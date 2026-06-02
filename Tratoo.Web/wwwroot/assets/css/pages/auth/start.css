@@ -1,0 +1,252 @@
+﻿/* start.css */
+
+/* Container principal */
+.page {
+    max-width: 75rem; /* 1200px */
+    margin: 0 auto;
+    padding: 4rem 2rem;
+    animation: fadeInUp 0.6s ease;
+}
+
+    /* Header da página */
+    .page > h1 {
+        font-size: clamp(2rem, 5vw, 2.5rem);
+        font-weight: 700;
+        text-align: center;
+        color: var(--primary);
+        margin-bottom: 1rem;
+        letter-spacing: -0.025em;
+    }
+
+    .page > p {
+        font-size: clamp(1rem, 3vw, 1.125rem);
+        text-align: center;
+        color: var(--text-secondary);
+        max-width: 37.5rem; /* 600px */
+        margin: 0 auto 3rem auto;
+        line-height: 1.6;
+    }
+
+/* Grid de escolhas */
+.choice-box {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    max-width: 75rem;
+    margin: 0 auto;
+}
+
+/* Cards */
+.choice-item {
+    background: var(--white);
+    border-radius: var(--radius-xl);
+    padding: 2.5rem 2rem;
+    transition: var(--transition-slow);
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-direction: column;
+    animation: fadeInUp 0.6s ease backwards;
+}
+
+    .choice-item:nth-child(1) {
+        animation-delay: 0.1s;
+    }
+
+    .choice-item:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    /* Efeito de hover nos cards */
+    .choice-item:hover {
+        transform: translateY(-0.5rem);
+        box-shadow: var(--shadow-xl);
+    }
+
+    /* Borda superior colorida */
+    .choice-item.cliente::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 0.25rem;
+        background: var(--secondary);
+        transform: scaleX(0);
+        transition: transform 0.3s ease;
+    }
+
+    .choice-item.prestador::before {
+        background: var(--primary);
+    }
+
+    .choice-item:hover::before {
+        transform: scaleX(1);
+    }
+
+/* Ícones */
+.choice-icon {
+    font-size: 4rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    transition: var(--transition-slow);
+}
+
+.choice-item:hover .choice-icon {
+    transform: scale(1.05);
+}
+
+/* Títulos dos cards */
+.choice-item h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 1rem;
+    text-align: center;
+    letter-spacing: -0.025em;
+}
+
+/* Texto dos cards */
+.choice-item p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    text-align: center;
+    flex-grow: 1;
+}
+
+/* Botão primário unificado */
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1.5rem;
+    background: var(--secondary);
+    color: var(--white);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    transition: var(--transition-slow);
+    text-align: center;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+}
+
+    .btn-primary:hover {
+        background: var(--secondary-dark);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        gap: 0.75rem;
+    }
+
+    .btn-primary:active {
+        transform: translateY(0);
+    }
+
+/* Botão específico para prestador (pode personalizar) */
+.prestador .btn-primary {
+    background: var(--primary);
+}
+
+    .prestador .btn-primary:hover {
+        background: var(--primary-dark);
+    }
+
+/* Animações */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .page {
+        padding: 2rem 1.5rem;
+    }
+
+        .page > p {
+            margin-bottom: 2rem;
+        }
+
+    .choice-box {
+        gap: 1.5rem;
+        grid-template-columns: 1fr;
+        max-width: 32rem;
+    }
+
+    .choice-item {
+        padding: 2rem 1.5rem;
+    }
+
+    .choice-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .choice-item h2 {
+        font-size: 1.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .page {
+        padding: 1.5rem 1rem;
+    }
+
+    .choice-item {
+        padding: 1.5rem 1.25rem;
+    }
+
+    .btn-primary {
+        padding: 0.75rem 1.25rem;
+        font-size: 0.875rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .page > h1 {
+        margin-bottom: 0.75rem;
+    }
+
+    .page > p {
+        font-size: 0.9375rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .choice-icon {
+        font-size: 2.5rem;
+    }
+}
+
+/* Acessibilidade - prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .choice-item:hover,
+    .btn-primary:hover {
+        transform: none;
+    }
+}
+
+/* Focus visible para navegação por teclado */
+.btn-primary:focus-visible,
+.choice-item:focus-within {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+    border-radius: var(--radius-md);
+}
+
+/* Suporte para loading dos headers/footers */
+#start-header,
+#site-footer {
+    width: 100%;
+}

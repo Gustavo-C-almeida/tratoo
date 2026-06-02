@@ -1,0 +1,54 @@
+﻿<div id="cadastro" data-tipo="prestador">
+    <div class="cadastro">
+        <h2 class="cadastro__title">Cadastro</h2>
+
+        <form id="cadastroForm" class="cadastro__form">
+            <div class="cadastro__group">
+                <label for="nome">Nome</label>
+                <input type="text" id="nome" name="nome">
+            </div>
+
+            <div class="cadastro__group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email">
+            </div>
+
+            <div class="cadastro__group">
+                <label for="senha">Senha</label>
+                <input type="password" id="senha" name="senha">
+            </div>
+
+            <div class="cadastro__group">
+                <label for="confirmarSenha">Confirmar Senha</label>
+                <input type="password" id="confirmarSenha" name="confirmarSenha">
+            </div>
+
+            <div class="cadastro__mfa">
+                <label class="cadastro__mfa-label">
+                    <input type="checkbox" id="mfaHabilitado" name="mfaHabilitado">
+                    <div class="cadastro__mfa-info">
+                        <span class="cadastro__mfa-titulo">Autenticação em dois fatores (MFA)</span>
+                        <span class="cadastro__mfa-desc">Ao fazer login, você receberá um código por e-mail para confirmar sua identidade.</span>
+                    </div>
+                </label>
+            </div>
+
+            <div class="cadastro__termos">
+                <label class="cadastro__termos-label">
+                    <input type="checkbox" id="aceitouTermos" name="aceitouTermos">
+                    <span>
+                        Li e aceito os
+                        <a href="/pages/termos/termos-de-uso.html" target="_blank">Termos de Uso</a>
+                        e a
+                        <a href="/pages/termos/politica-de-privacidade.html" target="_blank">Política de Privacidade</a>
+                        da Tratoo.
+                    </span>
+                </label>
+            </div>
+
+            <button type="submit" class="cadastro__button">
+                Cadastrar
+            </button>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagamento — Tratoo</title>
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/pages/contrato/detalhe.css">
+    <link rel="stylesheet" href="/assets/css/pages/pagamento/detalhe.css">
+</head>
+<body>
+    <div id="app-header"></div>
+    <div id="pag-root"></div>
+
+    <!-- Modal: Confirmar liberação -->
+    <div id="modal-liberar" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Confirmar entrega e liberar pagamento</h3>
+            <p>Ao liberar, o valor será transferido ao prestador e a operação <strong>não pode ser desfeita</strong>.</p>
+            <p>Faça isso somente após verificar que o serviço foi entregue conforme combinado.</p>
+            <div class="modal-campo">
+                <label for="obs-liberacao">Observação (opcional)</label>
+                <textarea id="obs-liberacao" rows="3" placeholder="Ex: Entrega recebida e aprovada em..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button id="modal-liberar-cancelar" class="btn-secundario">Cancelar</button>
+                <button id="modal-liberar-btn" class="btn-liberar">Confirmar e liberar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Abrir disputa -->
+    <div id="modal-disputar" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Abrir disputa</h3>
+            <p>Descreva o motivo da disputa. Nossa equipe analisará e tomará uma decisão em até 5 dias úteis.</p>
+            <div class="modal-campo">
+                <label for="disputa-motivo">Motivo da disputa <span class="obrigatorio">*</span></label>
+                <textarea id="disputa-motivo" rows="4" placeholder="Descreva detalhadamente o problema com o serviço prestado..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button id="modal-disputar-cancelar" class="btn-secundario">Cancelar</button>
+                <button id="modal-disputar-btn" class="btn-disputar-modal">Abrir disputa</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Solicitar estorno -->
+    <div id="modal-estornar" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Solicitar estorno</h3>
+            <p>O valor será devolvido via PIX ao contratante. Esta ação cancela o pagamento em escrow.</p>
+            <p class="aviso-legal">O estorno só é possível enquanto o pagamento não foi liberado ao prestador.</p>
+            <div class="modal-actions">
+                <button id="modal-estornar-cancelar" class="btn-secundario">Cancelar</button>
+                <button id="modal-estornar-btn" class="btn-estornar-modal">Solicitar estorno</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="site-footer"></div>
+
+    <script src="/assets/js/core/app.js"></script>
+    <script src="/assets/js/core/header.js"></script>
+    <script src="/assets/js/services/api.js"></script>
+    <script src="/assets/js/utils/loadComponents.js"></script>
+    <script src="/assets/js/utils/auth-guard.js"></script>
+    <script src="/assets/js/pages/pagamento-detalhe.js"></script>
+</body>
+</html>

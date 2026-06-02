@@ -1,0 +1,302 @@
+/* ── Avaliação — enviar ──────────────────────────────────────────────────────── */
+
+.av-container {
+    max-width: 560px;
+    margin: 2rem auto;
+    padding: 0 1rem 4rem;
+}
+
+.av-header {
+    margin-bottom: 1.5rem;
+}
+
+.av-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0.3rem 0 0;
+}
+
+.av-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.75rem;
+    box-shadow: var(--shadow-sm);
+}
+
+/* ── Avaliado ────────────────────────────────────────────────────────────────── */
+
+.av-avaliado {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--surface-hover);
+}
+
+.av-foto {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.av-foto-placeholder {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.av-avaliado-nome {
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0 0 0.2rem;
+    font-size: 1rem;
+}
+
+.av-projeto {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* ── Estrelas ────────────────────────────────────────────────────────────────── */
+
+.av-nota-section {
+    margin-bottom: 1.25rem;
+}
+
+.av-label {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-bottom: 0.5rem;
+}
+
+.estrelas {
+    display: flex;
+    gap: 0.3rem;
+    margin-bottom: 0.4rem;
+}
+
+.estrela {
+    background: none;
+    border: none;
+    font-size: 2.2rem;
+    color: var(--border-dark);
+    cursor: pointer;
+    padding: 0;
+    transition: color var(--transition-fast), transform 0.1s;
+    line-height: 1;
+}
+
+.estrela:hover,
+.estrela.ativa {
+    color: var(--warning);
+}
+
+.estrela:hover {
+    transform: scale(1.15);
+}
+
+.av-nota-texto {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--warning);
+    min-height: 1.2em;
+    margin: 0;
+}
+
+/* ── Comentário ─────────────────────────────────────────────────────────────── */
+
+.av-campo {
+    margin-bottom: 1.25rem;
+}
+
+.av-opcional {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.av-campo textarea {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-md);
+    font-size: 0.88rem;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+    transition: border-color var(--transition-base);
+    min-height: 100px;
+}
+
+.av-campo textarea:focus {
+    outline: none;
+    border-color: var(--secondary);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.av-char-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: right;
+    margin: 0.2rem 0 0;
+}
+
+/* ── Privacidade ─────────────────────────────────────────────────────────────── */
+
+.av-privacidade {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.av-toggle-label {
+    display: flex;
+    gap: 0.75rem;
+    cursor: pointer;
+    align-items: flex-start;
+}
+
+.av-toggle-label input[type="checkbox"] {
+    margin-top: 0.15rem;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--secondary);
+}
+
+.av-toggle-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.av-toggle-text strong {
+    font-size: 0.88rem;
+    color: var(--gray-700);
+}
+
+.av-toggle-text small {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* ── Aviso blind review ──────────────────────────────────────────────────────── */
+
+.av-aviso-blind {
+    background: var(--info-light);
+    border: 1px solid var(--info);
+    border-radius: var(--radius-md);
+    padding: 0.65rem 1rem;
+    font-size: 0.82rem;
+    color: var(--info);
+    margin-bottom: 1.25rem;
+    line-height: 1.5;
+}
+
+/* ── Ações ───────────────────────────────────────────────────────────────────── */
+
+.av-acoes {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-enviar {
+    background: var(--secondary);
+    color: var(--surface);
+    border: none;
+    padding: 0.7rem 1.75rem;
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-base), opacity var(--transition-base);
+}
+
+.btn-enviar:hover:not(:disabled) { background: var(--secondary-dark); }
+.btn-enviar:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ── Estados ─────────────────────────────────────────────────────────────────── */
+
+.av-aguardando {
+    text-align: center;
+    padding: 2.5rem 1.5rem;
+}
+
+.av-aguardando-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.av-aguardando h2 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0 0 0.75rem;
+}
+
+.av-aguardando p {
+    font-size: 0.9rem;
+    color: var(--gray-600);
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+}
+
+.av-sucesso {
+    text-align: center;
+    padding: 2.5rem 1.5rem;
+}
+
+.av-sucesso-icon {
+    width: 60px;
+    height: 60px;
+    background: var(--success-light);
+    color: var(--secondary-dark);
+    border-radius: 50%;
+    font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+}
+
+.av-sucesso h2 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--secondary-dark);
+    margin: 0 0 0.75rem;
+}
+
+.av-sucesso p {
+    font-size: 0.9rem;
+    color: var(--gray-600);
+    margin-bottom: 1.5rem;
+}
+
+.av-encerrada {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem;
+    font-size: 0.95rem;
+}
+
+.obrigatorio { color: var(--error); }

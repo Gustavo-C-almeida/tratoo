@@ -1,0 +1,331 @@
+/* Container principal */
+.login {
+    max-width: 28rem; /* 448px */
+    margin: 4rem auto;
+    padding: 1.5rem 2rem;
+    border-radius: var(--radius-lg);
+    background: var(--bg);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Tipografia responsiva */
+.login__title {
+    text-align: center;
+    margin-bottom: 0.5rem;
+    font-size: clamp(1.5rem, 5vw, 1.875rem);
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.025em;
+}
+
+.login__subtitle {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Formul�rio */
+.login__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.login__group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+    .login__group label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--text);
+    }
+
+    .login__group input {
+        padding: 0.75rem 1rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--text-secondary);
+        font-size: 0.9375rem;
+        transition: var(--transition-base);
+        background: var(--white);
+        color: var(--text);
+        width: 100%;
+    }
+
+        .login__group input:focus {
+            outline: none;
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+        }
+
+        .login__group input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+/* Bot�es unificados */
+.actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+    .login__button,
+    .actions a {
+        flex: 1;
+        text-align: center;
+        padding: 0.75rem 1.5rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition-base);
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    /* Bot�o Entrar */
+    .actions .login {
+        background: var(--secondary);
+        color: var(--white);
+        border: none;
+    }
+
+        .actions .login:hover {
+            background: var(--secondary-dark);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+    /* Bot�o Cadastrar */
+    .actions .register {
+        background: transparent;
+        color: var(--secondary);
+        border: 1px solid var(--secondary);
+    }
+
+        .actions .register:hover {
+            background: rgba(34, 197, 94, 0.1);
+            transform: translateY(-1px);
+        }
+
+/* Bot�o principal do formul�rio */
+.login__button {
+    background: var(--secondary);
+    color: var(--white);
+    border: none;
+    font-weight: 600;
+    width: 100%;
+}
+
+    .login__button:hover {
+        background: var(--secondary-dark);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .login__button:disabled {
+        background: var(--text-secondary);
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+/* Mensagem de erro */
+.login__erro {
+    color: var(--error);
+    font-size: 0.8125rem;
+    text-align: center;
+    background: var(--error-light);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--error);
+    margin-top: 0.5rem;
+}
+
+/* Rodap� */
+.login__rodape {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+    .login__rodape a {
+        color: var(--secondary);
+        text-decoration: none;
+        font-weight: 600;
+        transition: var(--transition-base);
+    }
+
+        .login__rodape a:hover {
+            color: var(--secondary-dark);
+            text-decoration: underline;
+        }
+
+/* Link "Esqueci minha senha" */
+.login__esqueceu {
+    display: block;
+    text-align: right;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin-top: -0.5rem;
+    transition: var(--transition-base);
+}
+
+    .login__esqueceu:hover {
+        color: var(--secondary);
+        text-decoration: underline;
+    }
+
+/* Estado de sucesso (reset de senha concluído) */
+.login__sucesso {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 0;
+    text-align: center;
+}
+
+.login__sucesso-icone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.12);
+    color: var(--secondary);
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+/* MFA */
+.login__mfa-info {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 0.875rem;
+}
+
+    .login__mfa-info strong {
+        display: block;
+        font-size: 0.9375rem;
+        color: var(--text);
+        margin: 0.5rem 0;
+        word-break: break-all;
+        background: var(--white);
+        padding: 0.5rem;
+        border-radius: var(--radius-sm);
+        font-family: monospace;
+    }
+
+.login__mfa-form {
+    text-align: center;
+}
+
+.login__codigo-input {
+    text-align: center;
+    font-size: 1.5rem;
+    letter-spacing: 0.5rem;
+    font-family: 'Courier New', monospace;
+    padding: 0.75rem;
+    width: 100%;
+    max-width: 15rem;
+    display: block;
+    margin: 0 auto;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--text-secondary);
+    background: var(--white);
+    color: var(--text);
+    transition: var(--transition-base);
+}
+
+    .login__codigo-input:focus {
+        outline: none;
+        border-color: var(--secondary);
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+    }
+
+/* Responsividade */
+@media (max-width: 640px) {
+    .login {
+        margin: 2rem 1rem;
+        padding: 1.25rem 1.5rem;
+        max-width: none;
+    }
+
+    .actions {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+        .login__button,
+        .actions a {
+            padding: 0.625rem 1.25rem;
+        }
+
+    .login__codigo-input {
+        font-size: 1.25rem;
+        letter-spacing: 0.3rem;
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .login {
+        padding: 1rem 1.25rem;
+    }
+
+    .login__title {
+        margin-bottom: 0.25rem;
+    }
+
+    .login__subtitle {
+        margin-bottom: 1.25rem;
+        font-size: 0.8125rem;
+    }
+
+    .login__group input {
+        padding: 0.625rem 0.875rem;
+    }
+}
+
+/* Suporte para telas muito pequenas */
+@media (max-width: 360px) {
+    .login__codigo-input {
+        letter-spacing: 0.2rem;
+        max-width: 10rem;
+    }
+}
+
+/* Anima��es suaves */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.login {
+    animation: fadeIn 0.3s ease;
+}
+
+/* Focus visible para acessibilidade */
+.login__button:focus-visible,
+.actions a:focus-visible,
+.login__group input:focus-visible {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+}
