@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposta — Tratoo</title>
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/pages/proposta/detalhe.css">
+</head>
+<body>
+    <div id="app-header"></div>
+    <div id="proposta-root"></div>
+
+    <!-- Modal de confirmação de escopo -->
+    <div id="modal-confirmar" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Confirmar aceite da proposta</h3>
+            <p>Você está prestes a aceitar a proposta abaixo. Isso encerrará a negociação e iniciará o projeto.</p>
+            <div id="modal-escopo-resumo" class="modal-escopo"></div>
+            <div class="modal-actions">
+                <button id="modal-cancelar" class="btn-secundario">Cancelar</button>
+                <button id="modal-confirmar-btn" class="btn-aceitar">Confirmar aceite</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="site-footer"></div>
+
+    <script src="/assets/js/core/app.js"></script>
+    <script src="/assets/js/core/header.js"></script>
+    <script src="/assets/js/services/api.js"></script>
+    <script src="/assets/js/utils/loadComponents.js"></script>
+    <script src="/assets/js/utils/auth-guard.js"></script>
+    <script src="/assets/js/pages/proposta-detalhe.js"></script>
+</body>
+</html>

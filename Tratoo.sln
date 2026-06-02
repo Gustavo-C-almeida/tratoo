@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tratoo.Domain", "Tratoo.Domain\Tratoo.Domain.csproj", "{D316AB6F-4222-4E77-AC15-A6DA0A98E17C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tratoo.API", "Tratoo.API\Tratoo.API.csproj", "{B3AE17A1-96E0-4CBD-9ADA-67E29673C29D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tratoo.Web", "Tratoo.Web\Tratoo.Web.csproj", "{43E11098-D700-4216-BB74-E3E0881523BC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D316AB6F-4222-4E77-AC15-A6DA0A98E17C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D316AB6F-4222-4E77-AC15-A6DA0A98E17C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D316AB6F-4222-4E77-AC15-A6DA0A98E17C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D316AB6F-4222-4E77-AC15-A6DA0A98E17C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3AE17A1-96E0-4CBD-9ADA-67E29673C29D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3AE17A1-96E0-4CBD-9ADA-67E29673C29D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3AE17A1-96E0-4CBD-9ADA-67E29673C29D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3AE17A1-96E0-4CBD-9ADA-67E29673C29D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43E11098-D700-4216-BB74-E3E0881523BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43E11098-D700-4216-BB74-E3E0881523BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43E11098-D700-4216-BB74-E3E0881523BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43E11098-D700-4216-BB74-E3E0881523BC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

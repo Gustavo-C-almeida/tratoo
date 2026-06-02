@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contrato — Tratoo</title>
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/pages/contrato/detalhe.css">
+</head>
+<body>
+    <div id="app-header"></div>
+    <div id="contrato-root"></div>
+
+    <!-- Modal de assinatura -->
+    <div id="modal-assinar" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Assinar contrato digitalmente</h3>
+            <p>Ao clicar em <strong>Assinar</strong>, você confirma que leu e concorda com todos os termos deste contrato.</p>
+            <p class="aviso-legal">Esta assinatura tem validade jurídica nos termos da MP 2.200-2/2001 e da Lei 14.129/2021.</p>
+            <div class="modal-actions">
+                <button id="modal-cancelar-btn" class="btn-secundario">Cancelar</button>
+                <button id="modal-assinar-btn" class="btn-assinar">Assinar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de cancelamento -->
+    <div id="modal-cancelar-contrato" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Cancelar contrato</h3>
+            <div id="modal-cancelar-aviso"></div>
+            <div class="modal-campo">
+                <label for="motivo-cancelamento">Motivo do cancelamento <span style="font-weight:400;color:#9ca3af;font-size:0.82rem">(opcional)</span></label>
+                <textarea id="motivo-cancelamento" rows="3" placeholder="Descreva o motivo do cancelamento..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button id="modal-cancelar-contrato-fechar" class="btn-secundario">Voltar</button>
+                <button id="modal-cancelar-contrato-btn" class="btn-cancelar-contrato">Confirmar cancelamento</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de entrega -->
+    <div id="modal-entrega" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Registrar entrega</h3>
+            <p>Ao registrar a entrega, você informa ao contratante que o serviço foi concluído e está pronto para revisão.</p>
+            <p style="font-size:0.85rem;color:#dc2626;margin-top:0.5rem">
+                <strong>Atenção:</strong> após registrar a entrega, o cancelamento direto não estará mais disponível.
+                Em caso de disputa, será necessário abrir uma contestação.
+            </p>
+            <div class="modal-actions">
+                <button id="modal-entrega-fechar" class="btn-secundario">Voltar</button>
+                <button id="modal-entrega-btn" class="btn-registrar-entrega">Confirmar entrega</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="site-footer"></div>
+
+    <script src="/assets/js/core/app.js"></script>
+    <script src="/assets/js/core/header.js"></script>
+    <script src="/assets/js/services/api.js"></script>
+    <script src="/assets/js/utils/loadComponents.js"></script>
+    <script src="/assets/js/utils/auth-guard.js"></script>
+    <script src="/assets/js/pages/contrato-detalhe.js"></script>
+</body>
+</html>

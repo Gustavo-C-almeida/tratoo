@@ -1,0 +1,158 @@
+/* ── Lista centralizada de chats ─────────────────────────────────────────── */
+
+.chat-lista-wrap {
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.chat-lista-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.chat-lista-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text, #1E293B);
+    margin: 0;
+}
+
+.chat-lista-count {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #64748B);
+}
+
+.chat-lista-loading,
+.chat-lista-vazia {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary, #64748B);
+}
+
+.chat-lista-vazia span {
+    display: block;
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.chat-lista-vazia p {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.chat-lista-vazia small {
+    font-size: 0.85rem;
+}
+
+.chat-lista-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+}
+
+/* Card de cada conversa */
+.chat-card {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 1rem 1.25rem;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 1px solid #F1F5F9;
+    transition: background 0.15s;
+}
+
+.chat-card:last-child {
+    border-bottom: none;
+}
+
+.chat-card:hover {
+    background: #F8FAFC;
+}
+
+.chat-card-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--secondary, #22C55E);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.chat-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2px;
+}
+
+.chat-card-nome {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #1E293B;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-card-tempo {
+    font-size: 0.75rem;
+    color: #94A3B8;
+    flex-shrink: 0;
+    margin-left: 0.5rem;
+}
+
+.chat-card-projeto {
+    font-size: 0.78rem;
+    color: #64748B;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-card-preview {
+    font-size: 0.85rem;
+    color: #94A3B8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-card-badge {
+    background: var(--secondary, #22C55E);
+    color: #fff;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    .chat-lista-wrap {
+        margin: 1rem auto;
+    }
+
+    .chat-card {
+        padding: 0.875rem 1rem;
+    }
+}

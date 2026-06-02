@@ -1,0 +1,40 @@
+<link rel="stylesheet" href="/assets/css/components/header.css">
+<header class="header-contratante" role="banner">
+    <div class="container">
+
+        <div class="logo">
+                <img src="https://pub-46c03e8d8c3448c68e945f4231eabfc1.r2.dev/LogoTratoo.png" alt="Tratoo">
+            
+        </div>
+
+        <button class="header-menu-toggle" id="header-menu-toggle"
+                aria-label="Abrir menu" aria-expanded="false" aria-controls="header-nav">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+
+        <nav class="header-nav" id="header-nav" role="navigation" aria-label="Navegação do contratante">
+            <a href="/pages/contratante/meus-projetos.html">Meus Projetos</a>
+            <a href="/pages/me/contratos.html">Contratos</a>
+            <a href="/pages/chat/index.html">Mensagens</a>
+        </nav>
+
+        <div class="header-user">
+            <button class="header-user-btn" id="header-user-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="header-user-dropdown">
+                <span class="header-user-avatar" id="header-user-avatar" aria-hidden="true">U</span>
+                <span class="header-user-name" id="header-user-name">Carregando...</span>
+                <svg class="header-user-chevron" aria-hidden="true" width="12" height="8" viewBox="0 0 12 8" fill="none">
+                    <path d="M1 1L6 6L11 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <div class="header-user-dropdown" id="header-user-dropdown" role="menu" aria-label="Menu do usuário">
+                <a href="/pages/contratante/perfil.html" role="menuitem">Meu Perfil</a>
+                <div class="header-dropdown-divider" role="separator"></div>
+                <button id="header-logout-btn" role="menuitem" class="header-logout-btn">Sair</button>
+            </div>
+        </div>
+
+    </div>
+</header>

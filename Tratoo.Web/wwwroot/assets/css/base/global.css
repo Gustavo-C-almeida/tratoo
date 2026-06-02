@@ -1,0 +1,440 @@
+/* ============================================================================
+   TRATOO — Global Styles
+   Estilos compartilhados: loading overlay, start page, choice cards, CTA, footer.
+   ============================================================================ */
+
+/* ── Loading Overlay ─────────────────────────────────────────────────────── */
+
+#loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    align-items: center;
+    justify-content: center;
+}
+
+#loading-overlay.visible {
+    display: flex;
+}
+
+.loading-card {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg) var(--space-xl);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    box-shadow: var(--shadow-xl);
+}
+
+.loading-spinner {
+    width: 22px;
+    height: 22px;
+    border: 3px solid var(--border);
+    border-top-color: var(--secondary);
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: loading-spin 0.65s linear infinite;
+}
+
+.loading-card span {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+@keyframes loading-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Start Header (landing/start pages) ──────────────────────────────────── */
+
+.start-header {
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.start-header .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 var(--space-lg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 68px;
+}
+
+/* Logo */
+.logo a {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.logo img {
+    height: 38px;
+    width: auto;
+}
+
+/* Nav */
+.nav {
+    display: flex;
+    gap: 28px;
+}
+
+.nav a {
+    text-decoration: none;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    transition: color var(--transition-base);
+}
+
+.nav a:hover {
+    color: var(--primary);
+}
+
+/* Actions */
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.login {
+    text-decoration: none;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    padding: 5px 6px;
+    border-radius: var(--radius-md);
+    transition: background var(--transition-base), color var(--transition-base);
+}
+
+.login:hover {
+    background: var(--surface-hover);
+    color: var(--primary);
+}
+
+.register {
+    text-decoration: none;
+    background: linear-gradient(135deg, var(--secondary), var(--secondary-dark));
+    color: var(--white);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding: 9px 18px;
+    border-radius: var(--radius-md);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.register:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(34, 197, 94, 0.32);
+}
+
+/* ── Page Wrapper ────────────────────────────────────────────────────────── */
+
+.page {
+    max-width: 960px;
+    margin: 120px auto 80px;
+    padding: 0 var(--space-lg);
+    text-align: center;
+}
+
+.page h1 {
+    font-size: clamp(1.875rem, 5vw, 2.875rem);
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: var(--space-md);
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+}
+
+.page > p {
+    font-size: var(--text-lg);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3xl);
+    line-height: 1.6;
+}
+
+/* ── Security Box ────────────────────────────────────────────────────────── */
+
+.security-box {
+    background: var(--surface);
+    border-radius: var(--radius-2xl);
+    padding: var(--space-2xl) 44px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-light);
+    text-align: left;
+    transition: transform var(--transition-slow), box-shadow var(--transition-slow);
+}
+
+.security-box:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-xl);
+}
+
+/* ── Security Items ──────────────────────────────────────────────────────── */
+
+.security-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) 0;
+    border-bottom: 1px solid var(--border-light);
+    font-size: var(--text-base);
+    transition: transform var(--transition-base);
+}
+
+.security-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.security-item:first-child {
+    padding-top: 0;
+}
+
+.security-item:hover {
+    transform: translateX(4px);
+}
+
+.security-item span:first-child {
+    background: var(--success-light);
+    color: var(--secondary-dark);
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.highlight {
+    font-weight: 700;
+    color: var(--primary);
+}
+
+/* ── Choice Box (start.html) ─────────────────────────────────────────────── */
+
+.choice-box {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    margin-top: var(--space-sm);
+}
+
+.choice-item {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-2xl);
+    padding: var(--space-2xl) var(--space-xl);
+    text-align: left;
+    transition: border-color var(--transition-slow), transform var(--transition-slow), box-shadow var(--transition-slow);
+    display: flex;
+    flex-direction: column;
+}
+
+.choice-item:hover {
+    border-color: var(--secondary);
+    transform: translateY(-5px);
+    box-shadow: 0 16px 40px rgba(34, 197, 94, 0.1);
+}
+
+.choice-item .choice-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--text-2xl);
+    margin-bottom: var(--space-lg);
+}
+
+.choice-item.cliente .choice-icon {
+    background: rgba(15, 23, 42, 0.06);
+}
+
+.choice-item.prestador .choice-icon {
+    background: var(--success-light);
+}
+
+.choice-item h2 {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: var(--space-sm);
+    letter-spacing: -0.01em;
+}
+
+.choice-item p {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: var(--space-xl);
+    flex: 1;
+}
+
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.choice-item.cliente .btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: var(--white);
+}
+
+.choice-item.cliente .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+}
+
+.choice-item.prestador .btn-primary {
+    background: linear-gradient(135deg, var(--secondary), var(--secondary-dark));
+    color: var(--white);
+}
+
+.choice-item.prestador .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+}
+
+/* ── CTA (index.html) ────────────────────────────────────────────────────── */
+
+.cta {
+    margin-top: var(--space-2xl);
+}
+
+.btn-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: var(--white);
+    text-decoration: none;
+    padding: 15px var(--space-xl);
+    font-size: var(--text-base);
+    font-weight: 600;
+    border-radius: var(--radius-lg);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+    letter-spacing: 0.01em;
+}
+
+.btn-cta:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.25);
+}
+
+/* ── Landing Footer ──────────────────────────────────────────────────────── */
+
+/* Sticky footer: empurra o footer ao fundo quando o conteúdo é insuficiente
+   para preencher a viewport. Funciona em conjunto com body { display: flex }.  */
+#site-footer {
+    margin-top: auto;
+}
+
+.site-footer {
+    background: var(--primary);
+    color: var(--text-muted);
+    padding: var(--space-3xl) var(--space-lg) var(--space-xl);
+}
+
+.site-footer .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xl);
+}
+
+.site-footer .footer-logo img {
+    height: 30px;
+    filter: brightness(0) invert(1);
+    opacity: 0.6;
+}
+
+.site-footer .footer-links {
+    display: flex;
+    gap: var(--space-xl);
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.site-footer .footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: var(--text-xs);
+    transition: color var(--transition-base);
+}
+
+.site-footer .footer-links a:hover {
+    color: var(--border);
+}
+
+.site-footer .footer-copy {
+    font-size: var(--text-xs);
+    color: var(--gray-600);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .nav {
+        display: none;
+    }
+
+    .page {
+        margin-top: 100px;
+    }
+
+    .security-box {
+        padding: var(--space-xl) var(--space-lg);
+    }
+
+    .choice-box {
+        grid-template-columns: 1fr;
+    }
+
+    .choice-item {
+        padding: var(--space-xl) var(--space-lg);
+    }
+}
+
+/* ── Links de perfil inline (contratante e prestador) ──────────────────────── */
+.link-perfil-contratante,
+.link-perfil-prestador {
+    color: inherit;
+    text-decoration: none;
+    font-weight: inherit;
+    transition: color 0.15s ease;
+}
+
+.link-perfil-contratante:hover,
+.link-perfil-prestador:hover {
+    color: var(--primary, #004584);
+    text-decoration: underline;
+}

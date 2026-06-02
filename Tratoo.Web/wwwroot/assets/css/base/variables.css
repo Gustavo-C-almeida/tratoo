@@ -1,0 +1,95 @@
+/* ============================================================================
+   TRATOO — Design Tokens
+   Fonte unica de verdade para cores, espacamentos, tipografia e efeitos.
+   ============================================================================ */
+
+:root {
+    /* ── Cores da marca ──────────────────────────────────────────────────────── */
+    --primary:          #0F172A;
+    --primary-dark:     #020617;
+    --primary-light:    #1E293B;
+
+    --secondary:        #22C55E;
+    --secondary-dark:   #16A34A;
+    --secondary-light:  #4ADE80;
+
+    /* ── Superficies ─────────────────────────────────────────────────────────── */
+    --bg:               #F8FAFC;
+    --surface:          #FFFFFF;
+    --surface-hover:    #F1F5F9;
+
+    /* ── Texto ───────────────────────────────────────────────────────────────── */
+    --text:             #1E293B;
+    --text-secondary:   #64748B;
+    --text-muted:       #94A3B8;
+    --text-light:       #CBD5E1;
+    --white:            #FFFFFF;
+
+    /* ── Estados ─────────────────────────────────────────────────────────────── */
+    --error:            #EF4444;
+    --error-light:      #FEE2E2;
+    --warning:          #F59E0B;
+    --warning-light:    #FEF3C7;
+    --success:          #22C55E;
+    --success-light:    #DCFCE7;
+    --info:             #3B82F6;
+    --info-light:       #DBEAFE;
+
+    /* ── Bordas ──────────────────────────────────────────────────────────────── */
+    --border:           #E2E8F0;
+    --border-light:     #F1F5F9;
+    --border-dark:      #CBD5E1;
+
+    /* ── Grays auxiliares ─────────────────────────────────────────────────────── */
+    --gray-50:          #F8FAFC;
+    --gray-100:         #F1F5F9;
+    --gray-200:         #E2E8F0;
+    --gray-300:         #CBD5E1;
+    --gray-400:         #94A3B8;
+    --gray-500:         #64748B;
+    --gray-600:         #475569;
+    --gray-700:         #334155;
+    --gray-800:         #1E293B;
+    --gray-900:         #0F172A;
+
+    /* ── Sombras ─────────────────────────────────────────────────────────────── */
+    --shadow-sm:  0 1px 2px rgba(15, 23, 42, 0.05);
+    --shadow-md:  0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+    --shadow-lg:  0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+    --shadow-xl:  0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+
+    /* ── Espacamento ─────────────────────────────────────────────────────────── */
+    --space-xs:   0.25rem;   /* 4px  */
+    --space-sm:   0.5rem;    /* 8px  */
+    --space-md:   1rem;      /* 16px */
+    --space-lg:   1.5rem;    /* 24px */
+    --space-xl:   2rem;      /* 32px */
+    --space-2xl:  3rem;      /* 48px */
+    --space-3xl:  4rem;      /* 64px */
+
+    /* ── Tipografia ──────────────────────────────────────────────────────────── */
+    --text-xs:    0.75rem;   /* 12px */
+    --text-sm:    0.875rem;  /* 14px */
+    --text-base:  1rem;      /* 16px */
+    --text-lg:    1.125rem;  /* 18px */
+    --text-xl:    1.25rem;   /* 20px */
+    --text-2xl:   1.5rem;    /* 24px */
+    --text-3xl:   1.875rem;  /* 30px */
+    --text-4xl:   2.25rem;   /* 36px */
+
+    --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+
+    /* ── Bordas (radius) ─────────────────────────────────────────────────────── */
+    --radius-sm:   0.375rem; /* 6px  */
+    --radius-md:   0.5rem;   /* 8px  */
+    --radius-lg:   0.75rem;  /* 12px */
+    --radius-xl:   1rem;     /* 16px */
+    --radius-2xl:  1.5rem;   /* 24px */
+    --radius-full: 9999px;
+
+    /* ── Transicoes ──────────────────────────────────────────────────────────── */
+    --transition-fast: 150ms ease;
+    --transition-base: 200ms ease;
+    --transition-slow: 300ms ease;
+}
