@@ -27,10 +27,8 @@ namespace Tratoo.Domain.Features.Perfis
             p.Descricao          = dto.Descricao;
             p.LinkedinUrl        = dto.LinkedinUrl;
             p.PortfolioUrl       = dto.PortfolioUrl;
-            p.GitHubUrl          = dto.GitHubUrl;
             p.EmailContato       = dto.EmailContato;
             p.OutrosLinks        = dto.OutrosLinks;
-            p.ValorHora          = dto.ValorHora;
             p.Telefone           = dto.Telefone;
 
             p.PorcentagemCompleto = CalcularCompletude(p);
@@ -79,11 +77,9 @@ namespace Tratoo.Domain.Features.Perfis
             if (p.Experiencias.Count >= 1)
                 score += 15;
 
+            // Certificações concentram os 15% antes divididos com "valor por hora" (removido).
             if (p.Certificacoes.Count >= 1)
-                score += 10;
-
-            if (p.ValorHora.HasValue)
-                score += 5;
+                score += 15;
 
             return score;
         }

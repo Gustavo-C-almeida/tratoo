@@ -260,8 +260,7 @@ body {
 }
 
     .form-card h3::before {
-        content: '✨';
-        font-size: var(--text-base);
+        content: '';
     }
 
 /* ==========================================================================
@@ -364,7 +363,6 @@ body {
 }
 
     .char-count::before {
-        content: '📝';
         font-size: var(--text-xs);
     }
 
@@ -547,62 +545,6 @@ body {
     }
 
 /* ==========================================================================
-   MATCH PREVIEW
-   ========================================================================== */
-.match-preview {
-    margin-top: var(--space-md);
-    padding: var(--space-md);
-    background: linear-gradient(135deg, var(--info-light) 0%, rgba(59, 130, 246, 0.05) 100%);
-    border-left: 4px solid var(--info);
-    border-radius: var(--radius-lg);
-    font-size: var(--text-sm);
-    animation: slideInLeft 0.4s ease;
-}
-
-@keyframes slideInLeft {
-    from {
-        opacity: 0;
-        transform: translateX(-20px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-.match-hit {
-    color: var(--info);
-    font-weight: 700;
-    background: rgba(59, 130, 246, 0.1);
-    padding: 0.125rem 0.375rem;
-    border-radius: var(--radius-sm);
-}
-
-.match-zero {
-    color: var(--warning);
-    font-weight: 600;
-}
-
-.match-loading {
-    color: var(--text-secondary);
-    font-style: italic;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-}
-
-    .match-loading::after {
-        content: '';
-        width: 12px;
-        height: 12px;
-        border: 2px solid var(--border);
-        border-top-color: var(--secondary);
-        border-radius: 50%;
-        animation: spin 0.6s linear infinite;
-    }
-
-/* ==========================================================================
    AÇÕES BAR
    ========================================================================== */
 .acoes-bar {
@@ -616,15 +558,7 @@ body {
 }
 
     .acoes-bar::before {
-        content: '⚡';
-        position: absolute;
-        top: -12px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: var(--surface);
-        padding: 0 var(--space-md);
-        color: var(--secondary);
-        font-size: var(--text-sm);
+        content: '';
     }
 
 @media (min-width: 480px) {
@@ -647,6 +581,15 @@ body {
     border: none;
     position: relative;
     overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+}
+
+.btn-rascunho i,
+.btn-publicar i {
+    font-size: 1.1em;
 }
 
 .btn-rascunho {
@@ -656,8 +599,7 @@ body {
 }
 
     .btn-rascunho::before {
-        content: '📝';
-        margin-right: var(--space-sm);
+        content: '';
     }
 
     .btn-rascunho:hover {
@@ -673,8 +615,7 @@ body {
 }
 
     .btn-publicar::before {
-        content: '🚀';
-        margin-right: var(--space-sm);
+        content: '';
     }
 
     .btn-publicar:hover {
@@ -1097,129 +1038,6 @@ body {
         transition-duration: 0.01ms !important;
     }
 }
-
-/* ==========================================================================
-   MATCH LIST E CARDS - PRESTADORES COMPATÍVEIS
-   ========================================================================== */
-.match-summary {
-    margin-bottom: var(--space-md);
-    padding-bottom: var(--space-md);
-    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.match-list {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-md);
-}
-
-@media (min-width: 768px) {
-    .match-list {
-        grid-template-columns: repeat(2, 1fr);
-        gap: var(--space-lg);
-    }
-}
-
-.match-card {
-    background: var(--surface);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
-    padding: var(--space-md);
-    transition: all var(--transition-base);
-    position: relative;
-    overflow: hidden;
-}
-
-    .match-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, var(--info), transparent);
-    }
-
-    .match-card:hover {
-        transform: translateY(-4px);
-        border-color: var(--info);
-        box-shadow: var(--shadow-lg);
-    }
-
-.match-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--space-md);
-    margin-bottom: var(--space-md);
-}
-
-    .match-card-header > div {
-        flex: 1;
-    }
-
-    .match-card-header h4 {
-        font-size: var(--text-base);
-        font-weight: 700;
-        color: var(--text);
-        margin-bottom: var(--space-xs);
-    }
-
-    .match-link {
-        color: var(--info);
-        text-decoration: none;
-        transition: all var(--transition-fast);
-    }
-
-        .match-link:hover {
-            color: var(--secondary);
-            text-decoration: underline;
-        }
-
-.match-titulo {
-    font-size: var(--text-sm);
-    color: var(--text-secondary);
-    margin: 0;
-}
-
-.match-similarity {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--info-light), rgba(59, 130, 246, 0.1));
-    color: var(--info);
-    font-weight: 700;
-    font-size: var(--text-sm);
-    flex-shrink: 0;
-}
-
-.match-card-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-}
-
-.match-bio {
-    font-size: var(--text-sm);
-    color: var(--text-secondary);
-    line-height: 1.5;
-    margin: 0;
-    min-height: 2.4em;
-}
-
-.match-skills {
-    font-size: var(--text-xs);
-    color: var(--text-secondary);
-    margin: 0;
-}
-
-    .match-skills strong {
-        color: var(--text);
-        font-weight: 600;
-    }
 
 /* Print styles */
 @media print {

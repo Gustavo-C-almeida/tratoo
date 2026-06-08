@@ -1,0 +1,179 @@
+/* ── Área administrativa de disputas ──────────────────────────────────────── */
+
+.admin-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+}
+
+.admin-loading,
+.admin-vazio,
+.admin-erro {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+}
+.admin-erro { color: #b91c1c; }
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.admin-header h1 {
+    font-size: 1.5rem;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.admin-sub { color: #64748b; font-size: 0.9rem; width: 100%; margin-top: -4px; }
+
+.admin-voltar {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #2563eb;
+    text-decoration: none;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+}
+.admin-voltar:hover { text-decoration: underline; }
+
+/* ── Filtros ──────────────────────────────────────────────────────────────── */
+.admin-filtros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 18px 0 24px;
+}
+.admin-filtros select,
+.admin-filtros input {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    background: #fff;
+}
+.admin-filtros input[type="number"] { width: 130px; }
+
+.admin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid #2563eb;
+    background: #2563eb;
+    color: #fff;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+.admin-btn:hover { filter: brightness(0.95); }
+.admin-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.admin-btn--ghost { background: #fff; color: #475569; border-color: #cbd5e1; }
+.admin-btn--danger { background: #dc2626; border-color: #dc2626; }
+.admin-btn--success { background: #16a34a; border-color: #16a34a; }
+
+/* ── Tabela ───────────────────────────────────────────────────────────────── */
+.admin-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 0.85rem;
+}
+.admin-tabela th,
+.admin-tabela td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.admin-tabela th { background: #f8fafc; color: #475569; font-weight: 600; }
+.admin-tabela tr:last-child td { border-bottom: none; }
+.admin-id { color: #94a3b8; font-size: 0.75rem; }
+.admin-link { color: #2563eb; text-decoration: none; font-weight: 600; white-space: nowrap; }
+.admin-link:hover { text-decoration: underline; }
+
+/* ── Badges de status ─────────────────────────────────────────────────────── */
+.admin-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.badge-aberta    { background: #fef3c7; color: #92400e; }
+.badge-analise   { background: #dbeafe; color: #1e40af; }
+.badge-resolvida { background: #dcfce7; color: #166534; }
+.badge-encerrada { background: #f1f5f9; color: #475569; }
+
+/* ── Cards de detalhe ─────────────────────────────────────────────────────── */
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin: 18px 0;
+}
+.admin-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+}
+.admin-card h2 {
+    font-size: 0.95rem;
+    color: #0f172a;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.admin-card p { font-size: 0.88rem; color: #334155; margin: 4px 0; line-height: 1.5; }
+.admin-muted { color: #94a3b8; }
+.admin-card--resolvida { border-color: #bbf7d0; background: #f0fdf4; }
+.admin-card--acao { border-color: #fde68a; background: #fffbeb; }
+
+.admin-evid { margin: 0; padding-left: 18px; }
+.admin-evid li { font-size: 0.85rem; color: #334155; margin: 3px 0; word-break: break-all; }
+
+/* ── Histórico ────────────────────────────────────────────────────────────── */
+.admin-hist { display: flex; flex-direction: column; gap: 10px; }
+.admin-hist-item {
+    border-left: 3px solid #cbd5e1;
+    padding: 4px 0 4px 12px;
+}
+.admin-hist-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.85rem;
+}
+.admin-hist-item p { font-size: 0.82rem; color: #475569; margin-top: 2px; }
+
+/* ── Ações de resolução ───────────────────────────────────────────────────── */
+.admin-card--acao textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+}
+.admin-acoes { display: flex; flex-wrap: wrap; gap: 10px; }
+
+@media (max-width: 640px) {
+    .admin-filtros input[type="number"] { width: 100%; }
+    .admin-tabela { display: block; overflow-x: auto; }
+    .admin-acoes .admin-btn { width: 100%; justify-content: center; }
+}

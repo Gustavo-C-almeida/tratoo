@@ -1,4 +1,5 @@
 ﻿using Tratoo.Domain.Models;
+using Tratoo.Domain.Enums;
 
 namespace Tratoo.Domain.Features.Contratos
 {
@@ -74,7 +75,9 @@ namespace Tratoo.Domain.Features.Contratos
         public Guid Id { get; set; }
         public int ProjetoId { get; set; }
         public string ProjetoTitulo { get; set; } = string.Empty;
+        public int ContratanteId { get; set; }
         public string ContratanteNome { get; set; } = string.Empty;
+        public int PrestadorId { get; set; }
         public string PrestadorNome { get; set; } = string.Empty;
         public ContratoServicoStatus Status { get; set; }
         public decimal ValorTotal { get; set; }
@@ -121,6 +124,17 @@ namespace Tratoo.Domain.Features.Contratos
 
         /// <summary>True quando o contrato ainda pode ser cancelado diretamente (sem disputa).</summary>
         public bool PodeCancelar { get; set; }
+
+        // ── Estado do pagamento em garantia (escrow) ──────────────────────────────
+        /// <summary>Id do pagamento associado ao contrato (null se ainda não iniciado).</summary>
+        public Guid? PagamentoId { get; set; }
+        /// <summary>Status atual do pagamento/escrow. Null se nenhum pagamento foi iniciado.</summary>
+        public StatusPagamento? StatusPagamento { get; set; }
+        /// <summary>
+        /// True quando o valor está protegido em escrow (pago e retido na plataforma).
+        /// Pré-requisito para o prestador registrar a entrega.
+        /// </summary>
+        public bool PagamentoConfirmado { get; set; }
 
         public string? MotivoCancelamento { get; set; }
         public DateTime? CanceladoEm { get; set; }

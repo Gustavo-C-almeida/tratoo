@@ -68,22 +68,6 @@ namespace Tratoo.API.EndPoints
             }).RequireAuthorization();
 
             // ──────────────────────────────────────────────────────────────────────
-            // LISTAR MINHAS AVALIAÇÕES PENDENTES
-            // GET /api/me/avaliacoes/pendentes
-            // Badge: exibe quantas avaliações o usuário ainda precisa preencher.
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapGet("/api/me/avaliacoes/pendentes", async (
-                HttpContext http,
-                IAvaliacaoService service) =>
-            {
-                var userId = ExtrairUserId(http);
-                if (userId == null) return Results.Unauthorized();
-
-                var pendentes = await service.ListarPendentesAsync(userId.Value);
-                return Results.Ok(pendentes);
-            }).RequireAuthorization();
-
-            // ──────────────────────────────────────────────────────────────────────
             // ALTERAR PRIVACIDADE DAS AVALIAÇÕES (RN-AV-001/002/012)
             // PUT /api/me/avaliacoes/privacidade
             // Efeito imediato em perfil público, listagem e média (RN-AV-002).
@@ -98,39 +82,6 @@ namespace Tratoo.API.EndPoints
 
                 await service.AlterarPrivacidadeAvaliacoesAsync(userId.Value, request.Privado);
                 return Results.Ok(new { mensagem = "Preferência de privacidade atualizada com sucesso." });
-            }).RequireAuthorization();
-
-            // ──────────────────────────────────────────────────────────────────────
-            // RESPONDER PUBLICAMENTE A UMA AVALIAÇÃO (melhoria #2)
-            // POST /api/avaliacoes/{id}/responder
-            // Apenas o avaliado pode responder, apenas 1 vez, apenas em publicadas.
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapPost("/api/avaliacoes/{id:guid}/responder", async (
-                Guid id,
-                ResponderAvaliacaoDto dto,
-                HttpContext http,
-                IAvaliacaoService service) =>
-            {
-                var userId = ExtrairUserId(http);
-                if (userId == null) return Results.Unauthorized();
-
-                await service.ResponderAvaliacaoAsync(id, userId.Value, dto);
-                return Results.Ok(new { mensagem = "Resposta registrada com sucesso." });
-            }).RequireAuthorization();
-
-            // ──────────────────────────────────────────────────────────────────────
-            // MINHAS AVALIAÇÕES (enviadas + recebidas)
-            // GET /api/me/avaliacoes
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapGet("/api/me/avaliacoes", async (
-                HttpContext http,
-                IAvaliacaoService service) =>
-            {
-                var userId = ExtrairUserId(http);
-                if (userId == null) return Results.Unauthorized();
-
-                var minhas = await service.ListarMinhasAsync(userId.Value);
-                return Results.Ok(minhas);
             }).RequireAuthorization();
 
             // ──────────────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ function ehPrestadorLogado() {
     return (usuarioAtual?.tipo || '').toLowerCase() === 'prestador';
 }
 
-// Sem nenhum filtro aplicado → elegível para feed de recomendações
+// Sem nenhum filtro aplicado -> elegível para feed de recomendações
 function semFiltrosAplicados() {
     return !estado.categoria && !estado.orcamentoMin && !estado.orcamentoMax
         && !estado.nivelFreelancer && !estado.prazoAte;
@@ -47,8 +47,13 @@ function formatarData(d) {
 }
 
 function labelCategoria(c) {
-    const map = { TI: 'TI & Tecnologia', Design: 'Design', Marketing: 'Marketing',
-        Redacao: 'Redação', Juridico: 'Jurídico', Outros: 'Outros' };
+    const map = {
+        TI: 'Desenvolvimento de Software', Design: 'Design & UX/UI',
+        Marketing: 'Marketing Digital', Redacao: 'Redação & Conteúdo',
+        Video: 'Edição de Vídeo', Dados: 'Dados & BI', Traducao: 'Tradução',
+        Suporte: 'Suporte & Assistência Virtual', Consultoria: 'Consultoria',
+        Juridico: 'Jurídico', Outros: 'Outros'
+    };
     return map[c] || c;
 }
 
@@ -92,10 +97,15 @@ function renderPagina() {
                 <label>Categoria</label>
                 <select id="fil-categoria">
                     <option value="">Todas</option>
-                    <option value="TI">TI & Tecnologia</option>
-                    <option value="Design">Design</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Redacao">Redação</option>
+                    <option value="TI">Desenvolvimento de Software</option>
+                    <option value="Design">Design & UX/UI</option>
+                    <option value="Marketing">Marketing Digital</option>
+                    <option value="Redacao">Redação & Conteúdo</option>
+                    <option value="Video">Edição de Vídeo</option>
+                    <option value="Dados">Dados & BI</option>
+                    <option value="Traducao">Tradução</option>
+                    <option value="Suporte">Suporte & Assistência Virtual</option>
+                    <option value="Consultoria">Consultoria</option>
                     <option value="Juridico">Jurídico</option>
                     <option value="Outros">Outros</option>
                 </select>

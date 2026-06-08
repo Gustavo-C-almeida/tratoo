@@ -78,7 +78,7 @@ function renderizarFormMFA(email) {
             <button type="submit" class="login__button">Verificar código</button>
         </form>
         <div class="login__rodape">
-            <p><a href="#" id="voltarLogin">← Voltar ao login</a></p>
+            <p><a href="#" id="voltarLogin"><i class="fa-solid fa-arrow-left"></i> Voltar ao login</a></p>
         </div>
     `;
 
@@ -108,7 +108,7 @@ function renderizarFormEsqueceuSenha() {
             <button type="submit" class="login__button">Enviar código</button>
         </form>
         <div class="login__rodape">
-            <p><a href="#" id="voltarLogin">← Voltar ao login</a></p>
+            <p><a href="#" id="voltarLogin"><i class="fa-solid fa-arrow-left"></i> Voltar ao login</a></p>
         </div>
     `;
 
@@ -168,7 +168,7 @@ function renderizarFormResetarSenha(email) {
             <button type="submit" class="login__button">Redefinir senha</button>
         </form>
         <div class="login__rodape">
-            <p><a href="#" id="voltarEsqueceu">← Tentar outro e-mail</a></p>
+            <p><a href="#" id="voltarEsqueceu"><i class="fa-solid fa-arrow-left"></i> Tentar outro e-mail</a></p>
         </div>
     `;
 

@@ -4,10 +4,10 @@
 // Fluxo:
 //  1. Oculta o body para evitar flash de conteúdo protegido.
 //  2. Chama GET /api/me (leitura dos claims do JWT no cookie httpOnly).
-//  3. 401 → redireciona para login.
-//  4. perfilCompleto === false → redireciona para onboarding.
+//  3. 401 -> redireciona para login.
+//  4. perfilCompleto === false -> redireciona para onboarding.
 //  5. Verifica se o perfil (role) do usuário tem permissão para a página atual.
-//  6. OK → expõe window.__tratooUser e exibe o body normalmente.
+//  6. OK -> expõe window.__tratooUser e exibe o body normalmente.
 (async function guardOnboarding() {
     document.body.style.visibility = 'hidden';
 
@@ -43,10 +43,16 @@
             return;
         }
 
+        // Área administrativa: exclusiva para usuários com role Admin (seed/banco).
+        if (path.startsWith('/pages/admin/') && me.isAdmin !== true) {
+            window.location.replace('/pages/projetos/index.html');
+            return;
+        }
+
         // Autenticado, onboarding completo e role válida — exibe a página.
         document.body.style.visibility = '';
     } catch {
-        // Falha de rede ou outro erro inesperado → login por segurança.
+        // Falha de rede ou outro erro inesperado -> login por segurança.
         window.location.replace('/pages/auth/login.html');
     }
 })();

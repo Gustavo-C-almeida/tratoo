@@ -1,10 +1,12 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Exceptions;
+using Tratoo.Domain.Features.Shared;
 
 namespace Tratoo.Domain.Features.Contratos
 {
@@ -20,9 +22,18 @@ namespace Tratoo.Domain.Features.Contratos
         private readonly IProjetoRepository _projetoRepo;
         private readonly IPropostaProjetoRepository _propostaRepo;
         private readonly IPagamentoService _pagamentoService;
+        private readonly IPagamentoRepository _pagamentoRepo;
+        private readonly IMemoryCache _cache;
         private readonly ILogger<ContratoServicoService> _logger;
 
         private const string TemplateVersaoAtual = "v1.0-2026-05";
+
+        // OTP: 10 minutos de validade, máximo 5 tentativas por usuário/contrato
+        private static readonly TimeSpan OtpTtl = TimeSpan.FromMinutes(10);
+        private const int MaxTentativasOtp = 5;
+
+        private static string OtpHashKey(Guid contratoId, int usuarioId)     => $"otp-assinatura:{contratoId}:{usuarioId}";
+        private static string OtpTentativasKey(Guid contratoId, int usuarioId) => $"otp-assinatura-tentativas:{contratoId}:{usuarioId}";
 
         private static readonly JsonSerializerOptions _jsonOpts = new()
         {
@@ -46,6 +57,8 @@ namespace Tratoo.Domain.Features.Contratos
             IProjetoRepository projetoRepo,
             IPropostaProjetoRepository propostaRepo,
             IPagamentoService pagamentoService,
+            IPagamentoRepository pagamentoRepo,
+            IMemoryCache cache,
             ILogger<ContratoServicoService> logger)
         {
             _repo = repo;
@@ -58,6 +71,8 @@ namespace Tratoo.Domain.Features.Contratos
             _projetoRepo = projetoRepo;
             _propostaRepo = propostaRepo;
             _pagamentoService = pagamentoService;
+            _pagamentoRepo = pagamentoRepo;
+            _cache = cache;
             _logger = logger;
         }
 
@@ -128,9 +143,85 @@ namespace Tratoo.Domain.Features.Contratos
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // ASSINAR
+        // SOLICITAR OTP DE ASSINATURA
         // ─────────────────────────────────────────────────────────────────────────
-        public async Task AssinarAsync(Guid contratoId, int usuarioId, string ip)
+        public async Task SolicitarOtpAssinaturaAsync(Guid contratoId, int usuarioId, string ip, string? userAgent)
+        {
+            var contrato = await _repo.GetByIdAsync(contratoId)
+                ?? throw new NegocioException("Contrato não encontrado.");
+
+            var ehContratante = contrato.ContratanteId == usuarioId;
+            var ehPrestador   = contrato.PrestadorId   == usuarioId;
+
+            if (!ehContratante && !ehPrestador)
+                throw new NegocioException("Você não é parte deste contrato.");
+
+            if (contrato.Status == ContratoServicoStatus.Ativo)
+                throw new NegocioException("Este contrato já está totalmente assinado.");
+
+            if (contrato.Status is ContratoServicoStatus.Cancelado or ContratoServicoStatus.Encerrado)
+                throw new NegocioException("Este contrato não está disponível para assinatura.");
+
+            if (ehContratante && contrato.AssinadoContratanteEm.HasValue)
+                throw new NegocioException("Você já assinou este contrato.");
+            if (ehPrestador && contrato.AssinadoPrestadorEm.HasValue)
+                throw new NegocioException("Você já assinou este contrato.");
+
+            // Obtém e-mail do usuário para envio do OTP
+            string emailDestinatario;
+            string nomeDestinatario;
+            if (ehContratante)
+            {
+                var c = await _contratanteRepo.GetCompletoAsync(usuarioId)
+                    ?? throw new NegocioException("Contratante não encontrado.");
+                emailDestinatario = c.Email;
+                nomeDestinatario  = c.Nome;
+            }
+            else
+            {
+                var p = await _prestadorRepo.GetCompletoAsync(usuarioId)
+                    ?? throw new NegocioException("Prestador não encontrado.");
+                emailDestinatario = p.Email;
+                nomeDestinatario  = p.Nome;
+            }
+
+            // Gera OTP de 6 dígitos numéricos
+            var otp = RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
+
+            // Limpa tentativas anteriores e armazena hash do novo OTP
+            _cache.Remove(OtpTentativasKey(contratoId, usuarioId));
+            _cache.Set(OtpHashKey(contratoId, usuarioId), SecureHasher.Hash(otp), OtpTtl);
+
+            var tituloProjeto = contrato.Projeto?.Titulo ?? "Projeto";
+            try
+            {
+                await _emailService.EnviarOtpAssinaturaAsync(emailDestinatario, nomeDestinatario, tituloProjeto, otp);
+            }
+            catch (Exception ex)
+            {
+                _cache.Remove(OtpHashKey(contratoId, usuarioId));
+                _logger.LogError(ex, "Falha ao enviar OTP de assinatura para contrato {ContratoId}, usuário {UsuarioId}.", contratoId, usuarioId);
+                throw new NegocioException("Não foi possível enviar o código de confirmação. Tente novamente.");
+            }
+
+            await _repo.AddHistoricoAsync(new HistoricoAssinatura
+            {
+                ContratoId  = contratoId,
+                UsuarioId   = usuarioId,
+                Acao        = AcaoHistoricoAssinatura.OtpSolicitado,
+                Ip          = ip,
+                UserAgent   = userAgent,
+                DataEvento  = DateTime.UtcNow
+            });
+            await _repo.SaveChangesAsync();
+
+            _logger.LogInformation("OTP de assinatura enviado para contrato {ContratoId}, usuário {UsuarioId}.", contratoId, usuarioId);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // ASSINAR (exige OTP validado + UserAgent)
+        // ─────────────────────────────────────────────────────────────────────────
+        public async Task AssinarAsync(Guid contratoId, int usuarioId, string ip, string? userAgent, string otp)
         {
             var contrato = await _repo.GetByIdAsync(contratoId)
                 ?? throw new NegocioException("Contrato não encontrado.");
@@ -142,7 +233,16 @@ namespace Tratoo.Domain.Features.Contratos
                 throw new NegocioException("Você não é parte deste contrato.");
 
             if (contrato.Status == ContratoServicoStatus.Ativo)
+            {
+                await _repo.AddHistoricoAsync(new HistoricoAssinatura
+                {
+                    ContratoId = contratoId, UsuarioId = usuarioId,
+                    Acao = AcaoHistoricoAssinatura.ContratoBloqueadoAssinado,
+                    Ip = ip, UserAgent = userAgent, DataEvento = DateTime.UtcNow
+                });
+                await _repo.SaveChangesAsync();
                 throw new NegocioException("Este contrato já está ativo — ambas as partes já assinaram.");
+            }
 
             if (contrato.Status == ContratoServicoStatus.Cancelado || contrato.Status == ContratoServicoStatus.Encerrado)
                 throw new NegocioException("Este contrato não está mais disponível para assinatura.");
@@ -156,6 +256,59 @@ namespace Tratoo.Domain.Features.Contratos
             if (ehPrestador && contrato.AssinadoPrestadorEm.HasValue)
                 throw new NegocioException("Você já assinou este contrato.");
 
+            // ── Validação do OTP ─────────────────────────────────────────────────
+            if (string.IsNullOrWhiteSpace(otp))
+                throw new NegocioException("Informe o código de confirmação enviado ao seu e-mail.");
+
+            if (!_cache.TryGetValue(OtpHashKey(contratoId, usuarioId), out string? otpHash) || otpHash == null)
+                throw new NegocioException("Código expirado ou inválido. Solicite um novo código.");
+
+            if (!SecureHasher.Verify(otp.Trim(), otpHash))
+            {
+                var tentativas = _cache.GetOrCreate(OtpTentativasKey(contratoId, usuarioId), e =>
+                {
+                    e.AbsoluteExpirationRelativeToNow = OtpTtl;
+                    return 0;
+                }) + 1;
+
+                _cache.Set(OtpTentativasKey(contratoId, usuarioId), tentativas, OtpTtl);
+
+                if (tentativas >= MaxTentativasOtp)
+                {
+                    _cache.Remove(OtpHashKey(contratoId, usuarioId));
+                    _cache.Remove(OtpTentativasKey(contratoId, usuarioId));
+                    await _repo.AddHistoricoAsync(new HistoricoAssinatura
+                    {
+                        ContratoId = contratoId, UsuarioId = usuarioId,
+                        Acao = AcaoHistoricoAssinatura.OtpBloqueadoBruteForce,
+                        Ip = ip, UserAgent = userAgent, DataEvento = DateTime.UtcNow
+                    });
+                    await _repo.SaveChangesAsync();
+                    _logger.LogWarning("OTP de assinatura bloqueado por brute force. Contrato {ContratoId}, usuário {UsuarioId}.", contratoId, usuarioId);
+                    throw new NegocioException("Muitas tentativas incorretas. Solicite um novo código.");
+                }
+
+                await _repo.AddHistoricoAsync(new HistoricoAssinatura
+                {
+                    ContratoId = contratoId, UsuarioId = usuarioId,
+                    Acao = AcaoHistoricoAssinatura.OtpFalhaValidacao,
+                    Ip = ip, UserAgent = userAgent, DataEvento = DateTime.UtcNow
+                });
+                await _repo.SaveChangesAsync();
+                throw new NegocioException($"Código inválido. {MaxTentativasOtp - tentativas} tentativa(s) restante(s).");
+            }
+
+            // OTP correto — invalida para uso único
+            _cache.Remove(OtpHashKey(contratoId, usuarioId));
+            _cache.Remove(OtpTentativasKey(contratoId, usuarioId));
+
+            await _repo.AddHistoricoAsync(new HistoricoAssinatura
+            {
+                ContratoId = contratoId, UsuarioId = usuarioId,
+                Acao = AcaoHistoricoAssinatura.OtpValidado,
+                Ip = ip, UserAgent = userAgent, DataEvento = DateTime.UtcNow
+            });
+
             var agora = DateTime.UtcNow;
             var primeiraAssinatura = contrato.Status == ContratoServicoStatus.Gerado;
 
@@ -163,11 +316,13 @@ namespace Tratoo.Domain.Features.Contratos
             {
                 contrato.AssinadoContratanteEm = agora;
                 contrato.IpContratante = ip;
+                contrato.UserAgentContratante = userAgent?[..Math.Min(userAgent.Length, 500)];
             }
             else
             {
                 contrato.AssinadoPrestadorEm = agora;
                 contrato.IpPrestador = ip;
+                contrato.UserAgentPrestador = userAgent?[..Math.Min(userAgent.Length, 500)];
             }
 
             if (primeiraAssinatura)
@@ -257,6 +412,14 @@ namespace Tratoo.Domain.Features.Contratos
                 }
             }
 
+            // Registra assinatura no histórico
+            await _repo.AddHistoricoAsync(new HistoricoAssinatura
+            {
+                ContratoId = contratoId, UsuarioId = usuarioId,
+                Acao = AcaoHistoricoAssinatura.Assinado,
+                Ip = ip, UserAgent = userAgent, DataEvento = agora
+            });
+
             await _repo.SaveChangesAsync();
         }
 
@@ -272,7 +435,26 @@ namespace Tratoo.Domain.Features.Contratos
             if (!ehParte)
                 throw new NegocioException("Você não tem permissão para ver este contrato.");
 
-            return MapDetalhe(contrato, usuarioId);
+            var dto = MapDetalhe(contrato, usuarioId);
+
+            // Enriquece com o estado real do pagamento/escrow para o frontend
+            // controlar a ordem do fluxo (pagar → executar → entregar → aprovar).
+            var pagamento = await _pagamentoRepo.GetByContratoServicoIdAsync(contratoId);
+            if (pagamento != null)
+            {
+                dto.PagamentoId = pagamento.Id;
+                dto.StatusPagamento = pagamento.Status;
+                // Valor protegido em escrow: pago e retido (ou em disputa, transferência
+                // em progresso, liberado ou com falha na transferência — todos pós-pagamento).
+                dto.PagamentoConfirmado =
+                    pagamento.Status is StatusPagamento.Retido
+                                      or StatusPagamento.EmDisputa
+                                      or StatusPagamento.TransferenciaEmProgresso
+                                      or StatusPagamento.Liberado
+                                      or StatusPagamento.FalhaTransferencia;
+            }
+
+            return dto;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -308,42 +490,8 @@ namespace Tratoo.Domain.Features.Contratos
             return await _privateStorage.GerarUrlAssinadaAsync(contrato.PdfKey, TimeSpan.FromMinutes(15));
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // REGISTRAR ENTREGA (apenas prestador, contrato Ativo)
-        // ─────────────────────────────────────────────────────────────────────────
-        public async Task RegistrarEntregaAsync(Guid contratoId, int prestadorId)
-        {
-            var contrato = await _repo.GetByIdAsync(contratoId)
-                ?? throw new NegocioException("Contrato não encontrado.");
-
-            if (contrato.PrestadorId != prestadorId)
-                throw new NegocioException("Apenas o prestador pode registrar a entrega.");
-
-            if (contrato.Status != ContratoServicoStatus.Ativo)
-                throw new NegocioException("A entrega só pode ser registrada em contratos ativos.");
-
-            if (contrato.EntregaRegistradaEm.HasValue)
-                throw new NegocioException("A entrega já foi registrada para este contrato.");
-
-            contrato.EntregaRegistradaEm = DateTime.UtcNow;
-            await _repo.SaveChangesAsync();
-
-            _logger.LogInformation("Entrega registrada no contrato {ContratoId} pelo prestador {PrestadorId}.",
-                contratoId, prestadorId);
-
-            // Notifica o contratante
-            try
-            {
-                var contratante = await _contratanteRepo.GetCompletoAsync(contrato.ContratanteId);
-                if (contratante != null)
-                    await _emailService.EnviarSolicitacaoAssinaturaAsync(
-                        contratante.Email, contratante.Nome);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Falha ao notificar contratante sobre entrega do contrato {ContratoId}.", contratoId);
-            }
-        }
+        // Registro de entrega migrado para EntregaService (entrega formal com anexos,
+        // links, aprovação/rejeição e auditoria). Ver IEntregaService.
 
         // ─────────────────────────────────────────────────────────────────────────
         // CANCELAR CONTRATO
@@ -664,7 +812,9 @@ namespace Tratoo.Domain.Features.Contratos
                 Id = c.Id,
                 ProjetoId = c.ProjetoId,
                 ProjetoTitulo = c.Projeto?.Titulo ?? string.Empty,
+                ContratanteId = c.ContratanteId,
                 ContratanteNome = c.Contratante?.Nome ?? string.Empty,
+                PrestadorId = c.PrestadorId,
                 PrestadorNome = c.Prestador?.Nome ?? string.Empty,
                 Status = c.Status,
                 ValorTotal = valorTotal,

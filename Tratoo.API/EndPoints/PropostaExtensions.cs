@@ -193,22 +193,6 @@ namespace Tratoo.API.EndPoints
             }).RequireAuthorization();
 
             // ──────────────────────────────────────────────────────────────────────
-            // VERSÕES — histórico de negociação
-            // GET /api/propostas/{id}/versoes
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapGet("/api/propostas/{id:guid}/versoes", async (
-                Guid id,
-                HttpContext http,
-                PropostaProjetoService service) =>
-            {
-                var userId = ExtrairUserId(http);
-                if (userId == null) return Results.Unauthorized();
-
-                var versoes = await service.ListarVersoesAsync(id, userId.Value);
-                return Results.Ok(versoes);
-            }).RequireAuthorization();
-
-            // ──────────────────────────────────────────────────────────────────────
             // MINHAS PROPOSTAS — prestador logado
             // GET /api/me/propostas — somente Prestador
             // ──────────────────────────────────────────────────────────────────────

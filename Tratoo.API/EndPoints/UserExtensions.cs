@@ -44,7 +44,7 @@ namespace Tratoo.API.EndPoints
                 if (resultado.RequerMFA)
                     return Results.Ok(new { requerMFA = true, email = resultado.Email, mensagem = resultado.Mensagem });
 
-                var token = jwtService.Gerar(resultado.UsuarioId, resultado.Email, resultado.Nome, resultado.Tipo, resultado.PerfilMinimoCompleto);
+                var token = jwtService.Gerar(resultado.UsuarioId, resultado.Email, resultado.Nome, resultado.Tipo, resultado.PerfilMinimoCompleto, resultado.IsAdmin);
                 http.Response.Cookies.Append("tratoo_auth", token, CriarOpcoesCookie(isDev));
 
                 return Results.Ok(new
@@ -53,7 +53,8 @@ namespace Tratoo.API.EndPoints
                     mensagem = resultado.Mensagem,
                     usuarioId = resultado.UsuarioId,
                     tipo = resultado.Tipo,
-                    perfilCompleto = resultado.PerfilMinimoCompleto
+                    perfilCompleto = resultado.PerfilMinimoCompleto,
+                    isAdmin = resultado.IsAdmin
                 });
             }).RequireRateLimiting("login");
 
@@ -75,7 +76,7 @@ namespace Tratoo.API.EndPoints
                     Ip = ip
                 });
 
-                var token = jwtService.Gerar(resultado.UsuarioId, resultado.Email, resultado.Nome, resultado.Tipo, resultado.PerfilMinimoCompleto);
+                var token = jwtService.Gerar(resultado.UsuarioId, resultado.Email, resultado.Nome, resultado.Tipo, resultado.PerfilMinimoCompleto, resultado.IsAdmin);
                 http.Response.Cookies.Append("tratoo_auth", token, CriarOpcoesCookie(isDev));
 
                 return Results.Ok(new
@@ -84,7 +85,8 @@ namespace Tratoo.API.EndPoints
                     mensagem = resultado.Mensagem,
                     usuarioId = resultado.UsuarioId,
                     tipo = resultado.Tipo,
-                    perfilCompleto = resultado.PerfilMinimoCompleto
+                    perfilCompleto = resultado.PerfilMinimoCompleto,
+                    isAdmin = resultado.IsAdmin
                 });
             }).RequireRateLimiting("login");
 
@@ -99,11 +101,12 @@ namespace Tratoo.API.EndPoints
                 var email         = http.User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
                 var tipo          = http.User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
                 var perfilCompleto = http.User.FindFirst("perfilCompleto")?.Value == "true";
+                var isAdmin       = http.User.IsInRole("Admin");
 
                 if (!int.TryParse(userIdStr, out var userId))
                     return Results.Unauthorized();
 
-                return Results.Ok(new { id = userId, nome, email, tipo, perfilCompleto });
+                return Results.Ok(new { id = userId, nome, email, tipo, perfilCompleto, isAdmin });
             }).RequireAuthorization();
 
             // ──────────────────────────────────────────
@@ -114,6 +117,29 @@ namespace Tratoo.API.EndPoints
                 http.Response.Cookies.Delete("tratoo_auth", new CookieOptions { Path = "/" });
                 return Results.Ok(new { mensagem = "Logout realizado com sucesso" });
             });
+
+            // ──────────────────────────────────────────
+            // Excluir conta (Soft Delete — LGPD Art. 18)
+            // DELETE /usuarios/conta — Prestador ou Contratante (autenticado)
+            // ──────────────────────────────────────────
+            app.MapDelete("usuarios/conta", async (
+                HttpContext http,
+                IExclusaoContaService service) =>
+            {
+                var userIdStr = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                             ?? http.User.FindFirst("sub")?.Value;
+                if (!int.TryParse(userIdStr, out var userId))
+                    return Results.Unauthorized();
+
+                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+
+                await service.ExcluirAsync(new ExcluirContaDTO { UserId = userId, Ip = ip });
+
+                // Encerra a sessão imediatamente — a conta não pode mais ser usada.
+                http.Response.Cookies.Delete("tratoo_auth", new CookieOptions { Path = "/" });
+
+                return Results.Ok(new { mensagem = "Conta excluída com sucesso." });
+            }).RequireAuthorization();
 
 
             // ──────────────────────────────────────────

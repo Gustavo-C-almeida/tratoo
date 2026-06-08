@@ -29,9 +29,11 @@ namespace Tratoo.Domain.Features.Pagamentos
 
         /// <summary>
         /// Contratante aprova a entrega e libera o escrow ao prestador.
-        /// Dispara a transferência PIX imediata.
+        /// Dispara a transferência PIX imediata. <paramref name="ip"/> e
+        /// <paramref name="userAgent"/> são auditados (ação sensível — antifraude).
         /// </summary>
-        Task<PagamentoResumoDto> LiberarPagamentoAsync(Guid pagamentoId, int contratanteId, string? observacao);
+        Task<PagamentoResumoDto> LiberarPagamentoAsync(
+            Guid pagamentoId, int contratanteId, string? observacao, string? ip, string? userAgent);
 
         /// <summary>
         /// Libera automaticamente um pagamento (chamado pelo BackgroundService).
@@ -47,8 +49,9 @@ namespace Tratoo.Domain.Features.Pagamentos
 
         /// <summary>
         /// Resolve uma disputa (uso exclusivo de administradores da plataforma).
+        /// Atualiza pagamento e contrato e grava trilha de auditoria com estado anterior/posterior.
         /// </summary>
-        Task ResolverDisputaAsync(Guid pagamentoId, Guid disputaId, int adminId, ResolverDisputaDto dto);
+        Task ResolverDisputaAsync(Guid pagamentoId, Guid disputaId, int adminId, ResolverDisputaDto dto, string ip = "admin");
 
         /// <summary>
         /// Solicita estorno de um pagamento (antes da liberação ao prestador).
@@ -74,5 +77,11 @@ namespace Tratoo.Domain.Features.Pagamentos
         /// Alternativa ao webhook para ambientes sem URL pública (localhost).
         /// </summary>
         Task<PagamentoResumoDto> SincronizarStatusAsync(Guid pagamentoId, int usuarioId);
+
+        /// <summary>
+        /// Reprocessa manualmente uma transferência que falhou (status FalhaTransferencia).
+        /// Uso exclusivo de administradores. Reverte para Retido e dispara nova tentativa.
+        /// </summary>
+        Task<PagamentoResumoDto> ReprocessarTransferenciaAsync(Guid pagamentoId, int adminId);
     }
 }

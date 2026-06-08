@@ -63,6 +63,29 @@ Equipe Tratoo");
             await smtp.SendMailAsync(mensagem);
         }
 
+        public async Task EnviarTokenDadosBancariosAsync(string emailDestino, string nome, string token)
+        {
+            using var mensagem = CriarMensagem(
+                emailDestino,
+                "Confirmação de alteração de dados bancários — Tratoo",
+                $@"Olá, {nome}!
+
+Recebemos uma solicitação para alterar os dados bancários (chave PIX) da sua conta na Tratoo.
+
+Seu código de confirmação é: {token}
+
+Este código expira em 10 minutos e só pode ser usado uma vez.
+
+⚠️ Se você NÃO solicitou esta alteração, ignore este e-mail e altere sua senha imediatamente —
+alguém pode ter acesso indevido à sua conta. Seus dados bancários permanecem inalterados.
+
+Atenciosamente,
+Equipe Tratoo");
+
+            using var smtp = CriarSmtp();
+            await smtp.SendMailAsync(mensagem);
+        }
+
         public async Task EnviarNotificacaoPropostaEnviadaAsync(
             string emailContratante, string nomeContratante, string tituloProjeto)
         {
@@ -219,6 +242,31 @@ Equipe Tratoo");
             await smtp.SendMailAsync(mensagem);
         }
 
+        public async Task EnviarOtpAssinaturaAsync(
+            string emailDestinatario, string nomeDestinatario, string tituloProjeto, string otp)
+        {
+            using var mensagem = CriarMensagem(
+                emailDestinatario,
+                $"Seu código de assinatura — {tituloProjeto}",
+                $@"Olá, {nomeDestinatario}!
+
+Você solicitou a assinatura digital do contrato referente ao projeto ""{tituloProjeto}"".
+
+Seu código de confirmação é:
+
+    {otp}
+
+Este código é válido por 10 minutos e pode ser usado apenas uma vez.
+
+Se você não solicitou esta assinatura, ignore este e-mail e entre em contato com o suporte imediatamente.
+
+Atenciosamente,
+Equipe Tratoo");
+
+            using var smtp = CriarSmtp();
+            await smtp.SendMailAsync(mensagem);
+        }
+
         public async Task EnviarNotificacaoPagamentoConfirmadoAsync(
             string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valorBruto)
         {
@@ -241,7 +289,7 @@ Equipe Tratoo");
         }
 
         public async Task EnviarNotificacaoPagamentoEmEscrowAsync(
-            string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valorLiquido)
+            string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valor)
         {
             using var mensagem = CriarMensagem(
                 emailDestinatario,
@@ -250,7 +298,7 @@ Equipe Tratoo");
 
 O pagamento referente ao projeto ""{tituloProjeto}"" foi confirmado!
 
-Seu valor líquido de R$ {valorLiquido:F2} está retido em escrow na plataforma e será liberado para sua conta PIX após a aprovação da entrega pelo contratante.
+O valor de R$ {valor:F2} está retido em escrow e será liberado integralmente para sua conta PIX após a aprovação da entrega pelo contratante.
 
 Conclua o serviço conforme acordado no contrato e solicite a aprovação.
 
@@ -262,18 +310,41 @@ Equipe Tratoo");
         }
 
         public async Task EnviarNotificacaoLiberacaoAsync(
-            string emailDestinatario, string nomeDestinatario, decimal valorLiquido, string tituloProjeto)
+            string emailDestinatario, string nomeDestinatario, decimal valor, string tituloProjeto)
         {
             using var mensagem = CriarMensagem(
                 emailDestinatario,
                 $"Pagamento liberado — {tituloProjeto}",
                 $@"Olá, {nomeDestinatario}!
 
-Ótima notícia! O valor de R$ {valorLiquido:F2} referente ao projeto ""{tituloProjeto}"" foi transferido para sua chave PIX cadastrada.
+Ótima notícia! O valor de R$ {valor:F2} referente ao projeto ""{tituloProjeto}"" foi transferido integralmente para sua chave PIX cadastrada.
 
 O crédito pode levar alguns instantes para aparecer na sua conta.
 
 Obrigado por utilizar a plataforma Tratoo!
+
+Atenciosamente,
+Equipe Tratoo");
+
+            using var smtp = CriarSmtp();
+            await smtp.SendMailAsync(mensagem);
+        }
+
+        public async Task EnviarNotificacaoFalhaTransferenciaAsync(
+            string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valor)
+        {
+            using var mensagem = CriarMensagem(
+                emailDestinatario,
+                $"Atenção: falha na transferência do pagamento — {tituloProjeto}",
+                $@"Olá, {nomeDestinatario}!
+
+Identificamos uma falha técnica durante a transferência do seu pagamento referente ao projeto ""{tituloProjeto}"".
+
+O valor de R$ {valor:F2} continua protegido em nossa plataforma e não foi perdido. Nossa equipe está realizando o tratamento necessário e o reprocessamento será efetuado em breve.
+
+Você receberá uma nova notificação quando a transferência for concluída.
+
+Se tiver dúvidas ou quiser acompanhar o status, entre em contato com nosso suporte.
 
 Atenciosamente,
 Equipe Tratoo");

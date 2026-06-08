@@ -4,8 +4,6 @@ namespace Tratoo.Domain.Models.Prestador
 {
     public class Prestador : Usuario
     {
-        public ICollection<Contrato> Contratos { get; set; } = new List<Contrato>();
-        public ICollection<Proposta> PropostasRecebidas { get; set; } = new List<Proposta>();
         public ICollection<Competencia> Competencias { get; set; } = new List<Competencia>();
         public ICollection<CertificacaoPrestador> Certificacoes { get; set; } = new List<CertificacaoPrestador>();
         public ICollection<ExperienciaPrestador> Experiencias { get; set; } = new List<ExperienciaPrestador>();
@@ -32,9 +30,6 @@ namespace Tratoo.Domain.Models.Prestador
         /// <summary>URL da foto de perfil armazenada no Cloudflare R2.</summary>
         public string? FotoUrl { get; set; }
 
-        /// <summary>Perfil do GitHub.</summary>
-        public string? GitHubUrl { get; set; }
-
         /// <summary>E-mail de contato público (pode diferir do e-mail de login).</summary>
         public string? EmailContato { get; set; }
 
@@ -49,7 +44,6 @@ namespace Tratoo.Domain.Models.Prestador
         public DateTime? DisponivelAPartirDe { get; set; }
 
         // ── Financeiro ────────────────────────────────────────────────────────
-        public decimal? ValorHora { get; set; }
         public decimal? ValorMinimoProjeto { get; set; }
         public bool? AceitaParcelamento { get; set; } = true;
 

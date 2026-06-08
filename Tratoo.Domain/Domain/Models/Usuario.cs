@@ -32,7 +32,21 @@ namespace Tratoo.Domain.Models
         /// </summary>
         public StatusUsuario Status { get; set; } = StatusUsuario.Pending;
 
+        /// <summary>
+        /// Marca de exclusão lógica (Soft Delete — LGPD Art. 18). Quando preenchido,
+        /// a conta foi excluída pelo titular: login é bloqueado e dados identificáveis
+        /// são anonimizados ("Usuário indisponível"). Registros históricos (projetos,
+        /// contratos, pagamentos, avaliações) são preservados por obrigação legal.
+        /// </summary>
+        public DateTime? ExcluidoEm { get; set; }
+
         public bool MFA { get; set; } = false;
+
+        /// <summary>
+        /// Administrador da plataforma. NÃO é definido por nenhum fluxo da aplicação —
+        /// apenas via seed ou diretamente no banco de dados. Concede a role "Admin" no JWT.
+        /// </summary>
+        public bool IsAdmin { get; set; } = false;
 
         public DateTime DataCadastro { get; set; } = DateTime.UtcNow;
 

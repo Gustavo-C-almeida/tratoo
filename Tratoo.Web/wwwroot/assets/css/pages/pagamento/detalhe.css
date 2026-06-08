@@ -28,6 +28,50 @@
 .badge-liberado { background: var(--success-light); color: var(--secondary-dark); }
 .badge-disputa { background: var(--warning-light); color: var(--warning); }
 
+/* ── Banner de confirmação (PIX recebido) ───────────────────────────────────── */
+
+.pag-confirmado {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--success-light);
+    border: 1px solid var(--secondary-light);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 1.5rem;
+}
+
+.pag-confirmado-icone {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    background: var(--secondary-dark);
+    color: var(--surface);
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.pag-confirmado-texto h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--secondary-dark);
+}
+
+.pag-confirmado-detalhes {
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+    .pag-confirmado { gap: 0.75rem; padding: 0.9rem 1rem; }
+    .pag-confirmado-texto h2 { font-size: 0.98rem; }
+}
+
 /* Seções — herda .contrato-secao, adiciona variantes */
 .pag-secao {
     background: var(--surface);
@@ -187,8 +231,16 @@
     color: var(--primary);
 }
 
-.fi-taxa { color: var(--error); font-size: 1rem; }
 .fi-liquido { color: var(--secondary-dark); font-size: 1.2rem; }
+.fi-nota-taxa {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #f8fafc;
+    border-left: 3px solid #cbd5e1;
+    border-radius: 0 6px 6px 0;
+}
 
 .mono { font-family: var(--font-mono); font-size: 0.82rem; }
 

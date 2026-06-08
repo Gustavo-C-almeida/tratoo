@@ -23,5 +23,8 @@ namespace Tratoo.Domain.Features.Auth
         /// Se false, o front-end deve redirecionar para o onboarding.
         /// </summary>
         public bool PerfilMinimoCompleto { get; set; }
+
+        /// <summary>True quando o usuário é administrador da plataforma (role Admin no JWT).</summary>
+        public bool IsAdmin { get; set; }
     }
 }

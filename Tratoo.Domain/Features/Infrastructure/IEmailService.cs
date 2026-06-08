@@ -5,6 +5,9 @@
         Task EnviarCodigoVerificacaoAsync(string emailDestino, string codigo);
         Task EnviarCodigoResetSenhaAsync(string emailDestino, string codigo);
 
+        /// <summary>Token de revalidação para alteração de dados bancários (uso único, 10 min).</summary>
+        Task EnviarTokenDadosBancariosAsync(string emailDestino, string nome, string token);
+
         // Notificações do fluxo de Proposta e Negociação
         Task EnviarNotificacaoPropostaEnviadaAsync(string emailContratante, string nomeContratante, string tituloProjeto);
         Task EnviarNotificacaoContrapropostaAsync(string emailDestinatario, string nomeDestinatario, string tituloProjeto);
@@ -17,10 +20,19 @@
         Task EnviarSolicitacaoAssinaturaAsync(string emailDestinatario, string nomeDestinatario);
         Task EnviarContratoAtivoAsync(string emailDestinatario, string nomeDestinatario);
 
+        /// <summary>Código OTP de confirmação enviado antes da assinatura digital. Uso único, expira em 10 minutos.</summary>
+        Task EnviarOtpAssinaturaAsync(string emailDestinatario, string nomeDestinatario, string tituloProjeto, string otp);
+
         // Notificações do fluxo de Pagamento e Escrow
         Task EnviarNotificacaoPagamentoConfirmadoAsync(string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valorBruto);
-        Task EnviarNotificacaoPagamentoEmEscrowAsync(string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valorLiquido);
-        Task EnviarNotificacaoLiberacaoAsync(string emailDestinatario, string nomeDestinatario, decimal valorLiquido, string tituloProjeto);
+        Task EnviarNotificacaoPagamentoEmEscrowAsync(string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valor);
+        Task EnviarNotificacaoLiberacaoAsync(string emailDestinatario, string nomeDestinatario, decimal valor, string tituloProjeto);
+
+        /// <summary>
+        /// Notifica o prestador de que houve falha técnica na transferência PIX.
+        /// O valor permanece protegido em escrow e será reprocessado.
+        /// </summary>
+        Task EnviarNotificacaoFalhaTransferenciaAsync(string emailDestinatario, string nomeDestinatario, string tituloProjeto, decimal valor);
 
         // Notificações do fluxo de Avaliação
         Task EnviarLembreteAvaliacaoPendenteAsync(string emailDestinatario, string nomeDestinatario, string tituloProjeto);

@@ -796,3 +796,93 @@
         border: 1px solid #ddd;
     }
 }
+
+/* ── Botão de proposta proativa + modal ─────────────────────────────────────── */
+
+/* Variante de botão para a ação (reseta defaults de <button>) */
+.chat-acao-btn {
+    border: none;
+    cursor: pointer;
+    font: inherit;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-box {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: var(--shadow-xl);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-box-proposta { max-width: 600px; }
+
+.modal-box h3 { margin: 0 0 0.25rem; color: var(--primary); }
+.modal-sub { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 1rem; }
+
+.pp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem 1rem;
+}
+
+.modal-campo { margin-bottom: 0.85rem; display: flex; flex-direction: column; }
+.modal-campo label { font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
+.modal-campo input,
+.modal-campo select,
+.modal-campo textarea {
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-family: inherit;
+    width: 100%;
+}
+.modal-campo textarea { resize: vertical; }
+
+.obrigatorio { color: var(--error); font-weight: 700; }
+.opcional { font-weight: 400; color: var(--text-muted); font-size: 0.8rem; }
+
+.pp-erro { color: var(--error); font-size: 0.85rem; min-height: 1.1em; margin: 0.25rem 0 0; }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem; }
+
+.btn-secundario {
+    background: var(--surface-hover);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.6rem 1.2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-enviar-proposta {
+    background: var(--secondary-dark);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 0.6rem 1.4rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-enviar-proposta:disabled { opacity: 0.6; cursor: default; }
+
+@media (max-width: 560px) {
+    .pp-grid { grid-template-columns: 1fr; }
+}

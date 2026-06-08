@@ -29,6 +29,27 @@ namespace Tratoo.Domain.Features.IA
             _logger = logger;
         }
 
+        /// <summary>
+        /// Remove o embedding do prestador do índice vetorial. Usado quando a conta é
+        /// excluída (LGPD) — garante que prestadores deletados não apareçam na busca.
+        /// </summary>
+        public async Task RemoverAsync(int prestadorId)
+        {
+            try
+            {
+                var existing = await _vectorDb.PrestadorEmbeddings.FindAsync(prestadorId);
+                if (existing == null) return;
+
+                _vectorDb.PrestadorEmbeddings.Remove(existing);
+                await _vectorDb.SaveChangesAsync();
+                _logger.LogInformation("Embedding do prestador {Id} removido do índice (conta excluída).", prestadorId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao remover embedding do prestador {Id}.", prestadorId);
+            }
+        }
+
         public async Task IndexarAsync(int prestadorId)
         {
             try

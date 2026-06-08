@@ -53,11 +53,13 @@ function renderAguardandoPar(av) {
     root.innerHTML = `
         <div class="av-container">
             <header class="av-header">
-                <a href="javascript:history.back()" class="back-link-pag">← Voltar</a>
+                <a href="javascript:history.back()" class="back-link-pag"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
                 <h1>Avaliação enviada</h1>
             </header>
             <div class="av-card av-aguardando">
-                <div class="av-aguardando-icon">⏳</div>
+                <div class="av-aguardando-icon">
+                    <i class="fa-solid fa-hourglass-half"></i>
+                </div>
                 <h2>Aguardando avaliação da outra parte</h2>
                 <p>Você já enviou sua avaliação para <strong>${escapeHtml(av.avaliadoNome)}</strong>.</p>
                 <p>As avaliações serão publicadas simultaneamente quando a outra parte também responder,
@@ -79,7 +81,7 @@ function renderFormulario(av) {
     root.innerHTML = `
         <div class="av-container">
             <header class="av-header">
-                <a href="javascript:history.back()" class="back-link-pag">← Voltar</a>
+                <a href="javascript:history.back()" class="back-link-pag"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
                 <h1>Avaliar prestação de serviço</h1>
             </header>
 
@@ -96,7 +98,7 @@ function renderFormulario(av) {
                     <label class="av-label">Sua nota <span class="obrigatorio">*</span></label>
                     <div class="estrelas" id="estrelas">
                         ${[1,2,3,4,5].map(n => `
-                            <button type="button" class="estrela" data-nota="${n}" aria-label="${n} estrelas">★</button>
+                            <button type="button" class="estrela" data-nota="${n}" aria-label="${n} estrelas"><i class="fa-solid fa-star"></i></button>
                         `).join('')}
                     </div>
                     <p class="av-nota-texto" id="nota-texto"></p>
@@ -121,7 +123,7 @@ function renderFormulario(av) {
                 </div>
 
                 <div class="av-aviso-blind">
-                    🔒 <strong>Avaliação cega (blind review):</strong> sua avaliação só será publicada
+                    <i class="fa-solid fa-lock"></i> <strong>Avaliação cega (blind review):</strong> sua avaliação só será publicada
                     quando a outra parte também responder, evitando influência mútua.
                 </div>
 
@@ -202,7 +204,7 @@ async function enviarAvaliacao() {
         root.innerHTML = `
             <div class="av-container">
                 <div class="av-card av-sucesso">
-                    <div class="av-sucesso-icon">✓</div>
+                    <div class="av-sucesso-icon"><i class="fa-solid fa-check"></i></div>
                     <h2>Avaliação enviada!</h2>
                     <p>Obrigado pelo seu feedback. Ele será publicado quando a outra parte também responder.</p>
                     <a href="/pages/me/contratos.html" class="btn-secundario">Ver meus contratos</a>

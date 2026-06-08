@@ -31,10 +31,8 @@ namespace Tratoo.Domain.Features.Perfis
                 TituloProfissional  = prestador.TituloProfissional,
                 Descricao           = prestador.Descricao,
                 FotoUrl             = prestador.FotoUrl,
-                GitHubUrl           = prestador.GitHubUrl,
                 EmailContato        = prestador.EmailContato,
                 OutrosLinks         = prestador.OutrosLinks,
-                ValorHora           = prestador.ValorHora,
                 PorcentagemCompleto = prestador.PorcentagemCompleto,
 
                 AreaEspecializacao      = prestador.AreaEspecializacao,
@@ -66,6 +64,7 @@ namespace Tratoo.Domain.Features.Perfis
                     DataEmissao     = c.DataEmissao,
                     DataValidade    = c.DataValidade,
                     LinkVerificacao = c.LinkVerificacao,
+                    ArquivoUrl      = c.ArquivoUrl,
                     Competencias    = c.CompetenciaCertificacoes
                         .Select(cc => new CompetenciaDTO
                         {

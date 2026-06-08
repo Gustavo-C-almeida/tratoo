@@ -39,6 +39,9 @@ namespace Tratoo.Domain.Features.Perfis
                     .ThenInclude(pt => pt.CompetenciaPortfolios)
                         .ThenInclude(cp => cp.Competencia)
 
+                // Conta bancária (necessária para a liberação de pagamento via PIX)
+                .Include(p => p.ContaBancaria)
+
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
 

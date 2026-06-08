@@ -3,12 +3,6 @@
     public interface IAvaliacaoService
     {
         /// <summary>
-        /// Registra resposta pública do avaliado a uma avaliação publicada (melhoria #2).
-        /// Apenas 1 vez, apenas em avaliações publicadas.
-        /// </summary>
-        Task ResponderAvaliacaoAsync(Guid avaliacaoId, int userId, ResponderAvaliacaoDto dto);
-
-        /// <summary>
         /// Envia lembretes por e-mail para avaliações pendentes com 3 dias (melhoria #4).
         /// Chamado pelo background service diariamente.
         /// </summary>
@@ -39,9 +33,6 @@
         /// Retorna AvaliacoesVisiveis = false quando o usuário optou por privacidade (RN-AV-005).
         /// </summary>
         Task<AvaliacoesPublicasDto> ListarPublicasAsync(int avaliadoId, int pagina, int tamanhoPagina);
-
-        /// <summary>Todas as avaliações do usuário (enviadas e recebidas).</summary>
-        Task<List<MinhaAvaliacaoDto>> ListarMinhasAsync(int userId);
 
         /// <summary>
         /// Altera a configuração AvaliacoesPrivado do usuário autenticado (RN-AV-001/012).

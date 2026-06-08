@@ -15,7 +15,6 @@ namespace Tratoo.Domain.Features.Projetos
         public NivelFreelancerProjet? NivelFreelancer { get; set; }
         public VisibilidadeProjeto Visibilidade { get; set; }
         public IdiomaProjet Idioma { get; set; }
-        public int NumFreelancersDesejados { get; set; }
         public int TotalPropostas { get; set; }
         public DateTime? PublicadoEm { get; set; }
         public StatusProjeto Status { get; set; }

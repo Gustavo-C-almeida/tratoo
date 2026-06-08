@@ -21,8 +21,11 @@ function dataISO(d) {
 }
 
 const CATEGORIAS = {
-    TI: 'TI & Tecnologia', Design: 'Design', Marketing: 'Marketing',
-    Redacao: 'Redação', Juridico: 'Jurídico', Outros: 'Outros'
+    TI: 'Desenvolvimento de Software', Design: 'Design & UX/UI',
+    Marketing: 'Marketing Digital', Redacao: 'Redação & Conteúdo',
+    Video: 'Edição de Vídeo', Dados: 'Dados & BI', Traducao: 'Tradução',
+    Suporte: 'Suporte & Assistência Virtual', Consultoria: 'Consultoria',
+    Juridico: 'Jurídico', Outros: 'Outros'
 };
 const NIVEIS = { Junior: 'Júnior', Pleno: 'Pleno', Senior: 'Sênior' };
 const IDIOMAS = { Portugues: 'Português', Ingles: 'Inglês', Espanhol: 'Espanhol' };
@@ -79,7 +82,7 @@ function renderDetalhe(p, ehContratante) {
 
     root().innerHTML = `
     <div class="detalhe-nav">
-        <a href="${linkVoltar}">&larr; Voltar aos projetos</a>
+        <a href="${linkVoltar}"><i class="fa-solid fa-arrow-left"></i> Voltar aos projetos</a>
     </div>
 
     <div class="${layoutClass}">
@@ -113,7 +116,6 @@ function renderDetalhe(p, ehContratante) {
         <aside class="proposta-panel" ${ehContratante ? 'style="display:none"' : ''}>
             <div class="orcamento-range">${moeda(p.orcamentoMin)} – ${moeda(p.orcamentoMax)}</div>
             <div class="prazo-info">Prazo: <strong>${dataFmt(p.prazoEntrega)}</strong></div>
-            ${p.numFreelancersDesejados > 1 ? `<div class="prazo-info">Freelancers: <strong>${p.numFreelancersDesejados}</strong></div>` : ''}
             <div class="propostas-count">${p.totalPropostas} proposta${p.totalPropostas !== 1 ? 's' : ''} recebida${p.totalPropostas !== 1 ? 's' : ''}</div>
 
             <hr class="divider">
@@ -460,8 +462,8 @@ async function carregarPrestadoresRecomendados(projectId) {
 }
 
 function renderEstrelas(reputacao) {
-    const estrelaCheia = '★';
-    const estrelaVazia = '☆';
+    const estrelaCheia = '<i class="fa-solid fa-star"></i>';
+    const estrelaVazia = '<i class="fa-regular fa-star"></i>';
     const estrelasInteiras = Math.floor(reputacao);
     const temMeiaEstrela = reputacao % 1 >= 0.5;
 
@@ -499,10 +501,10 @@ function renderPrestadorCard(p, index, habilidadesProjeto, projetoAberto) {
     }
 
     const recomendacaoIcons = {
-        alta: '🏆',
-        boa: '📈',
-        moderada: '📊',
-        baixa: '📉'
+        alta: '<i class="fa-solid fa-trophy"></i>',
+        boa: '<i class="fa-solid fa-arrow-trend-up"></i>',
+        moderada: '<i class="fa-solid fa-chart-column"></i>',
+        baixa: '<i class="fa-solid fa-arrow-trend-down"></i>'
     };
 
     const bioPreview = p.bio
@@ -515,11 +517,11 @@ function renderPrestadorCard(p, index, habilidadesProjeto, projetoAberto) {
     const estrelas = renderEstrelas(reputacao);
     const percentualMatch = Math.round(scoreParaRecomendacao * 100);
 
-    // Badge de stack compatível (se tiver competências matchadas)
+    // Badge de habilidades compatíveis (se tiver competências matchadas)
     const stackBadge = compEmComum.length > 0 ? `
-        <div class="stack-match-badge">
-            <span class="stack-icon">✅</span>
-            Stack compatível
+        <div class="habilidade-match-badge">
+            <span class="habilidade-icon"><i class="fa-solid fa-circle-check"></i></span>
+            Habilidades compatíveis
         </div>
     ` : '';
 
@@ -559,7 +561,7 @@ function renderPrestadorCard(p, index, habilidadesProjeto, projetoAberto) {
                         <div class="avatar-initials">
                             ${nomePrestador.charAt(0).toUpperCase()}
                         </div>
-                        ${reputacao >= 4.5 ? '<div class="avatar-verified">✓</div>' : ''}
+                        ${reputacao >= 4.5 ? '<div class="avatar-verified"><i class="fa-solid fa-check"></i></div>' : ''}
                     </div>
                     <div class="prestador-details">
                         <h4 class="prestador-name">
@@ -570,18 +572,18 @@ function renderPrestadorCard(p, index, habilidadesProjeto, projetoAberto) {
                         ${tituloProfissional ? `<p class="prestador-title">${tituloProfissional}</p>` : ''}
                         <div class="prestador-stats">
                             <div class="stat-item">
-                                <span class="stat-icon">⭐</span>
+                                <span class="stat-icon"><i class="fa-solid fa-star"></i></span>
                                 <span class="stat-value">${reputacao.toFixed(1)}</span>
                                 <div class="stat-stars">${estrelas}</div>
                             </div>
                             ${avaliacao > 0 ? `
                             <div class="stat-item">
-                                <span class="stat-icon">📝</span>
+                                <span class="stat-icon"><i class="fa-solid fa-pen-to-square"></i></span>
                                 <span class="stat-value">${avaliacao}</span>
                                 <span class="stat-label">avaliação${avaliacao !== 1 ? 'es' : ''}</span>
                             </div>` : ''}
                             <div class="stat-item">
-                                <span class="stat-icon">🎯</span>
+                                <span class="stat-icon"><i class="fa-solid fa-bullseye"></i></span>
                                 <span class="stat-value">${p.contratosEncerrados || 0}</span>
                                 <span class="stat-label">projetos</span>
                             </div>
@@ -592,14 +594,14 @@ function renderPrestadorCard(p, index, habilidadesProjeto, projetoAberto) {
                 ${compEmComum.length > 0 ? `
                 <div class="competencias-comum-modern">
                     <div class="competencias-header">
-                        <span class="competencias-icon">🎯</span>
+                        <span class="competencias-icon"><i class="fa-solid fa-bullseye"></i></span>
                         <span class="competencias-title">Competências que combinam</span>
                         <span class="competencias-count">${compEmComum.length}</span>
                     </div>
                     <div class="competencias-tags-modern">
                         ${compEmComum.map(c => `
                             <span class="tag-match-modern">
-                                <span class="tag-check">✓</span>
+                                <span class="tag-check"><i class="fa-solid fa-check"></i></span>
                                 ${esc(c)}
                             </span>
                         `).join('')}
@@ -608,7 +610,7 @@ function renderPrestadorCard(p, index, habilidadesProjeto, projetoAberto) {
                 ` : ''}
 
                 <div class="prestador-bio-modern">
-                    <div class="bio-icon">💬</div>
+                    <div class="bio-icon"><i class="fa-solid fa-comments"></i></div>
                     <p class="bio-text">${bioPreview}</p>
                 </div>
 
@@ -647,7 +649,7 @@ async function atualizarPrestadoresRecomendados(projectId) {
         if (prestadores.length === 0) {
             el.innerHTML = `
                 <div class="match-empty-modern">
-                    <div class="match-empty-icon">🔍</div>
+                    <div class="match-empty-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
                     <div class="match-empty-title">Nenhum prestador encontrado</div>
                     <div class="match-empty-text">Nenhum prestador com perfil relevante foi encontrado para este projeto.</div>
                     <div class="match-empty-hint">Tente ajustar as habilidades ou a descrição do projeto.</div>
@@ -689,7 +691,7 @@ async function atualizarPrestadoresRecomendados(projectId) {
         console.error('Erro ao carregar ranking:', err);
         el.innerHTML = `
             <div class="match-empty-modern">
-                <div class="match-empty-icon">⚠️</div>
+                <div class="match-empty-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
                 <div class="match-empty-title">Erro ao carregar</div>
                 <div class="match-empty-text">Não foi possível carregar o ranking de recomendação.</div>
                 <div class="match-empty-hint">Tente novamente mais tarde.</div>

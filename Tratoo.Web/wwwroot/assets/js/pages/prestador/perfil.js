@@ -3,7 +3,7 @@
 const root = () => document.getElementById('perfil-root');
 
 function nivelLabel(n) {
-    const m = { 1: 'Básico', 2: 'Iniciante', 3: 'Intermediário', 4: 'Avançado', 5: 'Especialista' };
+    const m = { 1: 'Básico', 3: 'Intermediário', 4: 'Avançado', 5: 'Especialista' };
     return m[n] ?? `Nível ${n}`;
 }
 
@@ -23,9 +23,9 @@ function escHtml(str) {
 
 // ── Detecta o ID do prestador pela URL ────────────────────────────────────────
 // Suporta:
-//   - /prestadores/{id}/perfil.html → extrai {id} do pathname
-//   - /pages/prestador/perfil.html?id={id} → extrai ?id do query string
-//   - /pages/prestador/perfil.html (sem id) → carrega próprio perfil autenticado
+//   - /prestadores/{id}/perfil.html -> extrai {id} do pathname
+//   - /pages/prestador/perfil.html?id={id} -> extrai ?id do query string
+//   - /pages/prestador/perfil.html (sem id) -> carrega próprio perfil autenticado
 
 function obterPrestadorId() {
     // Tenta extrair do pathname: /prestadores/{id}/perfil.html
@@ -40,7 +40,7 @@ function obterPrestadorId() {
         return parseInt(params.get('id'));
     }
 
-    // Sem ID → carrega o próprio perfil autenticado
+    // Sem ID -> carrega o próprio perfil autenticado
     return null;
 }
 
@@ -93,6 +93,9 @@ function renderizarPerfil(d, ehProprietario) {
             <div class="perfil-header-info">
                 <h1 class="perfil-nome">${escHtml(d.nome)}</h1>
                 ${d.tituloProfissional ? `<p class="perfil-titulo">${escHtml(d.tituloProfissional)}</p>` : ''}
+                ${(d.areaEspecializacao || d.funcaoExecutada)
+            ? `<p class="perfil-area">${escHtml([d.funcaoExecutada, d.areaEspecializacao].filter(Boolean).join(' · '))}</p>`
+            : ''}
                 ${(d.localizacaoCidade || d.localizacaoEstado)
             ? `<p class="perfil-localizacao">${escHtml([d.localizacaoCidade, d.localizacaoEstado].filter(Boolean).join(', '))}</p>`
             : ''}
@@ -100,12 +103,11 @@ function renderizarPerfil(d, ehProprietario) {
                 <div class="perfil-tags">
                     ${d.disponivel ? '<span class="perfil-tag">Disponível</span>' : '<span class="perfil-tag">Indisponível</span>'}
                     ${d.nivelVerificacao ? '<span class="perfil-tag perfil-tag--verified">Identidade verificada</span>' : ''}
-                    ${d.valorHora ? `<span class="perfil-tag">R$ ${Number(d.valorHora).toFixed(2).replace('.', ',')}/h</span>` : ''}
                 </div>
 
                 <div class="perfil-links">
                     ${d.linkedinUrl ? `<a href="${escHtml(d.linkedinUrl)}" target="_blank" rel="noopener" class="perfil-link">LinkedIn</a>` : ''}
-                    ${d.gitHubUrl ? `<a href="${escHtml(d.gitHubUrl)}"   target="_blank" rel="noopener" class="perfil-link">GitHub</a>` : ''}
+                    ${d.portfolioUrl ? `<a href="${escHtml(d.portfolioUrl)}" target="_blank" rel="noopener" class="perfil-link">Portfólio</a>` : ''}
                     ${d.emailContato ? `<a href="mailto:${escHtml(d.emailContato)}" class="perfil-link">${escHtml(d.emailContato)}</a>` : ''}
                     ${linksExtras}
                 </div>
@@ -136,7 +138,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Competências
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormCompetencia()">+ Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormCompetencia()">Adicionar</button>` : ''}
             </h2>
             <div id="competencia-form-wrap"></div>
             <div id="competencia-lista" class="competencia-lista">
@@ -148,7 +150,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Portfólio
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormPortfolio()">+ Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormPortfolio()">Adicionar</button>` : ''}
             </h2>
             <div id="portfolio-form-wrap"></div>
             <div id="portfolio-grid" class="portfolio-grid">
@@ -160,7 +162,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Experiência Profissional
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormExperiencia()">+ Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormExperiencia()">Adicionar</button>` : ''}
             </h2>
             <div id="experiencia-form-wrap"></div>
             <div id="experiencia-lista">
@@ -172,7 +174,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Certificações
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormCertificacao()">+ Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormCertificacao()">Adicionar</button>` : ''}
             </h2>
             <div id="certificacao-form-wrap"></div>
             <div id="certificacao-lista">
@@ -252,11 +254,11 @@ function renderSimilarCard(p) {
         : '';
 
     const rating = p.mediaAvaliacoes > 0
-        ? `<span class="similar-card__rating">★ ${Number(p.mediaAvaliacoes).toFixed(1)} <small>(${p.totalAvaliacoes})</small></span>`
+        ? `<span class="similar-card__rating"><i class="fa-solid fa-star"></i> ${Number(p.mediaAvaliacoes).toFixed(1)} <small>(${p.totalAvaliacoes})</small></span>`
         : '';
 
     const verif = p.nivelVerificacao >= 2
-        ? '<span class="similar-card__verif" title="Identidade verificada">✓</span>' : '';
+        ? '<span class="similar-card__verif" title="Identidade verificada"><i class="fa-solid fa-check"></i></span>' : '';
 
     const skills = (p.competencias || []).slice(0, 3)
         .map(s => `<span class="similar-card__skill">${escHtml(s)}</span>`).join('');
@@ -293,7 +295,7 @@ function renderizarCompetencias(lista, ehProprietario) {
             ${escHtml(c.nome)}
             <span class="competencia-nivel nivel-${c.nivel}">${nivelLabel(c.nivel)}</span>
             ${ehProprietario ? `
-                <button class="btn-icon btn-icon--danger" onclick="removerCompetencia(${c.id})" title="Remover">✕</button>
+                <button class="btn-icon btn-icon--danger" onclick="removerCompetencia(${c.id})" title="Remover"><i class="fa-solid fa-trash"></i></button>
             ` : ''}
         </div>
     `).join('');
@@ -306,20 +308,28 @@ function renderizarBadgesCompetencias(competencias) {
     ).join('')}</div>`;
 }
 
+function ehArquivoImagem(url) {
+    return url && /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url);
+}
+
 function renderizarPortfolio(lista, ehProprietario) {
     if (!lista?.length) return '<span class="empty-state">Nenhum item de portfólio.</span>';
     return lista.map(p => `
         <div class="portfolio-card" id="port-${p.id}">
             <div class="portfolio-card__thumb">
-                ${p.arquivoUrl ? '📄' : '🔗'}
+                ${p.arquivoUrl
+                    ? ehArquivoImagem(p.arquivoUrl)
+                        ? `<img src="${escHtml(p.arquivoUrl)}" alt="${escHtml(p.titulo)}" class="portfolio-card__img">`
+                        : '<i class="fa-solid fa-file-pdf"></i>'
+                    : '<i class="fa-solid fa-globe"></i>'}
             </div>
             <div class="portfolio-card__body">
                 <p class="portfolio-card__titulo">${escHtml(p.titulo)}</p>
                 ${p.descricao ? `<p class="portfolio-card__desc">${escHtml(p.descricao)}</p>` : ''}
                 ${p.linkExterno
-            ? `<a href="${escHtml(p.linkExterno)}" target="_blank" rel="noopener" class="portfolio-card__link">Ver projeto</a>`
+            ? `<a href="${escHtml(p.linkExterno)}" target="_blank" rel="noopener" class="portfolio-card__link">Visualizar portfólio</a>`
             : p.arquivoUrl
-                ? `<a href="${escHtml(p.arquivoUrl)}" target="_blank" rel="noopener" class="portfolio-card__link">Ver PDF</a>`
+                ? `<a href="${escHtml(p.arquivoUrl)}" target="_blank" rel="noopener" class="portfolio-card__link">Visualizar anexo</a>`
                 : ''}
                 ${renderizarBadgesCompetencias(p.competencias)}
                 <div id="comp-mgr-port-${p.id}"></div>
@@ -344,7 +354,7 @@ function renderizarExperiencias(lista, ehProprietario) {
             <div class="timeline-item__info">
                 <p class="timeline-item__cargo">${escHtml(e.cargo)}</p>
                 <p class="timeline-item__empresa">${escHtml(e.empresa)}${e.local ? ` · ${escHtml(e.local)}` : ''}</p>
-                <p class="timeline-item__periodo">${inicio}${fim ? ` → ${fim}` : ''}${e.tipoContrato ? ` · ${escHtml(e.tipoContrato)}` : ''}</p>
+                <p class="timeline-item__periodo">${inicio}${fim ? ` <i class="fa-solid fa-arrow-right"></i> ${fim}` : ''}${e.tipoContrato ? ` · ${escHtml(e.tipoContrato)}` : ''}</p>
                 ${e.atividades ? `<p class="timeline-item__desc">${escHtml(e.atividades)}</p>` : ''}
                 ${renderizarBadgesCompetencias(e.competencias)}
                 <div id="comp-mgr-exp-${e.id}"></div>
@@ -367,7 +377,11 @@ function renderizarCertificacoes(lista, ehProprietario) {
                 <p class="timeline-item__cargo">${escHtml(c.nome)}</p>
                 <p class="timeline-item__empresa">${escHtml(c.instituicao)}</p>
                 <p class="timeline-item__periodo">Emitido em ${formatarData(c.dataEmissao)}${c.dataValidade ? ` · Válido até ${formatarData(c.dataValidade)}` : ''}</p>
-                ${c.linkVerificacao ? `<a href="${escHtml(c.linkVerificacao)}" target="_blank" rel="noopener" class="perfil-link" style="font-size:12px">Verificar certificado</a>` : ''}
+                <div class="cert-links">
+                    ${c.linkVerificacao ? `<a href="${escHtml(c.linkVerificacao)}" target="_blank" rel="noopener" class="perfil-link" style="font-size:12px"><i class="fa-solid fa-link"></i> Verificar certificado</a>` : ''}
+                    ${c.arquivoUrl ? `<a href="${escHtml(c.arquivoUrl)}" target="_blank" rel="noopener" class="perfil-link" style="font-size:12px"><i class="fa-solid ${ehArquivoImagem(c.arquivoUrl) ? 'fa-image' : 'fa-file-pdf'}"></i> Ver certificado</a>` : ''}
+                </div>
+                ${c.arquivoUrl && ehArquivoImagem(c.arquivoUrl) ? `<a href="${escHtml(c.arquivoUrl)}" target="_blank" rel="noopener"><img src="${escHtml(c.arquivoUrl)}" alt="Certificado ${escHtml(c.nome)}" class="cert-thumb"></a>` : ''}
                 ${renderizarBadgesCompetencias(c.competencias)}
                 <div id="comp-mgr-cert-${c.id}"></div>
             </div>
@@ -388,8 +402,7 @@ function sugerirProximoPasso(d) {
     if ((d.competencias?.length ?? 0) < 3) return 'Adicione pelo menos 3 competências (+15%).';
     if (!(d.portfolio?.length >= 1)) return 'Adicione um item ao portfólio (+20%).';
     if (!(d.experiencias?.length >= 1)) return 'Adicione uma experiência profissional (+15%).';
-    if (!(d.certificacoes?.length >= 1)) return 'Adicione uma certificação (+10%).';
-    if (!d.valorHora) return 'Defina sua taxa por hora (+5%).';
+    if (!(d.certificacoes?.length >= 1)) return 'Adicione uma certificação (+15%).';
     return '';
 }
 
@@ -409,7 +422,6 @@ function abrirFormCompetencia() {
                     <label>Nível</label>
                     <select id="comp-nivel">
                         <option value="1">Básico</option>
-                        <option value="2">Iniciante</option>
                         <option value="3" selected>Intermediário</option>
                         <option value="4">Avançado</option>
                         <option value="5">Especialista</option>
@@ -485,9 +497,9 @@ function abrirFormPortfolio(item) {
                 <input type="url" id="port-link" value="${escHtml(item?.linkExterno ?? '')}" placeholder="https://github.com/...">
             </div>
             <div class="form-group">
-                <label>Upload PDF (máx. 10 MB)</label>
-                <input type="file" id="port-arquivo" accept=".pdf">
-                ${item?.arquivoUrl ? `<a href="${escHtml(item.arquivoUrl)}" target="_blank" style="font-size:12px;color:#004584">Ver PDF atual</a>` : ''}
+                <label>Imagem ou PDF (JPG, PNG, GIF, WEBP, PDF — máx. 10 MB)</label>
+                <input type="file" id="port-arquivo" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp">
+                ${item?.arquivoUrl ? `<a href="${escHtml(item.arquivoUrl)}" target="_blank" style="font-size:12px;color:#004584">Ver arquivo atual</a>` : ''}
             </div>
             <p id="port-erro" class="form-erro" hidden></p>
             <div class="form-acoes">
@@ -536,13 +548,19 @@ async function salvarPortfolio(portfolioId, arquivoUrlExistente) {
         erro.hidden = false; return;
     }
     if (!linkExterno && !arquivo && !arquivoUrlExistente) {
-        erro.textContent = 'Informe um link externo ou faça upload de um arquivo PDF.';
+        erro.textContent = 'Informe um link externo ou faça upload de um arquivo.';
         erro.hidden = false; return;
     }
-    // Validação de tamanho do PDF client-side (10 MB)
-    if (arquivo && arquivo.size > 10 * 1024 * 1024) {
-        erro.textContent = 'O arquivo PDF deve ter no máximo 10 MB.';
-        erro.hidden = false; return;
+    if (arquivo) {
+        const extPermitidas = /\.(pdf|jpg|jpeg|png|gif|webp)$/i;
+        if (!extPermitidas.test(arquivo.name)) {
+            erro.textContent = 'Somente PDF e imagens (JPG, PNG, GIF, WEBP) são aceitos.';
+            erro.hidden = false; return;
+        }
+        if (arquivo.size > 10 * 1024 * 1024) {
+            erro.textContent = 'O arquivo deve ter no máximo 10 MB.';
+            erro.hidden = false; return;
+        }
     }
 
     btn.disabled = true; btn.textContent = 'Salvando...';
@@ -588,7 +606,7 @@ function abrirFormExperiencia(item) {
             <div class="form-row">
                 <div class="form-group">
                     <label>Cargo *</label>
-                    <input type="text" id="exp-cargo" value="${escHtml(item?.cargo ?? '')}" placeholder="Ex: Desenvolvedor Full-Stack">
+                    <input type="text" id="exp-cargo" value="${escHtml(item?.cargo ?? '')}" placeholder="Ex: Designer Gráfico, Redator, Consultor...">
                 </div>
                 <div class="form-group">
                     <label>Empresa *</label>
@@ -729,10 +747,15 @@ function abrirFormCertificacao(item) {
                 <label>Link de verificação</label>
                 <input type="url" id="cert-link" value="${escHtml(item?.linkVerificacao ?? '')}" placeholder="https://...">
             </div>
+            <div class="form-group">
+                <label>Certificado (PDF ou imagem — JPG, PNG, WEBP — máx. 10 MB)</label>
+                <input type="file" id="cert-arquivo" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                ${item?.arquivoUrl ? `<a href="${escHtml(item.arquivoUrl)}" target="_blank" style="font-size:12px;color:#004584">Ver certificado atual</a>` : ''}
+            </div>
             <p id="cert-erro" class="form-erro" hidden></p>
             <div class="form-acoes">
                 <button class="btn-cancelar" onclick="fecharFormCertificacao()">Cancelar</button>
-                <button class="btn-salvar" id="btn-salvar-cert" onclick="salvarCertificacao(${edit ? item.id : 'null'})">Salvar</button>
+                <button class="btn-salvar" id="btn-salvar-cert" onclick="salvarCertificacao(${edit ? item.id : 'null'}, ${edit ? `'${item.arquivoUrl ?? ''}'` : 'null'})">Salvar</button>
             </div>
         </div>`;
 }
@@ -746,12 +769,13 @@ function editarCertificacao(id) {
     if (item) abrirFormCertificacao(item);
 }
 
-async function salvarCertificacao(certId) {
+async function salvarCertificacao(certId, arquivoUrlExistente) {
     const nome = document.getElementById('cert-nome').value.trim();
     const instituicao = document.getElementById('cert-instituicao').value.trim();
     const dataEmissao = document.getElementById('cert-emissao').value;
-    const dataValidade = document.getElementById('cert-validade').value || null;
-    const linkVerificacao = document.getElementById('cert-link').value.trim() || null;
+    const dataValidade = document.getElementById('cert-validade').value || '';
+    const linkVerificacao = document.getElementById('cert-link').value.trim() || '';
+    const arquivo = document.getElementById('cert-arquivo').files[0];
     const btn = document.getElementById('btn-salvar-cert');
     const erro = document.getElementById('cert-erro');
     erro.hidden = true;
@@ -761,16 +785,34 @@ async function salvarCertificacao(certId) {
         erro.hidden = false;
         return;
     }
+    if (arquivo) {
+        const extPermitidas = /\.(pdf|jpg|jpeg|png|webp)$/i;
+        if (!extPermitidas.test(arquivo.name)) {
+            erro.textContent = 'Somente PDF e imagens (JPG, PNG, WEBP) são aceitos.';
+            erro.hidden = false; return;
+        }
+        if (arquivo.size > 10 * 1024 * 1024) {
+            erro.textContent = 'O arquivo deve ter no máximo 10 MB.';
+            erro.hidden = false; return;
+        }
+    }
 
     btn.disabled = true; btn.textContent = 'Salvando...';
 
-    const body = { nome, instituicao, dataEmissao, dataValidade, linkVerificacao };
+    const form = new FormData();
+    form.append('nome', nome);
+    form.append('instituicao', instituicao);
+    form.append('dataEmissao', dataEmissao);
+    if (dataValidade) form.append('dataValidade', dataValidade);
+    if (linkVerificacao) form.append('linkVerificacao', linkVerificacao);
+    if (arquivo) form.append('arquivo', arquivo);
+    if (arquivoUrlExistente && !arquivo) form.append('arquivoUrlExistente', arquivoUrlExistente);
 
     try {
         if (certId) {
-            await api.put(`/prestadores/me/certificacoes/${certId}`, body);
+            await api.uploadPut(`/prestadores/me/certificacoes/${certId}`, form);
         } else {
-            await api.post('/prestadores/me/certificacoes', body);
+            await api.uploadPost('/prestadores/me/certificacoes', form);
         }
         fecharFormCertificacao();
         await recarregar();
@@ -804,11 +846,32 @@ const _COMP_MGR_FONTE = {
     port: id => window._perfilDados?.portfolio?.find(p => p.id === id),
 };
 
+// ── Competências Avançadas - Gerenciamento com UX Melhorado ───────────────────
+
+// Estado global para gerenciar painéis abertos
+const _painelsAbertos = new Set();
+
+// ── Gerenciamento de Competências (Interface Melhorada) ──────────────────────
+
 function toggleGerenciarCompetencias(tipo, itemId) {
     const mgrId = `comp-mgr-${tipo}-${itemId}`;
     const mgr = document.getElementById(mgrId);
     if (!mgr) return;
-    if (mgr.innerHTML.trim()) { mgr.innerHTML = ''; return; }
+
+    // Se já está aberto, fecha com animação suave
+    if (mgr.innerHTML.trim()) {
+        mgr.style.opacity = '0';
+        mgr.style.transform = 'translateY(-10px)';
+        setTimeout(() => {
+            mgr.innerHTML = '';
+            mgr.style.opacity = '';
+            mgr.style.transform = '';
+        }, 200);
+        _painelsAbertos.delete(mgrId);
+        return;
+    }
+
+    _painelsAbertos.add(mgrId);
     renderizarPainelCompetencias(tipo, itemId);
 }
 
@@ -818,49 +881,112 @@ function renderizarPainelCompetencias(tipo, itemId) {
     if (!mgr) return;
 
     const item = _COMP_MGR_FONTE[tipo]?.(itemId);
-    if (!item) return;
+    if (!item) {
+        mgr.innerHTML = '<div class="form-erro">Item não encontrado.</div>';
+        return;
+    }
 
     const todasComps = window._perfilDados?.competencias ?? [];
     const vinculadas = item.competencias ?? [];
     const vinculadasIds = new Set(vinculadas.map(c => c.id));
-
     const disponiveisParaAdicionar = todasComps.filter(c => !vinculadasIds.has(c.id));
 
+    // Renderiza com animação
+    mgr.style.opacity = '0';
+    mgr.style.transform = 'translateY(-10px)';
+
     const badgesHtml = vinculadas.length
-        ? vinculadas.map(c => `
-            <span class="comp-badge nivel-${c.nivel}" style="cursor:pointer" title="Clique para desvincular" onclick="desassociarCompetencia('${tipo}', ${itemId}, ${c.id}, this)">
-                ${escHtml(c.nome)} ✕
-            </span>`).join('')
-        : '<span class="empty-state" style="font-size:12px;padding:0">Nenhuma competência vinculada.</span>';
+        ? `<div class="comp-badges vinculadas-grid">
+            ${vinculadas.map(c => `
+                <div class="comp-vinculada-item" data-comp-id="${c.id}" data-nivel="${c.nivel}">
+                    <span class="comp-badge nivel-${c.nivel}">
+                        ${escHtml(c.nome)}
+                        <span class="comp-nivel-tag">${nivelLabel(c.nivel)}</span>
+                    </span>
+                    <button class="btn-desvincular" onclick="desassociarCompetencia('${tipo}', ${itemId}, ${c.id}, this)"
+                        title="Desvincular competência">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            `).join('')}
+        </div>`
+        : '<div class="empty-state-comp"><i class="fa-solid fa-layer-group"></i> Nenhuma competência vinculada ainda.</div>';
 
     const selectHtml = disponiveisParaAdicionar.length
-        ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px">
-            <select id="comp-add-select-${tipo}-${itemId}" class="competencia-select">
-                <option value="">— selecionar competência —</option>
-                ${disponiveisParaAdicionar.map(c => `<option value="${c.id}">${escHtml(c.nome)} (${nivelLabel(c.nivel)})</option>`).join('')}
-            </select>
-            <button class="btn-icon btn-icon--secondary" style="font-size:11px" onclick="associarCompetencia('${tipo}', ${itemId})">Vincular</button>
+        ? `<div class="comp-associar-area">
+            <div class="comp-select-wrapper">
+                <select id="comp-add-select-${tipo}-${itemId}" class="competencia-select-moderno">
+                    <option value="">Selecionar competência...</option>
+                    ${disponiveisParaAdicionar.map(c => `
+                        <option value="${c.id}" data-nivel="${c.nivel}">
+                            ${escHtml(c.nome)} — ${nivelLabel(c.nivel)}
+                        </option>
+                    `).join('')}
+                </select>
+                <button class="btn-associar" onclick="associarCompetencia('${tipo}', ${itemId})">
+                    <i class="fa-solid fa-circle-plus"></i> Vincular
+                </button>
+            </div>
            </div>`
-        : '<span style="font-size:12px;color:#94a3b8;margin-top:8px;display:block">✅ Todas as competências já estão vinculadas.</span>';
+        : '<div class="success-message"><i class="fa-solid fa-circle-check"></i> Todas as competências já estão vinculadas!</div>';
 
     mgr.innerHTML = `
-        <div class="comp-mgr-painel">
-            <p class="comp-mgr-painel__titulo">📌 Competências vinculadas</p>
-            <div class="comp-badges" style="margin-bottom:4px">${badgesHtml}</div>
-            ${selectHtml}
-            <p id="comp-mgr-erro-${tipo}-${itemId}" class="form-erro" hidden></p>
+        <div class="comp-mgr-painel-moderno">
+            <div class="comp-mgr-header">
+                <i class="fa-solid fa-link"></i>
+                <span>Vincular Competências</span>
+                <button class="btn-fechar-painel" onclick="toggleGerenciarCompetencias('${tipo}', ${itemId})">
+                    <i class="fa-solid fa-x"></i>
+                </button>
+            </div>
+            <div class="comp-mgr-body">
+                <div class="comp-section">
+                    <div class="comp-section-title">
+                        <i class="fa-solid fa-link"></i>
+                        Competências vinculadas (${vinculadas.length})
+                    </div>
+                    <div id="comp-vinculadas-${tipo}-${itemId}" class="comp-vinculadas-container">
+                        ${badgesHtml}
+                    </div>
+                </div>
+                <div class="comp-section">
+                    <div class="comp-section-title">
+                        <i class="fa-solid fa-circle-plus"></i>
+                        Adicionar competência
+                    </div>
+                    ${selectHtml}
+                </div>
+            </div>
+            <div id="comp-mgr-erro-${tipo}-${itemId}" class="form-erro" style="display:none"></div>
+            <div id="comp-mgr-sucesso-${tipo}-${itemId}" class="form-sucesso" style="display:none"></div>
         </div>`;
+
+    // Anima entrada
+    setTimeout(() => {
+        mgr.style.opacity = '1';
+        mgr.style.transform = 'translateY(0)';
+    }, 10);
 }
 
 async function associarCompetencia(tipo, itemId) {
     const sel = document.getElementById(`comp-add-select-${tipo}-${itemId}`);
     const compId = parseInt(sel?.value);
     const erroEl = document.getElementById(`comp-mgr-erro-${tipo}-${itemId}`);
-    if (erroEl) erroEl.hidden = true;
+    const sucessoEl = document.getElementById(`comp-mgr-sucesso-${tipo}-${itemId}`);
+
+    if (erroEl) erroEl.style.display = 'none';
+    if (sucessoEl) sucessoEl.style.display = 'none';
 
     if (!compId) {
-        if (erroEl) { erroEl.textContent = 'Selecione uma competência.'; erroEl.hidden = false; }
+        mostrarMensagem(erroEl, 'Selecione uma competência para vincular.', 'error');
         return;
+    }
+
+    // Feedback visual no botão
+    const btn = document.querySelector(`#comp-add-select-${tipo}-${itemId}`)?.parentElement?.querySelector('.btn-associar');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vinculando...';
     }
 
     const rota = _COMP_MGR_ROTAS[tipo]?.(itemId, compId);
@@ -868,74 +994,166 @@ async function associarCompetencia(tipo, itemId) {
 
     try {
         await api.post(rota.add, {});
-        // Atualiza dados locais sem recarregar a página inteira
+
+        // Atualiza dados locais
         const item = _COMP_MGR_FONTE[tipo]?.(itemId);
         const compOrigem = window._perfilDados?.competencias?.find(c => c.id === compId);
+
         if (item && compOrigem) {
             if (!item.competencias) item.competencias = [];
             if (!item.competencias.some(c => c.id === compId)) {
-                item.competencias.push({ id: compOrigem.id, nome: compOrigem.nome, nivel: compOrigem.nivel });
+                item.competencias.push({
+                    id: compOrigem.id,
+                    nome: compOrigem.nome,
+                    nivel: compOrigem.nivel
+                });
             }
         }
-        renderizarPainelCompetencias(tipo, itemId);
-        _atualizarBadgesNaView(tipo, itemId);
+
+        // Feedback de sucesso
+        mostrarMensagem(sucessoEl, `✓ "${compOrigem?.nome}" vinculado com sucesso!`, 'success');
+
+        // Recarrega o painel após pequeno delay para mostrar o sucesso
+        setTimeout(() => {
+            renderizarPainelCompetencias(tipo, itemId);
+            _atualizarBadgesNaView(tipo, itemId);
+        }, 800);
+
     } catch (e) {
-        if (erroEl) {
-            erroEl.textContent = e?.data?.mensagem ?? 'Erro ao vincular competência.';
-            erroEl.hidden = false;
-            setTimeout(() => { if (erroEl) erroEl.hidden = true; }, 3000);
+        mostrarMensagem(erroEl, e?.data?.mensagem ?? 'Erro ao vincular competência.', 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-plus"></i> Vincular';
         }
     }
 }
 
-async function desassociarCompetencia(tipo, itemId, compId, badgeEl) {
+async function desassociarCompetencia(tipo, itemId, compId, element) {
+    // Efeito visual de clique
+    const cardItem = element?.closest('.comp-vinculada-item');
+    if (cardItem) {
+        cardItem.style.transform = 'scale(0.95)';
+        cardItem.style.opacity = '0.5';
+    }
+
+    // Confirmação com estilo moderno
+    const confirmado = await confirmarAcao(
+        'Desvincular competência',
+        'Tem certeza que deseja desvincular esta competência? Esta ação não afeta a competência em si, apenas a remove deste item.'
+    );
+
+    if (!confirmado) {
+        if (cardItem) {
+            cardItem.style.transform = '';
+            cardItem.style.opacity = '';
+        }
+        return;
+    }
+
     const rota = _COMP_MGR_ROTAS[tipo]?.(itemId, compId);
     if (!rota) return;
 
+    const erroEl = document.getElementById(`comp-mgr-erro-${tipo}-${itemId}`);
+    const sucessoEl = document.getElementById(`comp-mgr-sucesso-${tipo}-${itemId}`);
+
     try {
         await api.delete(rota.del);
+
+        // Atualiza dados locais
         const item = _COMP_MGR_FONTE[tipo]?.(itemId);
+        const competenciaRemovida = item?.competencias?.find(c => c.id === compId);
+
         if (item) {
             item.competencias = (item.competencias ?? []).filter(c => c.id !== compId);
         }
-        renderizarPainelCompetencias(tipo, itemId);
-        _atualizarBadgesNaView(tipo, itemId);
 
-        // Feedback visual suave
-        if (badgeEl) {
-            badgeEl.style.transform = 'scale(0.9)';
-            setTimeout(() => {
-                if (badgeEl) badgeEl.style.transform = '';
-            }, 200);
-        }
+        // Feedback de sucesso
+        mostrarMensagem(sucessoEl, `✓ "${competenciaRemovida?.nome || 'Competência'}" desvinculada!`, 'success');
+
+        // Recarrega o painel
+        setTimeout(() => {
+            renderizarPainelCompetencias(tipo, itemId);
+            _atualizarBadgesNaView(tipo, itemId);
+        }, 500);
+
     } catch (e) {
-        alert('Erro ao desvincular competência.');
+        mostrarMensagem(erroEl, e?.data?.mensagem ?? 'Erro ao desvincular competência.', 'error');
+        if (cardItem) {
+            cardItem.style.transform = '';
+            cardItem.style.opacity = '';
+        }
     }
 }
+
+// ── Utilitários de UI para feedback ──────────────────────────────────────────
+
+function mostrarMensagem(elemento, mensagem, tipo) {
+    if (!elemento) return;
+
+    elemento.textContent = mensagem;
+    elemento.style.display = 'block';
+    elemento.className = `form-${tipo === 'error' ? 'erro' : 'sucesso'}`;
+
+    // Auto-esconde após 3 segundos
+    setTimeout(() => {
+        if (elemento) {
+            elemento.style.opacity = '0';
+            setTimeout(() => {
+                if (elemento) {
+                    elemento.style.display = 'none';
+                    elemento.style.opacity = '';
+                }
+            }, 300);
+        }
+    }, 3000);
+}
+
+// Modal de confirmação customizado (fallback para confirm nativo com estilo)
+async function confirmarAcao(titulo, mensagem) {
+    // Se tiver um modal customizado, use-o. Caso contrário, fallback para confirm nativo
+    if (window.showCustomConfirm) {
+        return await window.showCustomConfirm(titulo, mensagem);
+    }
+    return confirm(`${titulo}\n\n${mensagem}`);
+}
+
+// ── Atualização visual otimizada ─────────────────────────────────────────────
 
 function _atualizarBadgesNaView(tipo, itemId) {
     const item = _COMP_MGR_FONTE[tipo]?.(itemId);
     if (!item) return;
 
-    // Encontra o elemento pai do card para atualizar os badges estáticos acima do painel
     const prefixo = { exp: 'exp', cert: 'cert', port: 'port' }[tipo];
     const cardEl = document.getElementById(`${prefixo}-${itemId}`);
     if (!cardEl) return;
 
-    // Atualiza os badges que precedem o painel
-    const badgesExistente = cardEl.querySelector('.comp-badges');
-    if (badgesExistente) {
-        const novoHtml = renderizarBadgesCompetencias(item.competencias ?? []);
-        const tmp = document.createElement('div');
-        tmp.innerHTML = novoHtml;
-        const novoBadges = tmp.querySelector('.comp-badges');
-        if (novoBadges && novoBadges.children.length > 0) {
-            badgesExistente.replaceWith(novoBadges);
-        } else if (novoBadges) {
-            badgesExistente.remove();
-        }
+    // Atualiza os badges com animação
+    const badgesContainer = cardEl.querySelector('.comp-badges');
+    const novoHtml = renderizarBadgesCompetencias(item.competencias ?? []);
+
+    if (badgesContainer) {
+        badgesContainer.style.opacity = '0';
+        setTimeout(() => {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = novoHtml;
+            const novoBadges = tmp.querySelector('.comp-badges');
+            if (novoBadges && novoBadges.children.length > 0) {
+                badgesContainer.replaceWith(novoBadges);
+                novoBadges.style.opacity = '0';
+                setTimeout(() => { novoBadges.style.opacity = '1'; }, 10);
+            } else if (novoBadges) {
+                badgesContainer.replaceWith(novoBadges);
+            } else {
+                badgesContainer.remove();
+            }
+        }, 150);
     }
 }
+
+// ── Export/Disponibilizar funções globais ────────────────────────────────────
+window.toggleGerenciarCompetencias = toggleGerenciarCompetencias;
+window.associarCompetencia = associarCompetencia;
+window.desassociarCompetencia = desassociarCompetencia;
 
 // ── Reputação ─────────────────────────────────────────────────────────────────
 
@@ -960,7 +1178,7 @@ async function carregarReputacao(usuarioId) {
 
         const estrelasSVG = (nota) => {
             return [1, 2, 3, 4, 5].map(i =>
-                `<span class="rep-estrela ${i <= nota ? 'rep-estrela--ativa' : ''}">★</span>`
+                `<span class="rep-estrela ${i <= nota ? 'rep-estrela--ativa' : ''}"><i class="fa-solid fa-star"></i></span>`
             ).join('');
         };
 
@@ -971,7 +1189,7 @@ async function carregarReputacao(usuarioId) {
                     ? Math.round((cnt / reputacao.totalAvaliacoes) * 100) : 0;
                 return `
                     <div class="rep-dist-row">
-                        <span class="rep-dist-label">${n}★</span>
+                        <span class="rep-dist-label">${n}<i class="fa-solid fa-star"></i></span>
                         <div class="rep-dist-barra-wrap">
                             <div class="rep-dist-barra" style="width:${pct}%"></div>
                         </div>
@@ -1000,7 +1218,7 @@ async function carregarReputacao(usuarioId) {
                     : `<span class="rep-av-nome">${escHtml(av.avaliadorNome ?? 'Anônimo')}</span>`
                 }
                                 ${av.projetoId
-                    ? `<a href="../projetos/detalhe.html?id=${av.projetoId}" class="rep-av-projeto-link" title="Ver projeto"><span class="rep-av-projeto-icon">📁</span>${escHtml(av.projetoTitulo ?? 'Projeto')}</a>`
+                    ? `<a href="../projetos/detalhe.html?id=${av.projetoId}" class="rep-av-projeto-link" title="Ver projeto"><span class="rep-av-projeto-icon"><i class="fa-solid fa-briefcase"></i></span>${escHtml(av.projetoTitulo ?? 'Projeto')}</a>`
                     : av.projetoTitulo
                         ? `<span class="rep-av-projeto">${escHtml(av.projetoTitulo)}</span>`
                         : ''
@@ -1010,11 +1228,6 @@ async function carregarReputacao(usuarioId) {
                         <div class="rep-av-estrelas">${estrelasSVG(av.nota)}</div>
                     </div>
                     ${av.comentario ? `<p class="rep-av-comentario">${escHtml(av.comentario)}</p>` : ''}
-                    ${av.respostaPublica ? `
-                        <div class="rep-av-resposta">
-                            <span class="rep-av-resposta-label">Resposta do profissional</span>
-                            <p class="rep-av-resposta-texto">${escHtml(av.respostaPublica)}</p>
-                        </div>` : ''}
                     ${av.publicadaEm ? `<span class="rep-av-data">${new Date(av.publicadaEm).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>` : ''}
                 </div>`).join('')
             : '<p class="rep-vazio">Nenhuma avaliação pública ainda.</p>';

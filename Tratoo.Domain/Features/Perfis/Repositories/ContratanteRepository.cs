@@ -25,8 +25,6 @@ namespace Tratoo.Domain.Features.Perfis
         public async Task<Contratante?> GetCompletoAsync(int id)
         {
             return await _context.Contratantes
-                .Include(c => c.Contratos)
-                .Include(c => c.PropostasEnviadas)
                 .FirstOrDefaultAsync(c => c.Id == id);
         }
 
@@ -66,6 +64,32 @@ namespace Tratoo.Domain.Features.Perfis
                 .OrderByDescending(p => p.PublicadoEm ?? p.CriadoEm)
                 .Take(quantidade)
                 .ToListAsync();
+        }
+
+        public async Task<(int ProjetosAtivos, int ContratosConcluidoss, double? TempoMedioDecisaoDias)> GetMetricasAdicionaisAsync(int contratanteId)
+        {
+            var projetosAtivos = await _context.Projetos
+                .CountAsync(p => p.ContratanteId == contratanteId && p.Status == StatusProjeto.Aberto);
+
+            var contratosConcluidoss = await _context.ContratosServico
+                .CountAsync(c => c.ContratanteId == contratanteId && c.Status == ContratoServicoStatus.Encerrado);
+
+            // Dias entre publicação do projeto e criação do contrato, para contratos do contratante
+            var pares = await _context.ContratosServico
+                .AsNoTracking()
+                .Where(c => c.ContratanteId == contratanteId)
+                .Join(_context.Projetos,
+                      c => c.ProjetoId,
+                      p => p.Id,
+                      (c, p) => new { c.CriadoEm, p.PublicadoEm })
+                .Where(x => x.PublicadoEm.HasValue)
+                .ToListAsync();
+
+            double? tempoMedio = pares.Count > 0
+                ? pares.Average(x => (x.CriadoEm - x.PublicadoEm!.Value).TotalDays)
+                : null;
+
+            return (projetosAtivos, contratosConcluidoss, tempoMedio);
         }
     }
 

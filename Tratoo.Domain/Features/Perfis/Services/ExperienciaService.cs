@@ -14,28 +14,6 @@ namespace Tratoo.Domain.Features.Perfis
             _indexador = indexador;
         }
 
-        public async Task<List<ExperienciaDTO>> VisualizarAsync(int prestadorId)
-        {
-            var prestador = await _repo.GetCompletoAsync(prestadorId)
-                ?? throw new NegocioException("Prestador não encontrado");
-
-            return prestador.Experiencias
-                .Select(e => new ExperienciaDTO
-                {
-                    Id           = e.Id,
-                    PrestadorId  = e.PrestadorId,
-                    Empresa      = e.Empresa,
-                    Cargo        = e.Cargo,
-                    Atividades   = e.Atividades,
-                    DataInicio   = e.DataInicio,
-                    DataFim      = e.DataFim,
-                    EmpregoAtual = e.EmpregoAtual,
-                    Local        = e.Local,
-                    TipoContrato = e.TipoContrato
-                })
-                .ToList();
-        }
-
         public async Task AdicionarAsync(ExperienciaDTO dto)
         {
             var prestador = await _repo.GetCompletoAsync(dto.PrestadorId)

@@ -3,21 +3,39 @@
 const root = () => document.getElementById('criar-projeto-root');
 const habilidades = [];
 
-// Normalização de tags: aliases comuns → nome canônico
+// Normalização de tags: aliases comuns -> nome canônico.
+// Cobre as diversas áreas do marketplace (design, marketing, dados, vídeo, etc.),
+// não apenas desenvolvimento de software.
 const TAG_ALIASES = {
+    // Desenvolvimento de software
     'reactjs': 'React', 'react.js': 'React',
-    'vuejs': 'Vue.js', 'vue': 'Vue.js',
     'nodejs': 'Node.js', 'node': 'Node.js',
-    'expressjs': 'Express.js', 'express': 'Express.js',
-    'nextjs': 'Next.js', 'nuxtjs': 'Nuxt.js',
     'typescript': 'TypeScript', 'javascript': 'JavaScript',
-    'angularjs': 'Angular', 'reactnative': 'React Native',
-    'react native': 'React Native',
-    'tailwindcss': 'Tailwind CSS', 'tailwind': 'Tailwind CSS',
-    'nestjs': 'NestJS', 'k8s': 'Kubernetes',
-    'postgres': 'PostgreSQL', 'postgresql': 'PostgreSQL',
-    'golang': 'Go', 'csharp': 'C#',
-    'dotnet': '.NET', '.net': '.NET',
+    'golang': 'Go', 'csharp': 'C#', 'dotnet': '.NET', '.net': '.NET',
+    // Design e edição de imagem
+    'ps': 'Photoshop', 'photoshop': 'Photoshop',
+    'ai': 'Illustrator', 'illustrator': 'Illustrator',
+    'figma': 'Figma', 'canva': 'Canva',
+    'uxui': 'UX/UI', 'ux/ui': 'UX/UI', 'ui/ux': 'UX/UI',
+    // Marketing, social media e tráfego
+    'socialmedia': 'Social Media', 'social media': 'Social Media',
+    'trafego': 'Gestão de Tráfego', 'tráfego': 'Gestão de Tráfego',
+    'trafego pago': 'Gestão de Tráfego', 'ads': 'Tráfego Pago',
+    'metaads': 'Meta Ads', 'meta ads': 'Meta Ads',
+    'googleads': 'Google Ads', 'google ads': 'Google Ads',
+    'seo': 'SEO', 'copy': 'Copywriting', 'copywriting': 'Copywriting',
+    // Dados, BI e planilhas
+    'excel': 'Excel', 'planilhas': 'Planilhas', 'sheets': 'Google Sheets',
+    'powerbi': 'Power BI', 'power bi': 'Power BI', 'bi': 'Power BI',
+    'sql': 'SQL', 'dados': 'Análise de Dados',
+    // Vídeo e conteúdo
+    'premiere': 'Premiere', 'aftereffects': 'After Effects',
+    'after effects': 'After Effects', 'davinci': 'DaVinci Resolve',
+    'edicao de video': 'Edição de Vídeo',
+    // Outros serviços
+    'traducao': 'Tradução', 'tradução': 'Tradução',
+    'va': 'Assistência Virtual', 'assistente virtual': 'Assistência Virtual',
+    'automacao': 'Automação', 'automação': 'Automação',
 };
 
 function normalizarTag(tag) {
@@ -46,12 +64,12 @@ function renderPagina() {
 
         <!-- Seção 1: Informações principais -->
         <div class="form-card">
-            <h3>Informações do projeto</h3>
+            <h3><i class="fa-solid fa-file-pen"></i> Informações do projeto</h3>
 
             <div class="campo">
                 <label for="proj-titulo">Título <span class="obrigatorio">*</span></label>
                 <input id="proj-titulo" type="text" maxlength="200"
-                    placeholder='Ex: "Desenvolver API REST em .NET 8 com EF Core"'>
+                    placeholder='Ex: "Criar identidade visual para minha loja" ou "Editar 10 vídeos para o Instagram"'>
                 <small>Mínimo 10, máximo 200 caracteres.</small>
                 <div id="titulo-count" class="char-count">0 / 10 mínimo</div>
             </div>
@@ -69,10 +87,15 @@ function renderPagina() {
                     <label for="proj-categoria">Categoria <span class="obrigatorio">*</span></label>
                     <select id="proj-categoria">
                         <option value="">Selecione</option>
-                        <option value="TI">TI & Tecnologia</option>
-                        <option value="Design">Design</option>
-                        <option value="Marketing">Marketing</option>
-                        <option value="Redacao">Redação</option>
+                        <option value="TI">Desenvolvimento de Software</option>
+                        <option value="Design">Design & UX/UI</option>
+                        <option value="Marketing">Marketing Digital</option>
+                        <option value="Redacao">Redação & Conteúdo</option>
+                        <option value="Video">Edição de Vídeo</option>
+                        <option value="Dados">Dados & BI</option>
+                        <option value="Traducao">Tradução</option>
+                        <option value="Suporte">Suporte & Assistência Virtual</option>
+                        <option value="Consultoria">Consultoria</option>
                         <option value="Juridico">Jurídico</option>
                         <option value="Outros">Outros</option>
                     </select>
@@ -90,7 +113,7 @@ function renderPagina() {
 
         <!-- Seção 2: Orçamento e prazo -->
         <div class="form-card">
-            <h3>Orçamento & Prazo</h3>
+            <h3><i class="fa-solid fa-dollar-sign"></i> Orçamento & Prazo</h3>
 
             <div class="campo-row">
                 <div class="campo">
@@ -112,33 +135,26 @@ function renderPagina() {
 
         <!-- Seção 3: Detalhes adicionais (opcionais) -->
         <div class="form-card">
-            <h3>Detalhes adicionais</h3>
+            <h3><i class="fa-solid fa-sliders"></i> Detalhes adicionais</h3>
 
             <div class="campo">
                 <label>Habilidades desejadas</label>
                 <div class="habilidades-input-wrapper">
-                    <input id="inp-habilidade" type="text" maxlength="50" placeholder="Ex: React, Node.js, Python...">
+                    <input id="inp-habilidade" type="text" maxlength="50" placeholder="Ex: Photoshop, Social Media, Power BI...">
                     <button type="button" id="btn-add-habilidade">+ Adicionar</button>
                 </div>
                 <div id="habilidades-tags" class="habilidades-tags"></div>
                 <small>Até 10 habilidades. Cada tag: máx. 50 caracteres.</small>
-                <div id="match-preview" class="match-preview" style="display:none"></div>
             </div>
 
-            <div class="campo-row">
-                <div class="campo">
-                    <label for="proj-nivel">Nível do freelancer</label>
-                    <select id="proj-nivel">
-                        <option value="">Qualquer nível</option>
-                        <option value="Junior">Júnior</option>
-                        <option value="Pleno">Pleno</option>
-                        <option value="Senior">Sênior</option>
-                    </select>
-                </div>
-                <div class="campo">
-                    <label for="proj-num-freelancers">Nº de freelancers</label>
-                    <input id="proj-num-freelancers" type="number" min="1" value="1">
-                </div>
+            <div class="campo">
+                <label for="proj-nivel">Nível do freelancer</label>
+                <select id="proj-nivel">
+                    <option value="">Qualquer nível</option>
+                    <option value="Junior">Júnior</option>
+                    <option value="Pleno">Pleno</option>
+                    <option value="Senior">Sênior</option>
+                </select>
             </div>
 
             <div class="campo">
@@ -152,8 +168,8 @@ function renderPagina() {
 
         <!-- Ações -->
         <div class="acoes-bar">
-            <button id="btn-rascunho" class="btn-rascunho">Salvar como rascunho</button>
-            <button id="btn-publicar" class="btn-publicar">Publicar projeto</button>
+            <button id="btn-rascunho" class="btn-rascunho"><i class="fa-solid fa-floppy-disk"></i> Salvar como rascunho</button>
+            <button id="btn-publicar" class="btn-publicar"><i class="fa-solid fa-rocket"></i> Publicar projeto</button>
         </div>
     </div>`;
 
@@ -200,14 +216,13 @@ function adicionarHabilidade() {
     // Feedback visual de normalização
     if (tag !== tagRaw) {
         const originalPlaceholder = inp.placeholder;
-        inp.placeholder = `"${tagRaw}" → "${tag}" ✓`;
+        inp.placeholder = `"${tagRaw}" normalizado para "${tag}"`;
         setTimeout(() => { inp.placeholder = originalPlaceholder; }, 2000);
     }
 
     habilidades.push(tag);
     inp.value = '';
     renderHabilidades();
-    agendarMatchPreview();
 }
 
 function renderHabilidades() {
@@ -216,97 +231,13 @@ function renderHabilidades() {
     container.innerHTML = habilidades.map((h, i) => `
         <span class="habilidade-tag">
             ${escHtml(h)}
-            <button type="button" onclick="removerHabilidade(${i})" aria-label="Remover ${escHtml(h)}">&times;</button>
+            <button type="button" onclick="removerHabilidade(${i})" aria-label="Remover ${escHtml(h)}"><i class="fa-solid fa-x"></i></button>
         </span>`).join('');
 }
 
 function removerHabilidade(idx) {
     habilidades.splice(idx, 1);
     renderHabilidades();
-    agendarMatchPreview();
-}
-
-// ── Preview de match (prestadores compatíveis) ────────────────────────────────
-
-let _matchTimer = null;
-
-function agendarMatchPreview() {
-    clearTimeout(_matchTimer);
-    const el = document.getElementById('match-preview');
-    if (!el) return;
-    if (habilidades.length === 0) { el.style.display = 'none'; return; }
-    _matchTimer = setTimeout(atualizarMatchPreview, 900);
-}
-
-async function atualizarMatchPreview() {
-    const el = document.getElementById('match-preview');
-    if (!el || habilidades.length === 0) return;
-    el.style.display = 'block';
-    el.innerHTML = '<span class="match-loading">Verificando prestadores compatíveis...</span>';
-    try {
-        const q = encodeURIComponent(habilidades.join(' '));
-        const resultado = await api.get(`/api/busca/prestadores?q=${q}&pageSize=50`);
-
-        // Filtra apenas prestadores com similarity >= 0.6 (boa correspondência)
-        const prestadores = Array.isArray(resultado)
-            ? resultado.filter(p => p.similaridade && p.similaridade >= 0.2)
-            : [];
-
-        if (prestadores.length === 0) {
-            el.innerHTML = '<span class="match-zero">Nenhum prestador com boa compatibilidade encontrado com essas competências.</span>';
-            return;
-        }
-
-        // Ordena por similaridade (decrescente)
-        prestadores.sort((a, b) => (b.similaridade || 0) - (a.similaridade || 0));
-
-        // Limita a 5 prestadores na preview
-        const top5 = prestadores.slice(0, 5);
-
-        const listaHtml = top5.map(p => {
-            const nomePrestador = escHtml(p.nome || 'Sem nome');
-            const tituloProfissional = escHtml(p.tituloProfissional || '');
-            // Pega competências do endpoint (array de strings)
-            const competenciasStr = Array.isArray(p.competencias) && p.competencias.length > 0
-                ? p.competencias.map(c => escHtml(String(c))).join(', ')
-                : 'Sem competências';
-            // Primeiras 100 caracteres da bio
-            const bioPreview = p.bio
-                ? escHtml(p.bio.substring(0, 100)) + (p.bio.length > 100 ? '...' : '')
-                : 'Sem bio';
-
-            return `
-                <div class="match-card">
-                    <div class="match-card-header">
-                        <div>
-                            <h4><a href="/pages/prestador/perfil.html?id=${p.id}" target="_blank" class="match-link">${nomePrestador}</a></h4>
-                            <p class="match-titulo">${tituloProfissional}</p>
-                        </div>
-                        <span class="match-similarity">${(p.similaridade * 100).toFixed(0)}%</span>
-                    </div>
-                    <div class="match-card-body">
-                        <p class="match-bio">${bioPreview}</p>
-                        <p class="match-skills"><strong>Competências:</strong> ${competenciasStr}</p>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        const countMsg = prestadores.length > 5
-            ? `Mostrando top 5 de ${prestadores.length} prestadores compatíveis`
-            : `${prestadores.length} prestador${prestadores.length !== 1 ? 'es' : ''} compatível${prestadores.length !== 1 ? 's' : ''}`;
-
-        el.innerHTML = `
-            <div class="match-summary">
-                <span class="match-hit">✓ ${countMsg}</span>
-            </div>
-            <div class="match-list">
-                ${listaHtml}
-            </div>
-        `;
-    } catch {
-        el.style.display = 'none';
-    }
 }
 
 // ── Feedback e submissão ──────────────────────────────────────────────────────
@@ -329,7 +260,6 @@ async function submeter(publicar) {
     const orcMax = parseFloat(document.getElementById('proj-orc-max').value);
     const prazo = document.getElementById('proj-prazo').value;
     const nivel = document.getElementById('proj-nivel').value || null;
-    const numFreel = parseInt(document.getElementById('proj-num-freelancers').value) || 1;
     const visib = document.getElementById('proj-visibilidade').value;
     const idioma = document.getElementById('proj-idioma').value;
 
@@ -357,7 +287,6 @@ async function submeter(publicar) {
             nivelFreelancer: nivel,
             visibilidade: visib,
             idioma,
-            numFreelancersDesejados: numFreel,
             publicarImediatamente: publicar
         });
 

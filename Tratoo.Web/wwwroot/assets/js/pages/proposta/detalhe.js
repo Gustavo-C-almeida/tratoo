@@ -24,7 +24,7 @@ class Toast {
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
 
-        const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+        const icon = type === 'success' ? '<i class="fa-solid fa-circle-check"></i>' : type === 'error' ? '<i class="fa-solid fa-circle-xmark"></i>' : '<i class="fa-solid fa-circle-info"></i>';
         toast.innerHTML = `<span style="font-size: 18px; font-weight: bold;">${icon}</span> ${message}`;
 
         toast.onclick = () => this.remove(toast);
@@ -87,6 +87,8 @@ const STATUS_LABEL = {
 let proposta = null;
 let usuarioId = null;
 let ehContratante = false;
+let pixConfigurado = true; // assume true; atualizado no carregar (apenas para prestadores)
+let configFinanceiro = null; // taxa operacional estimada do gateway
 let currentStep = 1;
 const totalSteps = 3;
 
@@ -149,6 +151,19 @@ async function carregar() {
         ehContratante = usuarioId === proposta.contratanteId;
     } catch { /* não autenticado */ }
 
+    // Verifica PIX apenas para prestadores (contratante não precisa)
+    if (!ehContratante && usuarioId) {
+        try {
+            const db = await api.get('/prestadores/me/dados-bancarios');
+            pixConfigurado = !!(db && db.configurado);
+        } catch { pixConfigurado = false; }
+    }
+
+    // Carrega configuração financeira para exibir transparência de taxa operacional
+    try {
+        configFinanceiro = await api.get('/api/config/financeiro');
+    } catch { configFinanceiro = null; }
+
     document.title = `Proposta — ${esc(proposta.projetoTitulo)} — Tratoo`;
     render();
 }
@@ -159,7 +174,8 @@ async function carregar() {
 function render() {
     const v = proposta.versaoAtiva;
     const podeNegociar = ['Submitted', 'EmNegociacao'].includes(proposta.status);
-    const podeAceitarRecusar = ehContratante && podeNegociar;
+    const podeRecusarContratante = ehContratante && podeNegociar;
+    const podeAceitarContratante = ehContratante && podeNegociar && !podeAceitarComoPresrador();
 
     // Calcular métricas para o sidebar
     const tempoMedioResposta = calcularTempoMedioResposta();
@@ -169,7 +185,7 @@ function render() {
     <a href="#main-content" class="skip-to-main">Pular para conteúdo principal</a>
     
     <div class="prop-header">
-        <a href="javascript:history.back()" class="back-link">&larr; Voltar</a>
+        <a href="javascript:history.back()" class="back-link"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
         <div class="prop-titulo-bloco">
             <h1>${esc(proposta.projetoTitulo)}</h1>
             <div class="prop-sub">Proposta de <strong>${esc(proposta.prestadorNome)}</strong></div>
@@ -202,37 +218,36 @@ function render() {
             <!-- Métricas Visuais -->
             <div class="proposta-metrics">
                 <div class="metric-item">
-                    <span class="metric-label">💰 Valor</span>
+                    <span class="metric-label"><i class="fa-solid fa-money-bill-wave"></i> Valor</span>
                     <span class="metric-value">${v ? moeda(v.valorTotal) : '—'}</span>
                 </div>
                 <div class="metric-item">
-                    <span class="metric-label">🔄 Versões</span>
+                    <span class="metric-label"><i class="fa-solid fa-arrows-rotate"></i> Versões</span>
                     <span class="metric-value">${proposta.versoes?.length || 1}</span>
                 </div>
                 <div class="metric-item">
-                    <span class="metric-label">⚡ Contrapropostas</span>
+                    <span class="metric-label"><i class="fa-solid fa-bolt"></i> Contrapropostas</span>
                     <span class="metric-value">${totalContrapropostas}</span>
                 </div>
             </div>
 
             <div class="prop-valores">
-                ${v?.entrada ? `<div class="hint">Entrada: ${moeda(v.entrada)}</div>` : ''}
-                <div class="prazo-info">📅 Prazo: <strong>${v ? dataFmt(v.prazoTotal) : '—'}</strong></div>
-                <div class="prazo-info">💳 Pagamento: <strong>${esc(v?.formaPagamento || 'PIX')}</strong></div>
-                <div class="prazo-info">🔄 Revisões: <strong>${v?.revisoesInclusas ?? '—'}</strong></div>
+                <div class="prazo-info"><i class="fa-solid fa-calendar-days"></i> Prazo: <strong>${v ? dataFmt(v.prazoTotal) : '—'}</strong></div>
+                <div class="prazo-info"><i class="fa-solid fa-credit-card"></i> Pagamento: <strong>${esc(v?.formaPagamento || 'PIX')}</strong></div>
+                <div class="prazo-info"><i class="fa-solid fa-arrows-rotate"></i> Revisões: <strong>${v?.revisoesInclusas ?? '—'}</strong></div>
             </div>
 
             ${tempoMedioResposta ? `
             <div class="response-time">
-                <div class="metric-label">⏱️ Tempo médio de resposta</div>
+                <div class="metric-label"><i class="fa-solid fa-stopwatch"></i> Tempo médio de resposta</div>
                 <div class="time-value">${tempoMedioResposta}</div>
             </div>` : ''}
 
             <!-- Ações do contratante -->
-            ${podeAceitarRecusar ? `
+            ${podeRecusarContratante ? `
             <div id="acoes-contratante" class="acoes-bloco">
-                <button id="btn-aceitar" class="btn-aceitar" onclick="abrirModalAceite()" data-tooltip="Aceitar esta proposta">✓ Aceitar proposta</button>
-                <button id="btn-recusar" class="btn-recusar" onclick="mostrarFormRecusar()" data-tooltip="Recusar esta proposta">✗ Recusar</button>
+                ${podeAceitarContratante ? `<button id="btn-aceitar" class="btn-aceitar" onclick="abrirModalAceite()" data-tooltip="Aceitar esta proposta"><i class="fa-solid fa-check"></i> Aceitar proposta</button>` : `<div class="aviso-turno"><i class="fa-solid fa-clock" aria-hidden="true"></i> Aguardando resposta da outra parte</div>`}
+                <button id="btn-recusar" class="btn-recusar" onclick="mostrarFormRecusar()" data-tooltip="Recusar esta proposta"><i class="fa-solid fa-xmark"></i> Recusar</button>
                 <!-- Formulário de Recusa Moderno -->
                 <div id="form-recusar" class="recusar-form-modern" style="display:none">
                     <div class="recusar-form-container">
@@ -253,23 +268,23 @@ function render() {
                         <!-- Motivos Rápidos -->
                         <div class="motivos-rapidos-modern">
                             <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Fora do orçamento')">
-                                <span class="chip-icon">💰</span>
+                                <span class="chip-icon"><i class="fa-solid fa-money-bill-wave"></i></span>
                                 Fora do orçamento
                             </button>
                             <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Prazo muito longo')">
-                                <span class="chip-icon">⏰</span>
+                                <span class="chip-icon"><i class="fa-solid fa-clock"></i></span>
                                 Prazo muito longo
                             </button>
                             <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Escopo insuficiente')">
-                                <span class="chip-icon">📋</span>
+                                <span class="chip-icon"><i class="fa-solid fa-clipboard-list"></i></span>
                                 Escopo insuficiente
                             </button>
                             <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Valor acima do esperado')">
-                                <span class="chip-icon">💸</span>
+                                <span class="chip-icon"><i class="fa-solid fa-money-bill-transfer"></i></span>
                                 Valor acima do esperado
                             </button>
                             <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Já contratei outro profissional')">
-                                <span class="chip-icon">✓</span>
+                                <span class="chip-icon"><i class="fa-solid fa-check"></i></span>
                                 Já contratei outro
                             </button>
                         </div>
@@ -301,7 +316,7 @@ function render() {
                                 Cancelar
                             </button>
                             <button type="button" class="recusar-btn-confirmar" onclick="confirmarRecusa()">
-                                <span class="btn-icon">✗</span>
+                                <span class="btn-icon"><i class="fa-solid fa-xmark"></i></span>
                                 Confirmar recusa
                             </button>
                         </div>
@@ -310,28 +325,37 @@ function render() {
             </div>` : ''}
 
             <!-- Ações do prestador -->
+            ${!ehContratante && !pixConfigurado && ['Draft','Submitted','EmNegociacao'].includes(proposta.status) ? `
+            <div class="aviso-pix-banner" style="background:#fef9c3;border:1px solid #fde047;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#78350f;line-height:1.5">
+                <strong>Chave PIX não configurada</strong><br>
+                Para enviar ou aceitar propostas você precisa cadastrar sua chave PIX.
+                <a href="/pages/prestador/editar-perfil.html" style="color:#92400e;font-weight:700;display:block;margin-top:6px">
+                    <i class="fa-solid fa-arrow-right"></i> Cadastrar dados bancários
+                </a>
+            </div>` : ''}
+
             ${!ehContratante && proposta.status === 'Draft' ? `
             <div class="acoes-bloco">
-                <button class="btn-enviar" onclick="enviarProposta()" data-tooltip="Enviar proposta para análise">📤 Enviar proposta</button>
-                <button class="btn-secundario" style="margin-top:8px;width:100%" onclick="mostrarFormContraproposta()">✏️ Editar rascunho</button>
+                <button class="btn-enviar" onclick="enviarProposta()" ${!pixConfigurado ? 'disabled title="Cadastre sua chave PIX antes de enviar propostas"' : ''} data-tooltip="Enviar proposta para análise"><i class="fa-solid fa-paper-plane"></i> Enviar proposta</button>
+                <button class="btn-secundario" style="margin-top:8px;width:100%" onclick="mostrarFormContraproposta()"><i class="fa-solid fa-pen"></i> Editar rascunho</button>
             </div>` : ''}
 
             ${!ehContratante && ['Submitted', 'EmNegociacao'].includes(proposta.status) ? `
             <div class="acoes-bloco">
-                ${podeAceitarComoPresrador() ? `<button class="btn-aceitar" style="width:100%;margin-bottom:8px" onclick="abrirModalAceitePrestador()">✓ Aceitar proposta do contratante</button>` : ''}
-                ${podeAceitarComoPresrador() ? `<button class="btn-secundario" style="width:100%;margin-bottom:8px" onclick="mostrarFormContraproposta()">🔄 Fazer contraproposta</button>` : ''}
-                <button class="btn-recusar" style="margin-top:8px;width:100%" onclick="cancelarProposta()">🗑️ Cancelar proposta</button>
+                ${podeAceitarComoPresrador() ? `<button class="btn-aceitar" style="width:100%;margin-bottom:8px" onclick="abrirModalAceitePrestador()" ${!pixConfigurado ? 'disabled title="Cadastre sua chave PIX antes de aceitar"' : ''}><i class="fa-solid fa-check"></i> Aceitar proposta do contratante</button>` : ''}
+                ${podeAceitarComoPresrador() ? `<button class="btn-secundario" style="width:100%;margin-bottom:8px" onclick="mostrarFormContraproposta()"><i class="fa-solid fa-arrows-rotate"></i> Fazer contraproposta</button>` : ''}
+                <button class="btn-recusar" style="margin-top:8px;width:100%" onclick="cancelarProposta()"><i class="fa-solid fa-trash-can"></i> Cancelar proposta</button>
             </div>` : ''}
 
             ${ehContratante && podeNegociar && !podeAceitarComoPresrador() ? `
             <div class="acoes-bloco" style="margin-top:16px">
-                <button class="btn-secundario" style="width:100%" onclick="mostrarFormContraproposta()">🔄 Fazer contraproposta</button>
+                <button class="btn-secundario" style="width:100%" onclick="mostrarFormContraproposta()"><i class="fa-solid fa-arrows-rotate"></i> Fazer contraproposta</button>
             </div>` : ''}
 
             ${proposta.status === 'Convertida' ? `
             <div class="acoes-bloco" style="margin-top:12px;text-align:center">
                 <a href="/pages/me/contratos.html" class="btn-ver-contrato" style="display:inline-block;padding:0.45rem 1rem;background:#16a34a;color:#fff;border-radius:7px;font-size:0.85rem;font-weight:600;text-decoration:none">
-                    📄 Ver contrato gerado →
+                    <i class="fa-solid fa-file-lines"></i> Ver contrato gerado <i class="fa-solid fa-arrow-right"></i>
                 </a>
             </div>` : ''}
 
@@ -339,11 +363,11 @@ function render() {
             <div class="acoes-bloco" style="margin-top:16px;text-align:center">
                 <a href="/pages/chat/detalhe.html?projetoId=${proposta.projetoId}&prestadorId=${proposta.prestadorId}"
                    style="display:inline-block;width:100%;padding:0.5rem 1rem;background:#1E293B;color:#fff;border-radius:7px;font-size:0.85rem;font-weight:600;text-decoration:none;box-sizing:border-box">
-                    💬 Abrir conversa
+                    <i class="fa-solid fa-comments"></i> Abrir conversa
                 </a>
             </div>` : ''}
 
-            ${!ehContratante ? `<a href="../prestador/minhas-propostas.html" class="btn-texto" style="display:block;margin-top:16px;text-align:center">📋 Ver minhas propostas</a>` : ''}
+            ${!ehContratante ? `<a href="../prestador/minhas-propostas.html" class="btn-texto" style="display:block;margin-top:16px;text-align:center"><i class="fa-solid fa-clipboard-list"></i> Ver minhas propostas</a>` : ''}
         </aside>
     </div>
 
@@ -364,8 +388,8 @@ function render() {
     <div id="form-contraproposta-wrap" class="form-contraproposta-modern" style="display:none">
         <div class="form-container">
             <div class="form-header">
-                <h3>🔄 Nova Contraproposta</h3>
-                <button class="close-form" onclick="fecharFormContraproposta()" aria-label="Fechar">✕</button>
+                <h3><i class="fa-solid fa-arrows-rotate"></i> Nova Contraproposta</h3>
+                <button class="close-form" onclick="fecharFormContraproposta()" aria-label="Fechar"><i class="fa-solid fa-xmark"></i></button>
             </div>
             
             <div class="form-stepper">
@@ -415,10 +439,6 @@ function render() {
                             <label>Valor total (R$) <span class="obr">*</span></label>
                             <input id="c-valor" type="number" min="1" step="0.01" value="${v?.valorTotal ?? ''}" required>
                         </div>
-                        <div class="campo">
-                            <label>Entrada (R$)</label>
-                            <input id="c-entrada" type="number" min="0" step="0.01" value="${v?.entrada ?? ''}">
-                        </div>
                     </div>
                     <div class="campo">
                         <label>Forma de pagamento</label>
@@ -441,7 +461,7 @@ function render() {
                 <!-- Passo 3 -->
                 <div class="form-step" data-step="3" style="display:none">
                     <div class="live-preview">
-                        <h4>📋 Pré-visualização da proposta</h4>
+                        <h4><i class="fa-solid fa-clipboard-list"></i> Pré-visualização da proposta</h4>
                         <div class="preview-values">
                             <div class="preview-item">
                                 <div class="preview-label">Valor total</div>
@@ -463,9 +483,9 @@ function render() {
                 </div>
 
                 <div class="btn-group" style="margin-top: 24px">
-                    <button type="button" id="btn-prev" class="btn-secundario" style="display:none">← Anterior</button>
-                    <button type="button" id="btn-next" class="btn-enviar">Próximo →</button>
-                    <button type="submit" id="btn-submit" class="btn-enviar" style="display:none">Enviar contraproposta</button>
+                    <button type="button" id="btn-prev" class="btn-secundario" style="display:none"><i class="fa-solid fa-arrow-left"></i> Anterior</button>
+                    <button type="button" id="btn-next" class="btn-enviar btn-com-icone">Próximo <i class="fa-solid fa-arrow-right"></i></button>
+                    <button type="submit" id="btn-submit" class="btn-enviar btn-com-icone" style="display:none">Enviar contraproposta</button>
                     <button type="button" class="btn-secundario" onclick="fecharFormContraproposta()">Cancelar</button>
                 </div>
             </form>
@@ -699,22 +719,21 @@ function renderVersao(v, destaque = false) {
     return `
     <div class="versao-card ${destaque ? 'versao-ativa' : ''}">
         <div class="versao-header">
-            <span class="versao-num">📄 Versão ${v.versao}</span>
+            <span class="versao-num"><i class="fa-solid fa-file-lines"></i> Versão ${v.versao}</span>
             <span class="hint">por ${esc(v.criadoPorNome)} — ${dataFmt(v.criadoEm)}</span>
         </div>
-        <div class="versao-campo"><strong>🎯 Objetivo:</strong> ${esc(v.objetivo)}</div>
-        <div class="versao-campo"><strong>📋 Escopo:</strong><br><pre class="pre-wrap">${esc(v.escopo)}</pre></div>
-        ${v.exclusoes ? `<div class="versao-campo"><strong>🚫 Exclusões:</strong> ${esc(v.exclusoes)}</div>` : ''}
+        <div class="versao-campo"><strong><i class="fa-solid fa-bullseye"></i> Objetivo:</strong> ${esc(v.objetivo)}</div>
+        <div class="versao-campo"><strong><i class="fa-solid fa-clipboard-list"></i> Escopo:</strong><br><pre class="pre-wrap">${esc(v.escopo)}</pre></div>
+        ${v.exclusoes ? `<div class="versao-campo"><strong><i class="fa-solid fa-ban"></i> Exclusões:</strong> ${esc(v.exclusoes)}</div>` : ''}
         <div class="versao-campo-row">
-            <span><strong>💰 Valor:</strong> ${moeda(v.valorTotal)}</span>
-            ${v.entrada ? `<span><strong>💵 Entrada:</strong> ${moeda(v.entrada)}</span>` : ''}
-            <span><strong>💳 Pagamento:</strong> ${esc(v.formaPagamento)}</span>
+            <span><strong><i class="fa-solid fa-money-bill-wave"></i> Valor:</strong> ${moeda(v.valorTotal)}</span>
+            <span><strong><i class="fa-solid fa-credit-card"></i> Pagamento:</strong> ${esc(v.formaPagamento)}</span>
         </div>
         <div class="versao-campo-row">
-            <span><strong>📅 Prazo:</strong> ${dataFmt(v.prazoTotal)}</span>
-            <span><strong>🔄 Revisões:</strong> ${v.revisoesInclusas}</span>
+            <span><strong><i class="fa-solid fa-calendar-days"></i> Prazo:</strong> ${dataFmt(v.prazoTotal)}</span>
+            <span><strong><i class="fa-solid fa-arrows-rotate"></i> Revisões:</strong> ${v.revisoesInclusas}</span>
         </div>
-        ${v.observacoes ? `<div class="versao-campo"><strong>📝 Obs:</strong> ${esc(v.observacoes)}</div>` : ''}
+        ${v.observacoes ? `<div class="versao-campo"><strong><i class="fa-solid fa-pen-to-square"></i> Obs:</strong> ${esc(v.observacoes)}</div>` : ''}
     </div>`;
 }
 
@@ -742,7 +761,7 @@ async function renderVersoesLazy() {
 
     if (proposta.versoes.length > 5) {
         html += `<button class="btn-texto" onclick="carregarMaisVersoes()" style="margin-top: 12px;">
-            📚 Carregar mais ${proposta.versoes.length - 5} versões...
+            <i class="fa-solid fa-book"></i> Carregar mais ${proposta.versoes.length - 5} versões...
         </button>`;
     }
 
@@ -772,7 +791,7 @@ function abrirModalAceite() {
                 <!-- Cabeçalho da versão -->
                 <div class="modal-versao-header">
                     <div class="modal-versao-badge">
-                        <span class="modal-versao-icon">⭐</span>
+                        <span class="modal-versao-icon"><i class="fa-solid fa-star"></i></span>
                         <span class="modal-versao-title">Versão ${v.versao} - Proposta Ativa</span>
                     </div>
                     <div class="modal-versao-meta">
@@ -795,7 +814,7 @@ function abrirModalAceite() {
 
                 <!-- Objetivo -->
                 <div class="modal-versao-section">
-                    <div class="modal-section-icon">🎯</div>
+                    <div class="modal-section-icon"><i class="fa-solid fa-bullseye"></i></div>
                     <div class="modal-section-content">
                         <div class="modal-section-label">Objetivo da Proposta</div>
                         <div class="modal-section-value">${esc(v.objetivo)}</div>
@@ -804,7 +823,7 @@ function abrirModalAceite() {
 
                 <!-- Escopo -->
                 <div class="modal-versao-section">
-                    <div class="modal-section-icon">📋</div>
+                    <div class="modal-section-icon"><i class="fa-solid fa-clipboard-list"></i></div>
                     <div class="modal-section-content">
                         <div class="modal-section-label">Escopo Detalhado</div>
                         <div class="modal-section-value modal-scope-text">${esc(v.escopo)}</div>
@@ -814,46 +833,51 @@ function abrirModalAceite() {
                 ${v.exclusoes ? `
                 <!-- Exclusões -->
                 <div class="modal-versao-section">
-                    <div class="modal-section-icon">🚫</div>
+                    <div class="modal-section-icon"><i class="fa-solid fa-ban"></i></div>
                     <div class="modal-section-content">
                         <div class="modal-section-label">Exclusões</div>
                         <div class="modal-section-value">${esc(v.exclusoes)}</div>
                     </div>
                 </div>` : ''}
 
+                <!-- Transparência de taxa operacional -->
+                ${configFinanceiro && v.valorTotal ? (() => {
+                    const taxa = Math.round(v.valorTotal * configFinanceiro.taxaOperacionalEstimadaPercentual * 100) / 100;
+                    const liquido = v.valorTotal - taxa;
+                    return `
+                <div class="resumo-taxa-op">
+                    <div class="rto-linha"><span>Valor da proposta</span><strong>${moeda(v.valorTotal)}</strong></div>
+                    <div class="rto-linha rto-taxa"><span>Taxa operacional estimada (${configFinanceiro.taxaOperacionalEstimadaDisplay})</span><span>− ${moeda(taxa)}</span></div>
+                    <div class="rto-linha rto-liquido"><span>Estimativa do valor a receber</span><strong>${moeda(liquido)}</strong></div>
+                    <p class="rto-obs">${esc(configFinanceiro.observacao)}</p>
+                </div>`;
+                })() : ''}
+
                 <!-- Grid de Valores -->
                 <div class="modal-versao-grid">
                     <div class="modal-grid-item">
-                        <div class="modal-grid-icon">💰</div>
+                        <div class="modal-grid-icon"><i class="fa-solid fa-money-bill-wave"></i></div>
                         <div class="modal-grid-content">
                             <div class="modal-grid-label">Valor Total</div>
                             <div class="modal-grid-value">${moeda(v.valorTotal)}</div>
                         </div>
                     </div>
-                    ${v.entrada ? `
                     <div class="modal-grid-item">
-                        <div class="modal-grid-icon">💵</div>
-                        <div class="modal-grid-content">
-                            <div class="modal-grid-label">Entrada</div>
-                            <div class="modal-grid-value">${moeda(v.entrada)}</div>
-                        </div>
-                    </div>` : ''}
-                    <div class="modal-grid-item">
-                        <div class="modal-grid-icon">💳</div>
+                        <div class="modal-grid-icon"><i class="fa-solid fa-credit-card"></i></div>
                         <div class="modal-grid-content">
                             <div class="modal-grid-label">Forma de Pagamento</div>
                             <div class="modal-grid-value">${esc(v.formaPagamento)}</div>
                         </div>
                     </div>
                     <div class="modal-grid-item">
-                        <div class="modal-grid-icon">📅</div>
+                        <div class="modal-grid-icon"><i class="fa-solid fa-calendar-days"></i></div>
                         <div class="modal-grid-content">
                             <div class="modal-grid-label">Prazo de Entrega</div>
                             <div class="modal-grid-value">${dataFmt(v.prazoTotal)}</div>
                         </div>
                     </div>
                     <div class="modal-grid-item">
-                        <div class="modal-grid-icon">🔄</div>
+                        <div class="modal-grid-icon"><i class="fa-solid fa-arrows-rotate"></i></div>
                         <div class="modal-grid-content">
                             <div class="modal-grid-label">Revisões Inclusas</div>
                             <div class="modal-grid-value">${v.revisoesInclusas} ${v.revisoesInclusas === 1 ? 'revisão' : 'revisões'}</div>
@@ -864,7 +888,7 @@ function abrirModalAceite() {
                 ${v.observacoes ? `
                 <!-- Observações -->
                 <div class="modal-versao-section">
-                    <div class="modal-section-icon">📝</div>
+                    <div class="modal-section-icon"><i class="fa-solid fa-pen-to-square"></i></div>
                     <div class="modal-section-content">
                         <div class="modal-section-label">Observações Adicionais</div>
                         <div class="modal-section-value">${esc(v.observacoes)}</div>
@@ -906,7 +930,7 @@ async function confirmarAceite() {
         const modal = document.getElementById('modal-confirmar');
         if (modal) modal.style.display = 'none';
 
-        toast.show('✅ Proposta aceita com sucesso!', 'success');
+        toast.show('<i class="fa-solid fa-circle-check"></i> Proposta aceita com sucesso!', 'success');
 
         try {
             const meContratos = await api.get('/api/me/contratos');
@@ -941,10 +965,10 @@ function abrirModalAceitePrestador() {
     if (modalEscopo && ultima) {
         modalEscopo.innerHTML = `
             <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-secondary)">Você está aceitando a versão ${ultima.versao} enviada pelo contratante.</p>
-            <p><strong>🎯 Objetivo:</strong> ${esc(ultima.objetivo)}</p>
-            <p><strong>💰 Valor:</strong> ${moeda(ultima.valorTotal)}</p>
-            <p><strong>📅 Prazo:</strong> ${dataFmt(ultima.prazoTotal)}</p>
-            <p><strong>🔄 Revisões:</strong> ${ultima.revisoesInclusas}</p>`;
+            <p><strong><i class="fa-solid fa-bullseye"></i> Objetivo:</strong> ${esc(ultima.objetivo)}</p>
+            <p><strong><i class="fa-solid fa-money-bill-wave"></i> Valor:</strong> ${moeda(ultima.valorTotal)}</p>
+            <p><strong><i class="fa-solid fa-calendar-days"></i> Prazo:</strong> ${dataFmt(ultima.prazoTotal)}</p>
+            <p><strong><i class="fa-solid fa-arrows-rotate"></i> Revisões:</strong> ${ultima.revisoesInclusas}</p>`;
     }
 
     if (modal) {
@@ -963,7 +987,7 @@ async function confirmarAceitePrestador() {
     try {
         await api.put(`/api/propostas/${proposta.id}/aceitar-negociacao`, {});
         document.getElementById('modal-confirmar').style.display = 'none';
-        toast.show('✅ Proposta aceita! Um contrato foi gerado.', 'success');
+        toast.show('<i class="fa-solid fa-circle-check"></i> Proposta aceita! Um contrato foi gerado.', 'success');
 
         try {
             const meContratos = await api.get('/api/me/contratos');
@@ -1082,7 +1106,6 @@ async function enviarContraproposta(e) {
         exclusoes: document.getElementById('c-exclusoes').value.trim() || null,
         revisoesInclusas: parseInt(document.getElementById('c-revisoes').value),
         valorTotal: parseFloat(document.getElementById('c-valor').value),
-        entrada: parseFloat(document.getElementById('c-entrada').value) || null,
         formaPagamento: document.getElementById('c-pagamento').value,
         prazoTotal: new Date(document.getElementById('c-prazo').value).toISOString(),
         observacoes: document.getElementById('c-obs').value.trim() || null,

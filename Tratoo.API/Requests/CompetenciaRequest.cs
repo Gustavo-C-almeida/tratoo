@@ -4,7 +4,4 @@
     string Nome,
     int Nivel
     );
-    public record PutCompetenciaRequest(
-        int Nivel
-    );
 }

@@ -99,9 +99,6 @@ namespace Tratoo.Domain.Features.IA
             var query = _db.Prestadores
                 .Where(p => p.Status == StatusUsuario.Active && candidatoIds.Contains(p.Id));
 
-            if (filtros.ValorHoraMax.HasValue)
-                query = query.Where(p => p.ValorHora == null || p.ValorHora <= filtros.ValorHoraMax);
-
             if (!string.IsNullOrWhiteSpace(filtros.Categoria))
                 query = query.Where(p => p.Competencias.Any(c => c.Nome.Contains(filtros.Categoria)));
 
@@ -113,13 +110,20 @@ namespace Tratoo.Domain.Features.IA
                     p.Nome,
                     p.TituloProfissional,
                     p.FotoUrl,
-                    p.ValorHora,
                     p.PorcentagemCompleto,
                     p.AvaliacoesPrivado,
                     p.Disponivel,
                     p.DisponivelAPartirDe,
                     Bio = p.Descricao,
-                    Competencias = p.Competencias.Select(c => c.Nome).ToList()
+                    // Cada competência traz a flag "Comprovada": possui experiência,
+                    // portfólio ou certificação associada — usada no score de comprovação.
+                    Competencias = p.Competencias.Select(c => new
+                    {
+                        c.Nome,
+                        Comprovada = c.CompetenciaExperiencias.Any()
+                            || c.CompetenciaPortfolios.Any()
+                            || c.CompetenciaCertificacoes.Any()
+                    }).ToList()
                 })
                 .ToListAsync();
 
@@ -162,7 +166,15 @@ namespace Tratoo.Domain.Features.IA
             {
                 float similaridade = similaridades.GetValueOrDefault(c.Id, 0.5f);
 
-                var (stackScore, matched) = CalcularSimilaridadeStack(c.Competencias, termosBusca);
+                var nomesCompetencias = c.Competencias.Select(x => x.Nome).ToList();
+                var (stackScore, matched) = CalcularSimilaridadeStack(nomesCompetencias, termosBusca);
+
+                // Comprovação: prioriza prestadores cujas competências têm experiência,
+                // portfólio ou certificação associada. Quando há termos de busca, considera
+                // apenas as competências relevantes (matched); caso contrário, todas.
+                var competenciasComprovadas = c.Competencias
+                    .Select(x => new CompetenciaComprovada(x.Nome, x.Comprovada)).ToList();
+                float comprovacaoScore = CalcularComprovacaoScore(competenciasComprovadas, matched);
 
                 // RN-AV-006: avaliações privadas não influenciam ranking
                 var rep = reputacoes.GetValueOrDefault(c.Id);
@@ -171,12 +183,14 @@ namespace Tratoo.Domain.Features.IA
                 int nivelVerif   = identidades.GetValueOrDefault(c.Id);
                 int contratos    = contratosEncerrados.GetValueOrDefault(c.Id);
 
-                // Semântica 42% | Stack exata 31% | Reputação 05% | Perfil 12% | Contratos 05% | Verificação 05%
+                // Semântica 42% | Habilidade exata 22% | Comprovação 12% | Reputação 08%
+                // Perfil 09% | Contratos 04% | Verificação 03%
                 float score = (float)(
-                similaridade * 0.50 +
-                stackScore * 0.25 +
+                similaridade * 0.42 +
+                stackScore * 0.22 +
+                comprovacaoScore * 0.12 +
                 (mediaAval / 5.0) * 0.08 +
-                (c.PorcentagemCompleto / 100.0) * 0.10 +
+                (c.PorcentagemCompleto / 100.0) * 0.09 +
                 (Math.Min(contratos, 20) / 20.0) * 0.04 +
                 (nivelVerif >= 2 ? 1.0 : 0.3) * 0.03
             );
@@ -187,13 +201,12 @@ namespace Tratoo.Domain.Features.IA
                     Nome                 = c.Nome,
                     TituloProfissional   = c.TituloProfissional,
                     FotoUrl              = c.FotoUrl,
-                    ValorHora            = c.ValorHora,
                     MediaAvaliacoes      = mediaAval,
                     TotalAvaliacoes      = totalAval,
                     PorcentagemCompleto  = c.PorcentagemCompleto,
                     NivelVerificacao     = nivelVerif,
                     ContratosEncerrados  = contratos,
-                    Competencias         = c.Competencias.Take(5).ToList(),
+                    Competencias         = nomesCompetencias.Take(5).ToList(),
                     Bio                  = TruncarBio(c.Bio),
                     Similaridade         = similaridade,
                     ScoreComposto        = score,
@@ -456,11 +469,17 @@ namespace Tratoo.Domain.Features.IA
                 .Where(p => p.Status == StatusUsuario.Active && candidatoIds.Contains(p.Id))
                 .Select(p => new
                 {
-                    p.Id, p.Nome, p.TituloProfissional, p.FotoUrl, p.ValorHora,
+                    p.Id, p.Nome, p.TituloProfissional, p.FotoUrl,
                     p.PorcentagemCompleto, p.AvaliacoesPrivado,
                     p.Disponivel, p.DisponivelAPartirDe,
                     Bio = p.Descricao,
-                    Competencias = p.Competencias.Select(c => c.Nome).ToList()
+                    Competencias = p.Competencias.Select(c => new
+                    {
+                        c.Nome,
+                        Comprovada = c.CompetenciaExperiencias.Any()
+                            || c.CompetenciaPortfolios.Any()
+                            || c.CompetenciaCertificacoes.Any()
+                    }).ToList()
                 })
                 .ToListAsync();
 
@@ -491,8 +510,13 @@ namespace Tratoo.Domain.Features.IA
             {
                 float similaridade = similaridades.GetValueOrDefault(c.Id, 0f);
 
+                var nomesCompetencias = c.Competencias.Select(x => x.Nome).ToList();
                 // termosProjeto vem das habilidades reais do projeto — matching preciso
-                var (stackScore, matched) = CalcularSimilaridadeStack(c.Competencias, termosProjeto);
+                var (stackScore, matched) = CalcularSimilaridadeStack(nomesCompetencias, termosProjeto);
+
+                var competenciasComprovadas = c.Competencias
+                    .Select(x => new CompetenciaComprovada(x.Nome, x.Comprovada)).ToList();
+                float comprovacaoScore = CalcularComprovacaoScore(competenciasComprovadas, matched);
 
                 var rep = reputacoes.GetValueOrDefault(c.Id);
                 double mediaAval = privados.Contains(c.Id) ? 0 : (rep?.MediaGeral ?? 0);
@@ -501,10 +525,11 @@ namespace Tratoo.Domain.Features.IA
                 int contratos    = contratosEncerrados.GetValueOrDefault(c.Id);
 
                 float score = (float)(
-                    similaridade * 0.50 +
-                    stackScore * 0.25 +
+                    similaridade * 0.42 +
+                    stackScore * 0.22 +
+                    comprovacaoScore * 0.12 +
                     (mediaAval / 5.0) * 0.08 +
-                    (c.PorcentagemCompleto / 100.0) * 0.10 +
+                    (c.PorcentagemCompleto / 100.0) * 0.09 +
                     (Math.Min(contratos, 20) / 20.0) * 0.04 +
                     (nivelVerif >= 2 ? 1.0 : 0.3) * 0.03
                 );
@@ -515,13 +540,12 @@ namespace Tratoo.Domain.Features.IA
                     Nome                 = c.Nome,
                     TituloProfissional   = c.TituloProfissional,
                     FotoUrl              = c.FotoUrl,
-                    ValorHora            = c.ValorHora,
                     MediaAvaliacoes      = mediaAval,
                     TotalAvaliacoes      = totalAval,
                     PorcentagemCompleto  = c.PorcentagemCompleto,
                     NivelVerificacao     = nivelVerif,
                     ContratosEncerrados  = contratos,
-                    Competencias         = c.Competencias.Take(5).ToList(),
+                    Competencias         = nomesCompetencias.Take(5).ToList(),
                     Bio                  = TruncarBio(c.Bio),
                     Similaridade         = similaridade,
                     ScoreComposto        = score,
@@ -603,10 +627,13 @@ namespace Tratoo.Domain.Features.IA
             return result;
         }
 
-        // Sinônimos técnicos — expande termos de busca para cobrir variantes comuns de nomenclatura
-        private static readonly Dictionary<string, string[]> _techSinonimos =
+        // Sinônimos — expande termos de busca para cobrir variantes comuns de nomenclatura
+        // em todas as áreas do marketplace (design, marketing, dados, vídeo, etc.),
+        // não apenas desenvolvimento de software.
+        private static readonly Dictionary<string, string[]> _sinonimos =
             new(StringComparer.OrdinalIgnoreCase)
         {
+            // Desenvolvimento de software
             ["c#"]          = ["csharp", ".net", "dotnet", "asp.net"],
             ["csharp"]      = ["c#", ".net", "dotnet", "asp.net"],
             [".net"]        = ["c#", "csharp", "dotnet", "asp.net core", "asp.net"],
@@ -632,12 +659,66 @@ namespace Tratoo.Domain.Features.IA
             ["docker"]      = ["container", "containers"],
             ["aws"]         = ["amazon", "cloud"],
             ["azure"]       = ["microsoft azure", "cloud"],
+            // Design e edição de imagem
+            ["photoshop"]   = ["ps", "edição de imagem", "tratamento de imagem", "adobe photoshop"],
+            ["illustrator"] = ["ai", "adobe illustrator", "vetor"],
+            ["design"]      = ["designer", "design gráfico", "design grafico"],
+            ["ux/ui"]       = ["ux", "ui", "ux/ui design", "interface", "figma"],
+            ["figma"]       = ["ux/ui", "ui", "prototipagem"],
+            // Marketing, social media e tráfego
+            ["social media"] = ["redes sociais", "instagram", "gestor de redes", "gestão de redes"],
+            ["tráfego"]      = ["tráfego pago", "ads", "gestão de tráfego", "meta ads", "google ads"],
+            ["ads"]          = ["tráfego pago", "anúncios", "meta ads", "google ads"],
+            ["seo"]          = ["otimização", "search engine optimization"],
+            ["copywriting"]  = ["copy", "redação publicitária", "redator"],
+            // Dados, BI e planilhas
+            ["power bi"]    = ["bi", "business intelligence", "dashboard", "powerbi"],
+            ["excel"]       = ["planilhas", "planilha", "spreadsheet"],
+            ["análise de dados"] = ["analise de dados", "data analysis", "dados"],
+            // Vídeo
+            ["edição de vídeo"] = ["editor de vídeo", "premiere", "after effects", "davinci", "edicao de video"],
+            ["premiere"]    = ["edição de vídeo", "adobe premiere"],
+            // Tradução e outros serviços
+            ["tradução"]    = ["tradutor", "translation", "traducao", "verter"],
+            ["assistência virtual"] = ["assistente virtual", "va", "secretária virtual"],
+            ["automação"]   = ["automacao", "automação de processos", "rpa"],
         };
+
+        /// <summary>Competência do prestador com a indicação de estar comprovada
+        /// (possui experiência, portfólio ou certificação associada).</summary>
+        private sealed record CompetenciaComprovada(string Nome, bool Comprovada);
+
+        /// <summary>
+        /// Score de comprovação (0..1): premia prestadores cujas competências possuem
+        /// evidências (experiência, portfólio ou certificação associada). Quando há
+        /// competências relevantes para a busca (matched), considera apenas elas — assim
+        /// quem comprova as habilidades pedidas sobe no ranking. Sem competências, 0.
+        /// </summary>
+        private static float CalcularComprovacaoScore(
+            IReadOnlyCollection<CompetenciaComprovada> competencias,
+            IReadOnlyCollection<string> matched)
+        {
+            if (competencias.Count == 0) return 0f;
+
+            // Restringe às competências relevantes para a busca, se houver match.
+            IReadOnlyCollection<CompetenciaComprovada> alvo = competencias;
+            if (matched.Count > 0)
+            {
+                var matchedSet = matched.Select(m => m.ToLowerInvariant()).ToHashSet();
+                var relevantes = competencias
+                    .Where(c => matchedSet.Contains(c.Nome.ToLowerInvariant()))
+                    .ToList();
+                if (relevantes.Count > 0) alvo = relevantes;
+            }
+
+            return (float)alvo.Count(c => c.Comprovada) / alvo.Count;
+        }
 
         /// <summary>
         /// Calcula a proporção de skills requeridas (pelo projeto/query) que o prestador possui.
         /// Score = habilidades_encontradas / habilidades_requeridas (0..1).
-        /// Usa sinônimos técnicos para cobrir variantes (.NET, C#, csharp → mesmo grupo).
+        /// Usa o dicionário de sinônimos para cobrir variantes de qualquer área
+        /// (ex.: .NET/C#/csharp, Photoshop/edição de imagem, Power BI/BI → mesmo grupo).
         /// Quando não há termos de busca, retorna score neutro 0.5.
         /// </summary>
         private static (float score, List<string> matched) CalcularSimilaridadeStack(
@@ -656,7 +737,7 @@ namespace Tratoo.Domain.Features.IA
                 var termoL = termo.ToLowerInvariant();
 
                 // Sinônimos que expandem o termo buscado
-                var variantes = _techSinonimos.TryGetValue(termoL, out var s)
+                var variantes = _sinonimos.TryGetValue(termoL, out var s)
                     ? s.Append(termoL).ToArray()
                     : [termoL];
 

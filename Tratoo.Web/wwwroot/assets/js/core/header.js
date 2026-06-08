@@ -38,7 +38,7 @@
         }
 
         // Páginas compartilhadas autenticadas — detecta pelo /api/me
-        if (/\/pages\/(me|contrato|proposta|pagamento|avaliacao|chat)\//.test(path)) {
+        if (/\/pages\/(me|contrato|proposta|pagamento|avaliacao|chat|admin)\//.test(path)) {
             return await _getUserHeaderType('publico');
         }
 
@@ -47,7 +47,7 @@
             return await _getUserHeaderType('publico');
         }
 
-        // Raiz, start, termos e qualquer outra coisa → header público
+        // Raiz, start, termos e qualquer outra coisa -> header público
         return 'publico';
     }
 
@@ -108,6 +108,18 @@
             var avatarEl = document.getElementById('header-user-avatar');
             if (nameEl) nameEl.textContent = nome;
             if (avatarEl) avatarEl.textContent = inicial;
+
+            // Link da área administrativa — visível apenas para administradores.
+            if (_cachedUser.isAdmin === true) {
+                var nav = document.getElementById('header-nav');
+                if (nav && !document.getElementById('header-admin-link')) {
+                    var adminLink = document.createElement('a');
+                    adminLink.id = 'header-admin-link';
+                    adminLink.href = '/pages/admin/disputas.html';
+                    adminLink.textContent = 'Disputas (Admin)';
+                    nav.insertBefore(adminLink, nav.firstChild);
+                }
+            }
         }
 
         // Toggle do dropdown

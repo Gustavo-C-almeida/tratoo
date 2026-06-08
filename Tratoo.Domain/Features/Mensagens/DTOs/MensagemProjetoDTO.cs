@@ -34,8 +34,14 @@ namespace Tratoo.Domain.Features.Mensagens
         public string ProjetoTitulo { get; set; } = string.Empty;
         public int PrestadorId { get; set; }
         public string PrestadorNome { get; set; } = string.Empty;
+
+        /// <summary>Nome do outro participante da conversa, do ponto de vista do usuário logado
+        /// (contratante vê o prestador; prestador vê o contratante).</summary>
+        public string OutroParticipanteNome { get; set; } = string.Empty;
+
         public string UltimaMensagem { get; set; } = string.Empty;
         public DateTime UltimaMensagemEm { get; set; }
+        public int UltimaMensagemPorId { get; set; }
         public int TotalMensagens { get; set; }
     }
 }

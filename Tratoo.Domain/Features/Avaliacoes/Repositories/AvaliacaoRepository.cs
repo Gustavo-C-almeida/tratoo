@@ -81,20 +81,6 @@ namespace Tratoo.Domain.Features.Avaliacoes
                 .ToListAsync();
         }
 
-        public async Task<List<Avaliacao>> GetMinhasAsync(int userId)
-        {
-            return await _db.Avaliacoes
-                .AsNoTracking()
-                .AsSplitQuery()
-                .Include(a => a.ContratoServico)
-                    .ThenInclude(c => c.Projeto)
-                .Include(a => a.Avaliador)
-                .Include(a => a.Avaliado)
-                .Where(a => a.AvaliadorId == userId || a.AvaliadoId == userId)
-                .OrderByDescending(a => a.CriadoEm)
-                .ToListAsync();
-        }
-
         public async Task<List<Avaliacao>> GetPendentesExpiradosAsync(DateTime limite)
         {
             return await _db.Avaliacoes

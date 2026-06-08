@@ -41,11 +41,6 @@ namespace Tratoo.Domain.Models
         /// <summary>Momento em que o sistema criou o slot de avaliação (na liberação do pagamento).</summary>
         public DateTime CriadoEm { get; set; }
 
-        // ── Resposta pública (melhoria #2) ──────────────────────────────────────
-        /// <summary>Resposta do avaliado à avaliação recebida (máx 500 chars, apenas 1 vez, só em publicadas).</summary>
-        public string? RespostaPublica { get; set; }
-        public DateTime? RespostaPublicaCriadaEm { get; set; }
-
         // ── Sub-critérios (melhoria #7 — schema-only, sem UI) ───────────────────
         public byte? NotaPrazo { get; set; }
         public byte? NotaComunicacao { get; set; }

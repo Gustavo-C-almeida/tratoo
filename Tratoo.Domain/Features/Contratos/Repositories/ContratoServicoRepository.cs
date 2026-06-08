@@ -57,6 +57,9 @@ namespace Tratoo.Domain.Features.Contratos
         public async Task AddSnapshotAsync(ContratoSnapshot snapshot)
             => await _ctx.ContratoSnapshots.AddAsync(snapshot);
 
+        public async Task AddHistoricoAsync(HistoricoAssinatura historico)
+            => await _ctx.HistoricosAssinatura.AddAsync(historico);
+
         public async Task SaveChangesAsync()
             => await _ctx.SaveChangesAsync();
     }

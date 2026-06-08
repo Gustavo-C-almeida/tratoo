@@ -98,21 +98,6 @@ namespace Tratoo.API.EndPoints
                 return Results.Ok(convites);
             }).RequireAuthorization("Prestador");
 
-            // ──────────────────────────────────────────────────────────────────────
-            // OBTER CONVITE POR ID — qualquer parte envolvida
-            // GET /api/convites/{id}
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapGet("/api/convites/{id:guid}", async (
-                Guid id,
-                HttpContext http,
-                ConviteProjetoService service) =>
-            {
-                var userId = ExtrairUserId(http);
-                if (userId == null) return Results.Unauthorized();
-
-                var convite = await service.ObterPorIdAsync(id, userId.Value);
-                return convite is null ? Results.NotFound() : Results.Ok(convite);
-            }).RequireAuthorization();
         }
 
         private static int? ExtrairUserId(HttpContext http) => ClaimsHelper.ExtrairUserId(http);

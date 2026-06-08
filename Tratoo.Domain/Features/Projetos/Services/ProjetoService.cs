@@ -43,9 +43,6 @@ namespace Tratoo.Domain.Features.Projetos
             if (dto.PrazoEntrega.ToUniversalTime() <= DateTime.UtcNow)
                 throw new NegocioException("O prazo de entrega deve ser uma data futura.");
 
-            if (dto.NumFreelancersDesejados < 1)
-                throw new NegocioException("Informe um número válido de freelancers.");
-
             var habilidadesJson = dto.Habilidades != null && dto.Habilidades.Count > 0
                 ? JsonSerializer.Serialize(dto.Habilidades)
                 : null;
@@ -63,7 +60,6 @@ namespace Tratoo.Domain.Features.Projetos
                 NivelFreelancer = dto.NivelFreelancer,
                 Visibilidade = dto.Visibilidade,
                 Idioma = dto.Idioma,
-                NumFreelancersDesejados = dto.NumFreelancersDesejados,
                 Status = StatusProjeto.Rascunho,
                 CriadoEm = DateTime.UtcNow,
                 AtualizadoEm = DateTime.UtcNow
@@ -153,6 +149,7 @@ namespace Tratoo.Domain.Features.Projetos
 
             projeto.Status = StatusProjeto.Cancelado;
             projeto.CanceladoEm = DateTime.UtcNow;
+            projeto.CanceladoPorId = contratanteId;
             projeto.MotivoCancelamento = motivo;
             projeto.AtualizadoEm = DateTime.UtcNow;
 
@@ -228,7 +225,6 @@ namespace Tratoo.Domain.Features.Projetos
             NivelFreelancer = p.NivelFreelancer,
             Visibilidade = p.Visibilidade,
             Idioma = p.Idioma,
-            NumFreelancersDesejados = p.NumFreelancersDesejados,
             TotalPropostas = p.TotalPropostas,
             PublicadoEm = p.PublicadoEm,
             Status = p.Status,

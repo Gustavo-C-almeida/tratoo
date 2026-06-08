@@ -101,12 +101,12 @@ function renderizarEtapa1() {
             <p class="onboarding__subtitle">Você é pessoa física ou jurídica?</p>
             <div class="onboarding__opcoes">
                 <button id="btn-pf" class="onboarding__opcao" type="button">
-                    <span class="onboarding__opcao-icone">👤</span>
+                    <span class="onboarding__opcao-icone"><i class="fa-solid fa-user"></i></span>
                     <strong>Pessoa Física</strong>
                     <small>Cadastro com CPF</small>
                 </button>
                 <button id="btn-pj" class="onboarding__opcao" type="button">
-                    <span class="onboarding__opcao-icone">🏢</span>
+                    <span class="onboarding__opcao-icone"><i class="fa-solid fa-building"></i></span>
                     <strong>Pessoa Jurídica</strong>
                     <small>Cadastro com CNPJ</small>
                 </button>
@@ -124,7 +124,7 @@ function renderizarEtapa1() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FLUXO PESSOA FÍSICA (3 etapas: escolha → dados → endereço)
+// FLUXO PESSOA FÍSICA (3 etapas: escolha -> dados -> endereço)
 // ══════════════════════════════════════════════════════════════════════════════
 
 function renderizarPF_Etapa2() {
@@ -196,7 +196,7 @@ function renderizarPF_Etapa2() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FLUXO PESSOA JURÍDICA (4 etapas: escolha → empresa → representante → endereço)
+// FLUXO PESSOA JURÍDICA (4 etapas: escolha -> empresa -> representante -> endereço)
 // ══════════════════════════════════════════════════════════════════════════════
 
 function renderizarPJ_Etapa2() {
@@ -375,10 +375,10 @@ async function buscarCep(cep) {
     const cepLimpo = cep.replace(/\D/g, '');
     if (cepLimpo.length !== 8) return null;
     try {
-        const resp = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+        const resp = await fetch(`/api/cep/${cepLimpo}`);
         if (!resp.ok) return null;
         const data = await resp.json();
-        return data.erro ? null : data;
+        return data;
     } catch {
         return null;
     }
@@ -454,9 +454,8 @@ function renderizarEndereco(fnVoltar, etapaAtual, totalEtapas) {
     `;
 
     const inputCep = document.getElementById('cep');
-    inputCep.addEventListener('input', () => { inputCep.value = formatarCep(inputCep.value); });
 
-    inputCep.addEventListener('blur', async () => {
+    const buscarCepAutomaticamente = async () => {
         const cepLimpo = inputCep.value.replace(/\D/g, '');
         if (cepLimpo.length !== 8) return;
         const loading = document.getElementById('cep-loading');
@@ -473,7 +472,14 @@ function renderizarEndereco(fnVoltar, etapaAtual, totalEtapas) {
             }
             document.getElementById('numero').focus();
         }
+    };
+
+    inputCep.addEventListener('input', () => {
+        inputCep.value = formatarCep(inputCep.value);
+        buscarCepAutomaticamente();
     });
+
+    inputCep.addEventListener('blur', buscarCepAutomaticamente);
 
     document.getElementById('btn-voltar-end').addEventListener('click', fnVoltar);
 

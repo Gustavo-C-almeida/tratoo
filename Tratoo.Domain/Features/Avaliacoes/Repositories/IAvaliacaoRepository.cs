@@ -18,9 +18,6 @@ namespace Tratoo.Domain.Features.Avaliacoes
         /// <summary>Todos os slots pendentes (Nota == null) onde o usuário é avaliador.</summary>
         Task<List<Avaliacao>> GetPendentesPorAvaliadorAsync(int avaliadorId);
 
-        /// <summary>Todas as avaliações onde o usuário é avaliador ou avaliado.</summary>
-        Task<List<Avaliacao>> GetMinhasAsync(int userId);
-
         /// <summary>Avaliações Pendentes criadas antes de <paramref name="limite"/> (para expiração automática).</summary>
         Task<List<Avaliacao>> GetPendentesExpiradosAsync(DateTime limite);
 

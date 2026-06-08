@@ -11,24 +11,15 @@ namespace Tratoo.Domain.Models
         /// <summary>FK principal para o fluxo atual (ContratoServico).</summary>
         public Guid? ContratoServicoId { get; set; }
         public ContratoServico? ContratoServico { get; set; }
-
-        /// <summary>FK legado mantida para compatibilidade com Contrato antigo.</summary>
-        public Guid? ContratoId { get; set; }
-        public Contrato? Contrato { get; set; }
-
         // ── Valores ───────────────────────────────────────────────────────────
         public decimal ValorBruto { get; set; }
 
-        /// <summary>Taxa da plataforma Tratoo (~10%). Descontada do valor bruto.</summary>
-        public decimal TaxaPlataforma { get; set; }
-
         /// <summary>
-        /// Taxa cobrada pelo Asaas (registrada separadamente para rastreabilidade).
+        /// Taxa operacional cobrada pelo Asaas (gateway). Campo exclusivamente informativo/auditoria.
+        /// Preenchido a partir de dados retornados pelo Asaas — NÃO é calculado pelo sistema
+        /// e NÃO afeta o valor transferido ao prestador.
         /// </summary>
-        public decimal TaxaGateway { get; set; }
-
-        /// <summary>Valor líquido que o prestador receberá: ValorBruto - TaxaPlataforma.</summary>
-        public decimal ValorLiquidoPrestador => ValorBruto - TaxaPlataforma;
+        public decimal? TaxaGateway { get; set; }
 
         // ── Status ────────────────────────────────────────────────────────────
         public StatusPagamento Status { get; set; } = StatusPagamento.Criado;

@@ -26,7 +26,6 @@ namespace Tratoo.Domain.Models
         public NivelFreelancerProjet? NivelFreelancer { get; set; }
         public VisibilidadeProjeto Visibilidade { get; set; } = VisibilidadeProjeto.Publico;
         public IdiomaProjet Idioma { get; set; } = IdiomaProjet.Portugues;
-        public int NumFreelancersDesejados { get; set; } = 1;
 
         // Freelancer selecionado após aceite de proposta
         public int? FreelancerSelecionadoId { get; set; }
@@ -39,6 +38,8 @@ namespace Tratoo.Domain.Models
         public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
         public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;
         public DateTime? CanceladoEm { get; set; }
+        /// <summary>ID do usuário que cancelou o projeto (rastreabilidade — paridade com Proposta/Contrato).</summary>
+        public int? CanceladoPorId { get; set; }
         public string? MotivoCancelamento { get; set; }
 
         /// <summary>Contador de propostas recebidas.</summary>

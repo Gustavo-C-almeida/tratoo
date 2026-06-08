@@ -13,6 +13,9 @@
 
         public string? LinkVerificacao { get; set; }
 
+        /// <summary>URL do certificado anexado (PDF ou imagem).</summary>
+        public string? ArquivoUrl { get; set; }
+
         public List<CompetenciaDTO> Competencias { get; set; } = new();
     }
 }

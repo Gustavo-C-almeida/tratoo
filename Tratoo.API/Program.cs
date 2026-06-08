@@ -60,6 +60,7 @@ builder.Services.AddMemoryCache();
 // Repositories
 builder.Services.AddScoped<IPrestadorRepository, PrestadorRepository>();
 builder.Services.AddScoped<IContratanteRepository, ContratanteRepository>();
+builder.Services.AddScoped<IContaBancariaRepository, ContaBancariaRepository>();
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IIdentidadeRepository, IdentidadeRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
@@ -69,10 +70,10 @@ builder.Services.AddScoped<IProjetoRepository, ProjetoRepository>();
 builder.Services.AddScoped<IPropostaProjetoRepository, PropostaProjetoRepository>();
 builder.Services.AddScoped<IMensagemProjetoRepository, MensagemProjetoRepository>();
 builder.Services.AddScoped<IContratoServicoRepository, ContratoServicoRepository>();
+builder.Services.AddScoped<IEntregaRepository, EntregaRepository>();
 builder.Services.AddScoped<IPagamentoRepository, PagamentoRepository>();
 builder.Services.AddScoped<IAvaliacaoRepository, AvaliacaoRepository>();
 builder.Services.AddScoped<IConviteProjetoRepository, ConviteProjetoRepository>();
-builder.Services.AddScoped<IChatConviteRepository, ChatConviteRepository>();
 
 // Services — domínio
 builder.Services.AddScoped<CompetenciaService>();
@@ -80,6 +81,7 @@ builder.Services.AddScoped<ExperienciaService>();
 builder.Services.AddScoped<CertificacaoService>();
 builder.Services.AddScoped<PortfolioService>();
 builder.Services.AddScoped<PerfilProfissaoPrestadorService>();
+builder.Services.AddScoped<IDadosBancariosService, DadosBancariosService>();
 builder.Services.AddScoped<MyOwnProfilePrestadorService>();
 builder.Services.AddScoped<CompetenciaRelacionamentoService>();
 builder.Services.AddScoped<ICadastroService, CadastroService>();
@@ -90,17 +92,18 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IVerificacaoMFAService, VerificacaoMFAService>();
 builder.Services.AddScoped<ICacheTempService, CacheTempService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
-builder.Services.AddScoped<IContratanteService, ContratanteService>();
 builder.Services.AddScoped<PerfilContratanteService>();
 builder.Services.AddScoped<ProjetoService>();
 builder.Services.AddScoped<IContratoServicoService, ContratoServicoService>();
+builder.Services.AddScoped<IEntregaService, EntregaService>();
 builder.Services.AddScoped<PropostaProjetoService>();
 builder.Services.AddScoped<MensagemProjetoService>();
 builder.Services.AddScoped<ConviteProjetoService>();
-builder.Services.AddScoped<ChatConviteService>();
 builder.Services.AddScoped<IAvaliacaoService, AvaliacaoService>();
 builder.Services.AddScoped<IPagamentoService, PagamentoService>();
+builder.Services.AddScoped<AdminDisputaService>();
 builder.Services.AddHttpClient<IdentidadeService>();  // HttpClient para BrasilAPI
+builder.Services.AddHttpClient("viacep");             // HttpClient para proxy ViaCEP
 
 // Gateway de pagamento — Asaas
 builder.Services.Configure<AsaasConfig>(builder.Configuration.GetSection("Asaas"));
@@ -172,6 +175,7 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("Prestador", policy => policy.RequireRole("Prestador"));
     options.AddPolicy("Contratante", policy => policy.RequireRole("Contratante"));
+    options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
 });
 
 builder.Services.AddRateLimiter(options =>
@@ -196,6 +200,24 @@ builder.Services.AddRateLimiter(options =>
 
     // Máximo 3 solicitações por minuto por IP na redefinição de senha
     options.AddFixedWindowLimiter("senha", cfg =>
+    {
+        cfg.Window = TimeSpan.FromMinutes(1);
+        cfg.PermitLimit = 3;
+        cfg.QueueLimit = 0;
+        cfg.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+
+    // Máximo 5 requisições por minuto por IP no fluxo de dados bancários (token/confirmar/salvar)
+    options.AddFixedWindowLimiter("dados-bancarios", cfg =>
+    {
+        cfg.Window = TimeSpan.FromMinutes(1);
+        cfg.PermitLimit = 5;
+        cfg.QueueLimit = 0;
+        cfg.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+
+    // Máximo 3 solicitações de OTP por minuto (protege contra spam de e-mail)
+    options.AddFixedWindowLimiter("otp-assinatura", cfg =>
     {
         cfg.Window = TimeSpan.FromMinutes(1);
         cfg.PermitLimit = 3;
@@ -265,12 +287,20 @@ app.Use(async (context, next) =>
     headers["X-Frame-Options"] = "DENY";
     headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()";
+
+    // Em desenvolvimento, libera Browser Link (VS) e hot reload do ASP.NET
+    var connectExtra = app.Environment.IsDevelopment()
+        ? "http://localhost:* ws://localhost:* wss://localhost:* "
+        : "";
+
     headers["Content-Security-Policy"] =
         "default-src 'self'; " +
         "script-src 'self' 'unsafe-inline'; " +
-        "style-src 'self' 'unsafe-inline'; " +
+        // Font Awesome (cdnjs) — folha de estilo e webfonts
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
+        "font-src 'self' https://cdnjs.cloudflare.com; " +
         "img-src 'self' data: https:; " +
-        "connect-src 'self'; " +
+        $"connect-src 'self' {connectExtra}; " +
         "object-src 'none'; " +
         "base-uri 'self'; " +
         "form-action 'self'; " +
@@ -354,7 +384,9 @@ app.Use(async (context, next) =>
             // Redefinição de senha — fluxo público, usuário pode ter cookie expirado/inválido
             path.StartsWith("/usuarios/senha/resetar", StringComparison.OrdinalIgnoreCase) ||
             // Swagger (dev/teste)
-            path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase);
+            path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||
+            // CEP — usado no próprio onboarding para buscar endereço
+            path.StartsWith("/api/cep/", StringComparison.OrdinalIgnoreCase);
 
         if (!isIsenta)
         {
@@ -371,9 +403,24 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Endpoint público: informações de configuração financeira para exibição no frontend
+// (taxa operacional estimada do gateway — apenas informativo, não participa de cálculos)
+app.MapGet("/api/config/financeiro", (HttpContext http) =>
+{
+    var cfg = http.RequestServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<AsaasConfig>>().Value;
+    return Results.Ok(new
+    {
+        taxaOperacionalEstimadaPercentual = cfg.TaxaOperacionalEstimadaPercentual,
+        taxaOperacionalEstimadaDisplay    = $"{cfg.TaxaOperacionalEstimadaPercentual * 100:F2}%",
+        observacao = "Taxa cobrada pela operadora de pagamentos (Asaas). Não é uma taxa da plataforma Tratoo. Valores estimados — podem variar conforme a transação."
+    });
+});
+
+app.AddEndPointsCep();
 app.AddEndPointsCompetencias();
 app.AddEndPointsUsers();
 app.AddEndPointsPerfil();
+app.AddEndPointsDadosBancarios();
 app.AddEndPointsContratante();
 app.AddEndPointsCompetenciaRelacionamento();
 app.AddEndPointsProjeto();
@@ -384,7 +431,7 @@ app.AddEndPointsAvaliacao();
 app.AddEndPointsConviteProjeto();
 app.AddEndPointsChatConvite();
 app.AddEndPointsBusca();
-app.AddEndPointsAdminIndexacao();
+app.AddEndPointsAdminDisputa();
 app.AddEndPointsDevSeed();
 
 if (app.Environment.IsDevelopment())

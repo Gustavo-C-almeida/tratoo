@@ -73,7 +73,6 @@ namespace Tratoo.API.EndPoints
                     NivelFreelancer         = request.NivelFreelancer,
                     Visibilidade            = request.Visibilidade,
                     Idioma                  = request.Idioma,
-                    NumFreelancersDesejados = request.NumFreelancersDesejados,
                     PublicarImediatamente   = request.PublicarImediatamente
                 };
 
@@ -127,12 +126,13 @@ namespace Tratoo.API.EndPoints
             app.MapGet("/api/projects/{id:int}/proposals", async (
                 int id,
                 HttpContext http,
-                PropostaProjetoService service) =>
+                PropostaProjetoService service,
+                string? origem) =>
             {
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var propostas = await service.ListarDoProjetoAsync(id, userId.Value);
+                var propostas = await service.ListarDoProjetoAsync(id, userId.Value, origem);
                 return Results.Ok(propostas);
             }).RequireAuthorization("Contratante");
 

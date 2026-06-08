@@ -7,7 +7,9 @@ namespace Tratoo.Domain.Enums
         Processando,   // Gateway processando (cartão de crédito / análise de risco)
         Retido,        // Pago com sucesso — valor em escrow lógico na plataforma
         EmDisputa,     // Disputa aberta — liberação ao prestador suspensa
-        Liberado,      // Valor líquido transferido ao prestador via PIX
+        TransferenciaEmProgresso, // Transferência PIX criada no Asaas, aguardando confirmação (TRANSFER_DONE)
+        Liberado,      // Valor líquido transferido ao prestador via PIX (TRANSFER_DONE confirmado)
+        FalhaTransferencia, // Transferência ao prestador falhou/cancelada (TRANSFER_FAILED/CANCELLED) — exige reprocessamento
         Cancelado,     // Cancelado antes do pagamento (contrato não executado)
         Estornado,     // Estorno processado pelo gateway
         Falhou         // Pagamento falhou no gateway
