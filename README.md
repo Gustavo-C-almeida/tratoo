@@ -6,7 +6,225 @@
 [![pgvector](https://img.shields.io/badge/PostgreSQL-pgvector%20(HNSW)-336791)](https://github.com/pgvector/pgvector)
 [![Storage](https://img.shields.io/badge/Storage-Cloudflare%20R2-F38020)](https://developers.cloudflare.com/r2/)
 
-Marketplace que conecta **Contratantes** (quem precisa de um serviço) a **Prestadores** (freelancers), com fluxo financeiro protegido por **escrow**: o valor do contratante fica retido na plataforma e só é repassado ao prestador após a aprovação formal da entrega.
+O Tratoo é uma plataforma que conecta empresas e pessoas que precisam contratar um serviço a profissionais freelancers, oferecendo contrato digital, pagamento protegido e mecanismos de confiança para ambas as partes.
+
+1. Cadastro e criação do perfil
+
+Tudo começa quando o usuário cria sua conta.
+
+Ao se cadastrar, ele confirma seu e-mail e escolhe como deseja atuar na plataforma:
+
+Contratante → quem precisa contratar um serviço.
+Prestador → quem deseja oferecer seus serviços.
+
+Após o cadastro, o usuário passa por um onboarding inicial para preencher as informações mínimas do perfil.
+
+Além disso, pode realizar a validação de identidade utilizando CPF ou CNPJ, aumentando sua credibilidade dentro da plataforma.
+
+Fluxo do contratante
+2. Publicação do projeto
+
+O contratante descreve sua necessidade:
+
+O que precisa ser feito;
+Prazo desejado;
+Orçamento disponível;
+Competências necessárias.
+
+Exemplo:
+
+"Preciso desenvolver uma API REST em .NET 8 integrada com PostgreSQL e autenticação JWT."
+
+O projeto é publicado e passa a ficar visível para prestadores compatíveis.
+
+3. Descoberta de profissionais
+
+A plataforma utiliza busca inteligente baseada em IA.
+
+Em vez de procurar apenas por palavras-chave, o sistema analisa:
+
+Competências;
+Experiências;
+Certificações;
+Portfólio;
+Histórico profissional.
+
+Assim, o contratante recebe sugestões de profissionais realmente compatíveis com sua demanda.
+
+Também é possível convidar diretamente um prestador específico.
+
+4. Negociação
+
+Após demonstrar interesse, o prestador envia uma proposta contendo:
+
+Valor;
+Prazo;
+Escopo do serviço.
+
+O contratante pode:
+
+Aceitar;
+Recusar;
+Fazer uma contraproposta.
+
+As negociações ficam registradas em versões sucessivas para que exista histórico completo do acordo.
+
+Durante essa etapa, ambos podem conversar pelo chat integrado da plataforma.
+
+5. Aceitação da proposta
+
+Quando contratante e prestador chegam a um consenso:
+
+A proposta é aceita;
+O sistema bloqueia novas alterações;
+O processo segue para formalização contratual.
+Formalização do acordo
+6. Geração automática do contrato
+
+Com a proposta aceita, o Tratoo gera automaticamente um contrato digital contendo:
+
+Escopo acordado;
+Valor;
+Prazo;
+Obrigações das partes.
+
+Não é necessário redigir documentos manualmente.
+
+7. Assinatura digital
+
+Ambas as partes recebem um código de confirmação por e-mail.
+
+Ao informar esse código:
+
+A assinatura é registrada;
+O IP é armazenado;
+Um hash de integridade é gerado;
+O PDF assinado é arquivado.
+
+Isso cria evidências digitais do aceite do contrato.
+
+Pagamento protegido
+8. Depósito em garantia (Escrow)
+
+Após a assinatura do contrato, o contratante realiza o pagamento via PIX.
+
+Mas o dinheiro não vai imediatamente para o prestador.
+
+O valor fica retido em uma conta de garantia (escrow).
+
+Isso gera proteção para ambos:
+
+Para o contratante
+
+Só libera o dinheiro quando receber o serviço.
+
+Para o prestador
+
+Tem a certeza de que o valor já foi pago e reservado.
+Execução do trabalho
+9. Desenvolvimento e entrega
+
+O prestador executa o serviço normalmente.
+
+Quando concluir:
+
+Registra oficialmente a entrega;
+Pode anexar arquivos;
+Pode adicionar links;
+Pode incluir observações.
+
+A entrega passa a fazer parte do histórico do contrato.
+
+10. Aprovação da entrega
+
+O contratante recebe uma notificação e pode:
+
+Aprovar
+
+Se tudo estiver correto:
+
+O serviço é considerado concluído;
+O pagamento é liberado.
+Solicitar ajustes
+
+Caso algo precise ser corrigido:
+
+O contratante informa os pontos necessários;
+O prestador realiza os ajustes.
+Liberação do pagamento
+11. Recebimento pelo prestador
+
+Quando a entrega é aprovada:
+
+O dinheiro sai da garantia;
+O pagamento é transferido ao prestador;
+A operação é registrada no livro-razão financeiro da plataforma.
+
+Em alguns cenários, se o contratante não se manifestar dentro do prazo definido, a liberação pode ocorrer automaticamente.
+
+Construção de reputação
+12. Avaliações
+
+Após o encerramento do trabalho:
+
+O contratante avalia o prestador;
+O prestador avalia o contratante.
+
+O sistema utiliza blind review.
+
+Ou seja:
+
+Uma parte não vê a avaliação da outra imediatamente;
+As avaliações só são publicadas quando ambos avaliam ou quando o prazo expira.
+
+Isso reduz avaliações retaliatórias e aumenta a confiabilidade da reputação.
+
+Caso ocorra algum problema
+13. Abertura de disputa
+
+Se houver desacordo sobre a entrega:
+
+O contratante pode abrir uma disputa;
+O pagamento continua retido;
+Nenhuma das partes recebe ou perde o valor até a análise.
+
+Ambos podem anexar:
+
+Evidências;
+Conversas;
+Arquivos;
+Histórico da negociação.
+14. Análise administrativa
+
+Administradores da plataforma acessam uma área restrita para avaliar o caso.
+
+Eles podem decidir:
+
+Favor do contratante
+Pagamento estornado;
+Contrato encerrado;
+Disputa resolvida.
+Favor do prestador
+Pagamento liberado;
+Contrato concluído;
+Disputa resolvida.
+
+Toda a análise fica registrada para auditoria.
+
+Gestão da conta
+
+Em qualquer momento, o usuário pode:
+
+Atualizar seu perfil;
+Adicionar experiências;
+Inserir certificações;
+Publicar portfólio;
+Configurar chave PIX;
+Ativar MFA;
+Alterar senha;
+Solicitar exclusão da conta.
+
+Quando a exclusão é solicitada, os dados pessoais são anonimizados conforme LGPD, mas o histórico contratual é preservado para fins legais e financeiros.
 
 > ⚠️ Projeto de estudo/portfólio. Veja [Configuração e Segredos](#configuração-e-segredos) — **nenhuma credencial é versionada** neste repositório.
 
