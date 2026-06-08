@@ -11,6 +11,7 @@ const prestadorId = params.get('prestadorId');
 let usuarioId = null;
 let projeto = null;
 let proposta = null;
+let conviteId = null;      // convite aceito deste prestador (habilita proposta proativa)
 let mensagens = [];
 let pollingTimer = null;
 let noScrollLock = false;
@@ -107,6 +108,20 @@ async function iniciar() {
         ) ?? null;
     }
 
+    // Fluxo reverso: se eu sou o contratante, busco o convite ACEITO deste prestador
+    // para habilitar o envio de proposta proativa (POST /api/convites/{id}/proposta).
+    if (usuarioId === projeto.contratanteId) {
+        try {
+            const convites = await api.get(`/api/projects/${projetoId}/convites`);
+            const aceito = (convites || []).find(
+                c => String(c.prestadorId) === String(prestadorId) && c.status === 'Aceito'
+            );
+            conviteId = aceito ? aceito.id : null;
+        } catch {
+            conviteId = null;
+        }
+    }
+
     renderLayout();
     await carregarMensagens(true);
     iniciarPolling();
@@ -118,7 +133,15 @@ function renderLayout() {
     const linkProjeto = `/pages/projetos/detalhe.html?id=${projetoId}`;
     const linkProposta = proposta ? `/pages/proposta/detalhe.html?id=${proposta.id}` : null;
     const ehContratante = usuarioId === projeto.contratanteId;
-    const outroNome = ehContratante ? projeto.prestadorNome : projeto.contratanteNome;
+    // Contratante vê o nome do prestador (vindo da proposta deste chat);
+    // prestador vê o nome do contratante do projeto.
+    const outroNome = ehContratante
+        ? (proposta?.prestadorNome || 'Prestador')
+        : (projeto.contratanteNome || 'Contratante');
+
+    // Pode enviar proposta proativa: contratante, convite aceito e sem proposta ativa.
+    const propostaAtiva = proposta && !['Recusada', 'Expirada', 'Cancelada'].includes(proposta.status);
+    const podeEnviarProposta = ehContratante && conviteId && !propostaAtiva;
 
     root().innerHTML = `
     <div class="chat-detalhe-wrap">
@@ -133,11 +156,14 @@ function renderLayout() {
             </div>
             <div class="chat-detalhe-acoes">
                 <a class="chat-acao-link" href="${linkProjeto}">
-                    📋 Ver projeto
+                    <i class="fa-solid fa-clipboard-list"></i> Ver projeto
                 </a>
                 ${linkProposta ? `<a class="chat-acao-link" href="${linkProposta}">
-                    📄 Ver proposta
+                    <i class="fa-solid fa-file-lines"></i> Ver proposta
                 </a>` : ''}
+                ${podeEnviarProposta ? `<button type="button" class="chat-acao-link chat-acao-btn" id="btn-enviar-proposta">
+                    <i class="fa-solid fa-envelope"></i> Enviar proposta
+                </button>` : ''}
             </div>
         </header>
 
@@ -216,8 +242,159 @@ function renderLayout() {
         if (!noScrollLock) esconderBadge();
     });
 
+    // Botão de proposta proativa (contratante)
+    document.getElementById('btn-enviar-proposta')?.addEventListener('click', abrirModalProposta);
+
     // Focus no input
     input.focus();
+}
+
+// ── Proposta proativa (Contratante -> Prestador, pós-convite) ────────────────
+function abrirModalProposta() {
+    if (!conviteId) return;
+    garantirModalProposta();
+
+    // Datas padrão: prazo +14 dias, validade +7 dias
+    const hoje = new Date();
+    const prazoDefault = new Date(hoje.getTime() + 14 * 86400000).toISOString().slice(0, 10);
+    const validadeDefault = new Date(hoje.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+
+    document.getElementById('pp-valor').value = '';
+    document.getElementById('pp-entrada').value = '';
+    document.getElementById('pp-revisoes').value = '2';
+    document.getElementById('pp-pagamento').value = 'PIX';
+    document.getElementById('pp-prazo').value = prazoDefault;
+    document.getElementById('pp-validade').value = validadeDefault;
+    document.getElementById('pp-objetivo').value = '';
+    document.getElementById('pp-escopo').value = '';
+    document.getElementById('pp-exclusoes').value = '';
+    document.getElementById('pp-obs').value = '';
+    document.getElementById('pp-erro').textContent = '';
+
+    document.getElementById('modal-proposta').style.display = 'flex';
+}
+
+function garantirModalProposta() {
+    if (document.getElementById('modal-proposta')) return;
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-proposta';
+    modal.className = 'modal-overlay';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+        <div class="modal-box modal-box-proposta">
+            <h3>Enviar proposta ao prestador</h3>
+            <p class="modal-sub">O prestador poderá aceitar, recusar ou enviar uma contraproposta.</p>
+
+            <div class="pp-grid">
+                <div class="modal-campo">
+                    <label for="pp-valor">Valor total (R$) <span class="obrigatorio">*</span></label>
+                    <input id="pp-valor" type="number" min="1" step="0.01" placeholder="0,00">
+                </div>
+                <div class="modal-campo">
+                    <label for="pp-entrada">Entrada (R$) <span class="opcional">(opcional)</span></label>
+                    <input id="pp-entrada" type="number" min="0" step="0.01" placeholder="0,00">
+                </div>
+                <div class="modal-campo">
+                    <label for="pp-prazo">Prazo de entrega <span class="obrigatorio">*</span></label>
+                    <input id="pp-prazo" type="date">
+                </div>
+                <div class="modal-campo">
+                    <label for="pp-validade">Validade da proposta <span class="obrigatorio">*</span></label>
+                    <input id="pp-validade" type="date">
+                </div>
+                <div class="modal-campo">
+                    <label for="pp-revisoes">Revisões inclusas <span class="obrigatorio">*</span></label>
+                    <input id="pp-revisoes" type="number" min="1" value="2">
+                </div>
+                <div class="modal-campo">
+                    <label for="pp-pagamento">Forma de pagamento</label>
+                    <select id="pp-pagamento">
+                        <option value="PIX">PIX</option>
+                        <option value="Boleto">Boleto</option>
+                        <option value="Cartão">Cartão</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-campo">
+                <label for="pp-objetivo">Objetivo da proposta <span class="obrigatorio">*</span></label>
+                <textarea id="pp-objetivo" rows="2" placeholder="Resumo do que será entregue (mín. 20 caracteres)..."></textarea>
+            </div>
+            <div class="modal-campo">
+                <label for="pp-escopo">Escopo detalhado <span class="obrigatorio">*</span></label>
+                <textarea id="pp-escopo" rows="3" placeholder="Detalhe o escopo do trabalho (mín. 50 caracteres)..."></textarea>
+            </div>
+            <div class="modal-campo">
+                <label for="pp-exclusoes">Exclusões <span class="opcional">(opcional)</span></label>
+                <textarea id="pp-exclusoes" rows="2" placeholder="O que não está incluso..."></textarea>
+            </div>
+            <div class="modal-campo">
+                <label for="pp-obs">Observações <span class="opcional">(opcional)</span></label>
+                <textarea id="pp-obs" rows="2"></textarea>
+            </div>
+
+            <p id="pp-erro" class="pp-erro" role="alert"></p>
+
+            <div class="modal-actions">
+                <button type="button" id="pp-cancelar" class="btn-secundario">Cancelar</button>
+                <button type="button" id="pp-enviar" class="btn-enviar-proposta">Enviar proposta</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+    document.getElementById('pp-cancelar').addEventListener('click', () => { modal.style.display = 'none'; });
+    document.getElementById('pp-enviar').addEventListener('click', enviarPropostaProativa);
+}
+
+async function enviarPropostaProativa() {
+    const erroEl = document.getElementById('pp-erro');
+    erroEl.textContent = '';
+
+    const valor = parseFloat(document.getElementById('pp-valor').value);
+    const entrada = parseFloat(document.getElementById('pp-entrada').value);
+    const revisoes = parseInt(document.getElementById('pp-revisoes').value, 10);
+    const prazo = document.getElementById('pp-prazo').value;
+    const validade = document.getElementById('pp-validade').value;
+    const objetivo = document.getElementById('pp-objetivo').value.trim();
+    const escopo = document.getElementById('pp-escopo').value.trim();
+
+    // Validação client-side espelhando as regras do backend
+    if (!valor || valor <= 0) return (erroEl.textContent = 'Informe o valor total da proposta.');
+    if (!revisoes || revisoes <= 0) return (erroEl.textContent = 'Informe quantas revisões estão inclusas.');
+    if (!prazo) return (erroEl.textContent = 'Informe o prazo de entrega.');
+    if (!validade) return (erroEl.textContent = 'Informe a validade da proposta.');
+    if (objetivo.length < 20) return (erroEl.textContent = 'Descreva o objetivo com pelo menos 20 caracteres.');
+    if (escopo.length < 50) return (erroEl.textContent = 'Detalhe o escopo com pelo menos 50 caracteres.');
+    if (!isNaN(entrada) && entrada > valor) return (erroEl.textContent = 'A entrada não pode ser maior que o valor total.');
+
+    const payload = {
+        valorTotal: valor,
+        entrada: isNaN(entrada) ? null : entrada,
+        revisoesInclusas: revisoes,
+        formaPagamento: document.getElementById('pp-pagamento').value,
+        prazoTotal: new Date(prazo).toISOString(),
+        validoAte: new Date(validade).toISOString(),
+        objetivo,
+        escopo,
+        exclusoes: document.getElementById('pp-exclusoes').value.trim() || null,
+        observacoes: document.getElementById('pp-obs').value.trim() || null,
+    };
+
+    const btn = document.getElementById('pp-enviar');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    try {
+        await api.post(`/api/convites/${conviteId}/proposta`, payload);
+        document.getElementById('modal-proposta').style.display = 'none';
+        // Recarrega para refletir a nova proposta (link "Ver proposta")
+        await iniciar();
+    } catch (err) {
+        erroEl.textContent = err?.data?.mensagem || 'Erro ao enviar proposta.';
+        btn.disabled = false;
+        btn.textContent = 'Enviar proposta';
+    }
 }
 
 // ── Indicador de digitação ─────────────────────────────────────────────────
@@ -264,7 +441,7 @@ function renderMensagens(lista) {
     if (!mensagens.length) {
         lista.innerHTML = `
         <div class="chat-estado">
-            <p>💬 Nenhuma mensagem ainda</p>
+            <p><i class="fa-solid fa-comments"></i> Nenhuma mensagem ainda</p>
             <small>Seja o primeiro a escrever!</small>
         </div>`;
         return;
@@ -330,7 +507,7 @@ function mostrarBadge(qtd) {
         });
     }
     badge.querySelector('button').textContent =
-        `${qtd} nova${qtd > 1 ? 's' : ''} mensagem${qtd > 1 ? 'ns' : ''} ↓`;
+        `${qtd} nova${qtd > 1 ? 's' : ''} mensagem${qtd > 1 ? 'ns' : ''} <i class="fa-solid fa-arrow-down"></i>`;
     badge.style.display = 'flex';
 }
 

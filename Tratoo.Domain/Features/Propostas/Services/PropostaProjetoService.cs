@@ -13,7 +13,6 @@ namespace Tratoo.Domain.Features.Propostas
         private readonly IEmailService _emailService;
         private readonly IContratoServicoService _contratoService;
         private readonly IConviteProjetoRepository _conviteRepo;
-        private readonly IChatConviteRepository _chatRepo;
 
         public PropostaProjetoService(
             IPropostaProjetoRepository repo,
@@ -22,8 +21,7 @@ namespace Tratoo.Domain.Features.Propostas
             IUsuarioRepository usuarioRepo,
             IEmailService emailService,
             IContratoServicoService contratoService,
-            IConviteProjetoRepository conviteRepo,
-            IChatConviteRepository chatRepo)
+            IConviteProjetoRepository conviteRepo)
         {
             _repo = repo;
             _projetoRepo = projetoRepo;
@@ -32,7 +30,6 @@ namespace Tratoo.Domain.Features.Propostas
             _emailService = emailService;
             _contratoService = contratoService;
             _conviteRepo = conviteRepo;
-            _chatRepo = chatRepo;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -49,9 +46,17 @@ namespace Tratoo.Domain.Features.Propostas
             if (projeto.ContratanteId == dto.PrestadorId)
                 throw new NegocioException("Você não pode enviar proposta para um projeto que você criou.");
 
+            // Validar chave PIX do prestador ANTES de criar a proposta
+            await ValidarChavePixCadastradaAsync(dto.PrestadorId);
+
             var existente = await _repo.GetAtivaByPrestadorEProjetoAsync(dto.PrestadorId, dto.ProjetoId);
             if (existente != null)
-                throw new NegocioException("Você já possui uma proposta ativa neste projeto.");
+            {
+                if (existente.Status == StatusPropostaProjeto.Draft)
+                    throw new NegocioException("Você já está trabalhando em um rascunho de proposta para este projeto. Edite o rascunho existente ou descarte-o antes de criar uma nova.");
+                else
+                    throw new NegocioException("Você já possui uma proposta enviada ou em negociação neste projeto.");
+            }
 
             if (dto.ValidoAte.ToUniversalTime() <= DateTime.UtcNow)
                 throw new NegocioException("Informe a validade da proposta (deve ser data futura).");
@@ -79,7 +84,8 @@ namespace Tratoo.Domain.Features.Propostas
             proposta.Versoes = new List<PropostaVersao> { versao };
 
             var prestador = await _prestadorRepo.GetByIdAsync(dto.PrestadorId);
-            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional);
+            var nomesUsuarios = await ResolverNomesVersoes(proposta);
+            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional, nomesUsuarios);
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -109,7 +115,12 @@ namespace Tratoo.Domain.Features.Propostas
             // Não permite duplicar proposta ativa do mesmo convite
             var propostaAtiva = await _repo.GetAtivaByConviteIdAsync(conviteId);
             if (propostaAtiva != null)
-                throw new NegocioException("Já existe uma proposta ativa para este convite.");
+            {
+                if (propostaAtiva.Status == StatusPropostaProjeto.Draft)
+                    throw new NegocioException("Já existe um rascunho de proposta para este convite. Você pode editar o rascunho existente ou descartá-lo.");
+                else
+                    throw new NegocioException("Já existe uma proposta enviada ou em negociação para este convite.");
+            }
 
             // Usa PrestadorId do convite como alvo
             dto.ProjetoId = convite.ProjetoId;
@@ -153,82 +164,11 @@ namespace Tratoo.Domain.Features.Propostas
             proposta.Projeto = projeto;
             proposta.Versoes = new List<PropostaVersao> { versao };
 
-            // Resolve ChatId para incluir no DTO
-            var chat = await _chatRepo.GetByConviteIdAsync(conviteId);
             var prestadorInfo = await _prestadorRepo.GetByIdAsync(convite.PrestadorId);
+            var nomesUsuarios = await ResolverNomesVersoes(proposta);
             var detalhe = MapDetalhe(proposta, prestadorInfo?.Nome ?? string.Empty,
-                prestadorInfo?.FotoUrl, prestadorInfo?.TituloProfissional);
-            detalhe.ChatId = chat?.Id;
+                prestadorInfo?.FotoUrl, prestadorInfo?.TituloProfissional, nomesUsuarios);
             return detalhe;
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        // ACEITAR PELO PRESTADOR (fluxo reverso — Contratante enviou proposta)
-        // ─────────────────────────────────────────────────────────────────────────
-        public async Task<PropostaDetalheDTO> AceitarPorPrestadorAsync(Guid propostaId, int prestadorId)
-        {
-            var proposta = await _repo.GetByIdComVersoesAsync(propostaId)
-                ?? throw new NegocioException("Proposta não encontrada.");
-
-            if (proposta.SenderType != PropostaSenderType.Contratante)
-                throw new NegocioException("Este endpoint é exclusivo para propostas enviadas pelo contratante.");
-
-            if (proposta.PrestadorId != prestadorId)
-                throw new NegocioException("Apenas o prestador destinatário pode aceitar esta proposta.");
-
-            var statusPermitidos = new[] { StatusPropostaProjeto.Submitted, StatusPropostaProjeto.EmNegociacao };
-            if (!statusPermitidos.Contains(proposta.Status))
-                throw new NegocioException("Proposta não pode ser aceita neste status.");
-
-            if (proposta.Projeto.Status != StatusProjeto.Aberto)
-                throw new NegocioException("O projeto não está mais aberto para aceite.");
-
-            if (proposta.ValidoAte.ToUniversalTime() <= DateTime.UtcNow)
-                throw new NegocioException("Esta proposta já expirou.");
-
-            var versaoAtiva = proposta.Versoes.OrderByDescending(v => v.Versao).FirstOrDefault()
-                ?? throw new NegocioException("Proposta sem conteúdo — não é possível gerar contrato.");
-
-            proposta.Status = StatusPropostaProjeto.Aceita;
-            proposta.AtualizadoEm = DateTime.UtcNow;
-
-            // Projeto em andamento com prestador selecionado
-            proposta.Projeto.Status = StatusProjeto.EmAndamento;
-            proposta.Projeto.FreelancerSelecionadoId = prestadorId;
-            proposta.Projeto.AtualizadoEm = DateTime.UtcNow;
-
-            // Recusa outras propostas ativas do projeto
-            var outrasPropostas = await _repo.GetDoProjetoAsync(proposta.ProjetoId);
-            foreach (var outra in outrasPropostas.Where(p =>
-                p.Id != proposta.Id &&
-                (p.Status == StatusPropostaProjeto.Submitted || p.Status == StatusPropostaProjeto.EmNegociacao)))
-            {
-                outra.Status = StatusPropostaProjeto.Recusada;
-                outra.MotivoCancelamento = "Outro prestador foi selecionado.";
-                outra.AtualizadoEm = DateTime.UtcNow;
-            }
-
-            await _repo.SaveChangesAsync();
-
-            // Gera contrato
-            await _contratoService.GerarAsync(proposta, versaoAtiva);
-
-            proposta.Status = StatusPropostaProjeto.Convertida;
-            proposta.AtualizadoEm = DateTime.UtcNow;
-            await _repo.SaveChangesAsync();
-
-            // Notifica contratante
-            try
-            {
-                var contratante = await _usuarioRepo.ObterPorIdAsync(proposta.Projeto.ContratanteId);
-                if (contratante != null)
-                    await _emailService.EnviarPropostaAceitaPrestadorAsync(
-                        contratante.Email, contratante.Nome, proposta.Projeto.Titulo);
-            }
-            catch { }
-
-            var prestador = await _prestadorRepo.GetByIdAsync(prestadorId);
-            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional);
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -242,6 +182,8 @@ namespace Tratoo.Domain.Features.Propostas
 
             if (proposta.PrestadorId != prestadorId)
                 throw new NegocioException("Apenas o prestador desta proposta pode aceitar.");
+
+            await ValidarChavePixCadastradaAsync(prestadorId);
 
             var statusPermitidos = new[] { StatusPropostaProjeto.Submitted, StatusPropostaProjeto.EmNegociacao };
             if (!statusPermitidos.Contains(proposta.Status))
@@ -298,7 +240,8 @@ namespace Tratoo.Domain.Features.Propostas
             catch { }
 
             var prestador = await _prestadorRepo.GetByIdAsync(prestadorId);
-            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional);
+            var nomesUsuarios = await ResolverNomesVersoes(proposta);
+            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional, nomesUsuarios);
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -311,6 +254,8 @@ namespace Tratoo.Domain.Features.Propostas
 
             if (proposta.PrestadorId != prestadorId)
                 throw new NegocioException("Você não tem permissão para enviar esta proposta.");
+
+            await ValidarChavePixCadastradaAsync(prestadorId);
 
             if (proposta.Status != StatusPropostaProjeto.Draft)
                 throw new NegocioException("Apenas rascunhos podem ser enviados.");
@@ -354,7 +299,8 @@ namespace Tratoo.Domain.Features.Propostas
             catch { }
 
             var prestador = await _prestadorRepo.GetByIdAsync(prestadorId);
-            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional);
+            var nomesUsuarios = await ResolverNomesVersoes(proposta);
+            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional, nomesUsuarios);
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -369,6 +315,10 @@ namespace Tratoo.Domain.Features.Propostas
             var ehParte = proposta.PrestadorId == dto.UsuarioId || projeto.ContratanteId == dto.UsuarioId;
             if (!ehParte)
                 throw new NegocioException("Você não tem permissão para negociar esta proposta.");
+
+            // Se o prestador está enviando contraproposta, validar chave PIX
+            if (proposta.PrestadorId == dto.UsuarioId)
+                await ValidarChavePixCadastradaAsync(dto.UsuarioId);
 
             var statusPermitidos = new[] { StatusPropostaProjeto.Submitted, StatusPropostaProjeto.EmNegociacao };
             if (!statusPermitidos.Contains(proposta.Status))
@@ -421,7 +371,8 @@ namespace Tratoo.Domain.Features.Propostas
             catch { }
 
             var prestador = await _prestadorRepo.GetByIdAsync(proposta.PrestadorId);
-            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional);
+            var nomesUsuarios = await ResolverNomesVersoes(proposta);
+            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional, nomesUsuarios);
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -447,6 +398,9 @@ namespace Tratoo.Domain.Features.Propostas
 
             var versaoAtiva = proposta.Versoes.OrderByDescending(v => v.Versao).FirstOrDefault()
                 ?? throw new NegocioException("Proposta sem conteúdo — não é possível gerar contrato.");
+
+            if (versaoAtiva.CriadoPor == contratanteId)
+                throw new NegocioException("Você não pode aceitar uma proposta enviada por você mesmo. Aguarde a resposta da outra parte.");
 
             proposta.Status = StatusPropostaProjeto.Aceita;
             proposta.AtualizadoEm = DateTime.UtcNow;
@@ -487,7 +441,8 @@ namespace Tratoo.Domain.Features.Propostas
             catch { }
 
             var p = await _prestadorRepo.GetByIdAsync(proposta.PrestadorId);
-            return MapDetalhe(proposta, p?.Nome ?? string.Empty, p?.FotoUrl, p?.TituloProfissional);
+            var nomesUsuarios = await ResolverNomesVersoes(proposta);
+            return MapDetalhe(proposta, p?.Nome ?? string.Empty, p?.FotoUrl, p?.TituloProfissional, nomesUsuarios);
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -616,10 +571,12 @@ namespace Tratoo.Domain.Features.Propostas
                 throw new NegocioException("Você não tem permissão para ver esta proposta.");
 
             var prestador = await _prestadorRepo.GetByIdAsync(proposta.PrestadorId);
-            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional);
+            var nomesUsuarios = await ResolverNomesVersoes(proposta);
+            return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional, nomesUsuarios);
         }
 
-        public async Task<List<PropostaResumoDTO>> ListarDoProjetoAsync(int projetoId, int contratanteId)
+        public async Task<List<PropostaResumoDTO>> ListarDoProjetoAsync(
+            int projetoId, int contratanteId, string? origem = null)
         {
             var projeto = await _projetoRepo.GetByIdAsync(projetoId)
                 ?? throw new NegocioException("Projeto não encontrado.");
@@ -628,35 +585,21 @@ namespace Tratoo.Domain.Features.Propostas
                 throw new NegocioException("Você não tem permissão para ver as propostas deste projeto.");
 
             var propostas = await _repo.GetDoProjetoAsync(projetoId);
-            return propostas.Select(MapResumo).ToList();
+
+            var resultado = propostas.Select(MapResumo).ToList();
+
+            return origem switch
+            {
+                "convidado"   => resultado.Where(p => p.FoiConvidado).ToList(),
+                "espontaneo"  => resultado.Where(p => !p.FoiConvidado).ToList(),
+                _             => resultado
+            };
         }
 
         public async Task<List<PropostaResumoDTO>> ListarDoPrestadorAsync(int prestadorId)
         {
             var propostas = await _repo.GetDoPrestadorAsync(prestadorId);
             return propostas.Select(MapResumo).ToList();
-        }
-
-        public async Task<List<PropostaVersaoDTO>> ListarVersoesAsync(Guid propostaId, int usuarioId)
-        {
-            var proposta = await _repo.GetByIdAsync(propostaId)
-                ?? throw new NegocioException("Proposta não encontrada.");
-
-            var ehParte = proposta.PrestadorId == usuarioId ||
-                          proposta.Projeto.ContratanteId == usuarioId;
-            if (!ehParte)
-                throw new NegocioException("Você não tem permissão para ver as versões desta proposta.");
-
-            var versoes = await _repo.GetTodasVersoesAsync(propostaId);
-            var usuariosIds = versoes.Select(v => v.CriadoPor).Distinct().ToList();
-            var usuarios = new Dictionary<int, string>();
-            foreach (var uid in usuariosIds)
-            {
-                var u = await _usuarioRepo.ObterPorIdAsync(uid);
-                if (u != null) usuarios[uid] = u.Nome;
-            }
-
-            return versoes.Select(v => MapVersao(v, usuarios.GetValueOrDefault(v.CriadoPor, "Desconhecido"))).ToList();
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -678,6 +621,22 @@ namespace Tratoo.Domain.Features.Propostas
         // ─────────────────────────────────────────────────────────────────────────
         // Helpers privados
         // ─────────────────────────────────────────────────────────────────────────
+
+        // Verifica se o prestador cadastrou a chave PIX. Sem ela não é possível receber
+        // o pagamento retido no escrow, portanto o envio e aceite de propostas são
+        // bloqueados antecipadamente — evita chegar na liberação e falhar.
+        private async Task ValidarChavePixCadastradaAsync(int prestadorId)
+        {
+            var prestador = await _prestadorRepo.GetCompletoAsync(prestadorId);
+            if (prestador?.ContaBancaria == null ||
+                string.IsNullOrWhiteSpace(prestador.ContaBancaria.PixChave))
+            {
+                throw new NegocioException(
+                    "Para enviar ou aceitar propostas é necessário cadastrar sua chave PIX. " +
+                    "Acesse Editar Perfil → Dados Bancários para configurar.");
+            }
+        }
+
         private static void ValidarCamposVersao(PropostaVersao v)
         {
             if (v.ValorTotal <= 0)
@@ -729,7 +688,23 @@ namespace Tratoo.Domain.Features.Propostas
                 CriadoEm = DateTime.UtcNow
             };
 
-        private static PropostaVersaoDTO MapVersao(PropostaVersao v, string criadoPorNome) => new()
+        // Helper para resolver nomes de usuários das versões
+        private async Task<Dictionary<int, string>> ResolverNomesVersoes(PropostaProjeto proposta)
+        {
+            var idsUsuarios = proposta.Versoes.Select(v => v.CriadoPor).Distinct().ToList();
+            var nomes = new Dictionary<int, string>();
+            foreach (var id in idsUsuarios)
+            {
+                var usuario = await _usuarioRepo.ObterPorIdAsync(id);
+                if (usuario != null)
+                    nomes[id] = usuario.Nome;
+                else
+                    nomes[id] = "Desconhecido";
+            }
+            return nomes;
+        }
+
+        private static PropostaVersaoDTO MapVersao(PropostaVersao v, Dictionary<int, string> nomesUsuarios) => new()
         {
             Id = v.Id,
             PropostaId = v.PropostaId,
@@ -745,12 +720,12 @@ namespace Tratoo.Domain.Features.Propostas
             Observacoes = v.Observacoes,
             MarcosJson = v.MarcosJson,
             CriadoPor = v.CriadoPor,
-            CriadoPorNome = criadoPorNome,
+            CriadoPorNome = nomesUsuarios.GetValueOrDefault(v.CriadoPor, "Desconhecido"),
             CriadoEm = v.CriadoEm
         };
 
         private static PropostaDetalheDTO MapDetalhe(
-            PropostaProjeto p, string prestadorNome, string? fotoUrl, string? tituloProfissional)
+            PropostaProjeto p, string prestadorNome, string? fotoUrl, string? tituloProfissional, Dictionary<int, string> nomesUsuarios)
         {
             var versoesOrdenadas = p.Versoes.OrderBy(v => v.Versao).ToList();
             var versaoAtiva = versoesOrdenadas.LastOrDefault();
@@ -767,6 +742,7 @@ namespace Tratoo.Domain.Features.Propostas
                 PrestadorTitulo = tituloProfissional,
                 SenderType = p.SenderType,
                 ConviteId = p.ConviteId,
+                FoiConvidado = p.ConviteId.HasValue,
                 Status = p.Status,
                 VersaoAtual = p.VersaoAtual,
                 ValidoAte = p.ValidoAte,
@@ -774,9 +750,9 @@ namespace Tratoo.Domain.Features.Propostas
                 CriadoEm = p.CriadoEm,
                 AtualizadoEm = p.AtualizadoEm,
                 VersaoAtiva = versaoAtiva != null
-                    ? MapVersao(versaoAtiva, prestadorNome)
+                    ? MapVersao(versaoAtiva, nomesUsuarios)
                     : null,
-                Versoes = versoesOrdenadas.Select(v => MapVersao(v, prestadorNome)).ToList()
+                Versoes = versoesOrdenadas.Select(v => MapVersao(v, nomesUsuarios)).ToList()
             };
         }
 
@@ -795,6 +771,7 @@ namespace Tratoo.Domain.Features.Propostas
                 Status = p.Status,
                 SenderType = p.SenderType,
                 ConviteId = p.ConviteId,
+                FoiConvidado = p.ConviteId.HasValue,
                 VersaoAtual = p.VersaoAtual,
                 ValidoAte = p.ValidoAte,
                 CriadoEm = p.CriadoEm,

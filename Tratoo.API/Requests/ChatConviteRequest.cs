@@ -1,10 +1,5 @@
 namespace Tratoo.API.Requests
 {
-    public class EnviarChatMensagemRequest
-    {
-        public string Texto { get; set; } = string.Empty;
-    }
-
     /// <summary>
     /// Payload para o contratante criar proposta formal a partir de um convite aceito.
     /// Reutiliza os mesmos campos de CriarRascunhoPropostaRequest.

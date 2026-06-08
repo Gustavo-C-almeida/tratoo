@@ -74,7 +74,8 @@ namespace Tratoo.Domain.Features.Auth
                 Nome = usuario.Nome,
                 Email = usuario.Email,
                 Tipo = usuario.TipoUsuario.ToString(),
-                PerfilMinimoCompleto = usuario.PerfilMinimoCompleto
+                PerfilMinimoCompleto = usuario.PerfilMinimoCompleto,
+                IsAdmin = usuario.IsAdmin
             };
         }
 
@@ -98,7 +99,8 @@ namespace Tratoo.Domain.Features.Auth
                 Nome = usuario.Nome,
                 Email = usuario.Email,
                 Tipo = usuario.TipoUsuario.ToString(),
-                PerfilMinimoCompleto = usuario.PerfilMinimoCompleto
+                PerfilMinimoCompleto = usuario.PerfilMinimoCompleto,
+                IsAdmin = usuario.IsAdmin
             };
         }
 

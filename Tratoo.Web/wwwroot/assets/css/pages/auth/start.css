@@ -65,20 +65,16 @@
     }
 
     /* Borda superior colorida */
-    .choice-item.cliente::before {
+    .choice-item::before {
         content: '';
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
         height: 0.25rem;
-        background: var(--secondary);
+        background: var(--secondary-dark);
         transform: scaleX(0);
         transition: transform 0.3s ease;
-    }
-
-    .choice-item.prestador::before {
-        background: var(--primary);
     }
 
     .choice-item:hover::before {
@@ -101,7 +97,7 @@
 .choice-item h2 {
     font-size: 1.5rem;
     font-weight: 700;
-    color: var(--primary);
+    color: var(--text-primary);
     margin-bottom: 1rem;
     text-align: center;
     letter-spacing: -0.025em;
@@ -123,7 +119,7 @@
     justify-content: center;
     gap: 0.5rem;
     padding: 0.875rem 1.5rem;
-    background: var(--secondary);
+    background: var(--secondary-dark);
     color: var(--white);
     text-decoration: none;
     border-radius: var(--radius-md);
@@ -137,7 +133,7 @@
 }
 
     .btn-primary:hover {
-        background: var(--secondary-dark);
+        background: #15803d;
         transform: translateY(-2px);
         box-shadow: var(--shadow-md);
         gap: 0.75rem;
@@ -145,15 +141,6 @@
 
     .btn-primary:active {
         transform: translateY(0);
-    }
-
-/* Botão específico para prestador (pode personalizar) */
-.prestador .btn-primary {
-    background: var(--primary);
-}
-
-    .prestador .btn-primary:hover {
-        background: var(--primary-dark);
     }
 
 /* Animações */

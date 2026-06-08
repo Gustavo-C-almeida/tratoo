@@ -1,0 +1,652 @@
+O Tratoo é um sistema substancialmente mais maduro do que um projeto típico de
+portfólio júnior. A infraestrutura transversal (autenticação JWT, autorização
+por roles/policies, tratamento global de exceções, logging estruturado com
+Serilog, rate limiting, headers de segurança, background services, gateway de
+pagamento com escrow, busca semântica com embeddings) já está implementada e
+funcional.
+
+Os itens do "Nível 1 — Obrigatório" estão em sua MAIORIA atendidos. Os gaps
+reais concentram-se em quatro frentes de maturidade profissional:
+
+  1. Ausência de projeto de testes automatizados (unitários e de integração).
+  2. Validação feita manualmente nos serviços (padrão "Always-Valid Domain"
+     via NegocioException) em vez de FluentValidation.
+  3. Paginação não padronizada — existe pontualmente, falta um PagedResult<T>
+     reutilizável aplicado de forma consistente.
+  4. Soft delete e auditoria por-linha (CriadoPor/AtualizadoPor) não
+     sistematizados — hoje predomina o ciclo de vida baseado em Status.
+
+Classificação de maturidade (detalhada na Seção 9): JÚNIOR FORTE, com vários
+elementos já em nível PLENO. As lacunas acima são exatamente o que separa o
+projeto de um "Pleno Forte" consolidado.
+
+
+################################################################################
+# PARTE A — AUDITORIA ITEM A ITEM (NÍVEIS 1 e 2)
+# Formato por item: Situação atual / Problema / Impacto / Ação / Justificativa /
+#                    Benefício
+################################################################################
+
+================================================================================
+NÍVEL 1.1 — AUTENTICAÇÃO E AUTORIZAÇÃO
+================================================================================
+
+[1] JWT configurado corretamente
+- Situação atual: IMPLEMENTADO E CORRETO. Em Program.cs, AddJwtBearer define
+  TokenValidationParameters completos: ValidateIssuerSigningKey, IssuerSigningKey
+  (SymmetricSecurityKey a partir de Jwt:SecretKey), ValidateIssuer/ValidIssuer,
+  ValidateAudience/ValidAudience, ValidateLifetime e ClockSkew = TimeSpan.Zero
+  (elimina a tolerância padrão de 5 min — token expira no segundo exato). O token
+  trafega em cookie httpOnly "tratoo_auth" lido via JwtBearerEvents.OnMessageReceived.
+- Problema: nenhum gritante. O uso de cookie httpOnly é superior a localStorage
+  (mitiga XSS-roubo-de-token).
+- Impacto: positivo — base de autenticação sólida.
+- Ação: nenhuma correção necessária. Recomendação futura: rotação de chave e
+  refresh tokens (hoje há apenas o access token).
+- Benefício: autenticação stateless, validada criptograficamente, resistente a
+  replay tardio (ClockSkew zero).
+
+[2] Controle de acesso baseado em Roles
+- Situação atual: IMPLEMENTADO. Endpoints usam .RequireAuthorization("Prestador")
+  e .RequireAuthorization("Contratante"). As claims de role são emitidas no login
+  (ClaimTypes.Role).
+- Problema: nenhum.
+- Impacto: positivo.
+- Ação: nenhuma.
+- Benefício: separação clara de capacidades por tipo de usuário.
+
+[3] Controle de acesso baseado em Policies
+- Situação atual: IMPLEMENTADO. Program.cs registra três policies: "Prestador",
+  "Contratante" e "Admin" (RequireRole). A policy "Admin" existe para uso futuro
+  (não há painel admin ainda — ver roadmap).
+- Problema: a policy "Admin" está definida mas pouco utilizada.
+- Impacto: baixo.
+- Ação: manter; documentar que endpoints administrativos (resolver disputa,
+  reprocessar transferência) deveriam migrar para .RequireAuthorization("Admin").
+- Benefício: extensível para políticas compostas (ex.: claims de verificação).
+
+[4] Proteção contra acesso indevido a recursos de terceiros + [5] Validação de
+    ownership
+- Situação atual: IMPLEMENTADO de forma consistente na camada de serviço. Padrões
+  verificados:
+    * Competências: "if (userId.Value != prestadorId) return Results.Forbid();"
+    * Perfis: prestador só edita o próprio (rotas /prestadores/me/...).
+    * Propostas: ObterDetalheAsync valida "ehParte" (prestador OU contratante do
+      projeto) antes de retornar; lança NegocioException caso contrário.
+    * Contratos: aprovação de entrega valida "contrato.ContratanteId != contratanteId".
+    * Avaliações: ObterPendenteDoContratoAsync filtra pelo userId.
+    * Pagamentos/Entrega: validação de "é parte do contrato" antes de qualquer ação.
+- Problema: a verificação de ownership está distribuída por cada serviço (não há
+  um filtro/atributo central). Funciona, mas depende de disciplina do desenvolvedor.
+- Impacto: médio — risco de esquecimento em endpoints novos.
+- Ação recomendada (roadmap): um requisito de autorização baseado em recurso
+  (IAuthorizationHandler com Resource-based authorization) para centralizar.
+- Benefício atual: nenhum vazamento horizontal identificado nas rotas auditadas.
+
+================================================================================
+NÍVEL 1.2 — VALIDAÇÕES
+================================================================================
+
+- Situação atual: validação feita MANUALMENTE dentro dos serviços de domínio,
+  lançando NegocioException com mensagens claras em português. Exemplos reais:
+    * PropostaProjetoService.ValidarCamposVersao: valor > 0, revisões > 0, prazo
+      futuro, objetivo >= 20 chars, escopo >= 50 chars, entrada <= valor total.
+    * AvaliacaoService.EnviarAvaliacaoAsync: nota 1..5, comentário <= 1000 chars,
+      avaliador != avaliado, status Pendente.
+    * Regras de turno na negociação (autor da última versão não pode aceitá-la).
+  Isto é, na prática, o padrão "Always-Valid Domain Model" — uma abordagem DDD
+  válida e defensável.
+- Problema: (a) FluentValidation NÃO está presente (verificado: nenhum
+  AbstractValidator no codebase). (b) Há alguma duplicação entre
+  ValidarCamposVersao e ValidarCamposContrapropostaDTO. (c) A validação de
+  entrada (formato/obrigatoriedade) mistura-se com regra de negócio.
+- Impacto: médio. Funciona e é robusto, mas não segue o padrão que entrevistadores
+  frequentemente esperam ver explicitamente; e a duplicação aumenta custo de
+  manutenção.
+- Ação recomendada (roadmap, esforço médio): introduzir FluentValidation para a
+  validação de ENTRADA (Requests) no pipeline da API, mantendo as regras de
+  NEGÓCIO no domínio. Não substituir uma pela outra — são camadas distintas.
+- Justificativa da abordagem dupla: validação de entrada protege o contrato HTTP;
+  validação de negócio protege invariantes do domínio. Misturar as duas é um
+  anti-padrão; tê-las separadas é maturidade.
+- Benefício: mensagens padronizadas, validadores testáveis isoladamente, menos
+  "if" espalhado nos serviços.
+
+================================================================================
+NÍVEL 1.3 — TRATAMENTO GLOBAL DE EXCEÇÕES
+================================================================================
+
+- Situação atual: IMPLEMENTADO. Program.cs usa app.UseExceptionHandler com um
+  handler que:
+    * Mapeia NegocioException -> HTTP 400 + { mensagem }.
+    * Qualquer outra exceção -> HTTP 500 + { mensagem genérica } e LOGA o erro
+      via ILogger<Program> com método e path.
+  Respostas são padronizadas em JSON ({ mensagem } e, no guard de onboarding,
+  { mensagem, codigoErro }).
+- Problema: (a) o handler é uma lambda inline em Program.cs — funciona, mas
+  poderia ser uma classe de middleware dedicada (Single Responsibility / testável).
+  (b) Não há um corpo de erro padronizado tipo ProblemDetails (RFC 7807).
+- Impacto: baixo. O comportamento já é global e correto.
+- Ação recomendada (roadmap, esforço baixo): extrair para ExceptionHandlingMiddleware
+  e adotar ProblemDetails para padronização de mercado.
+- Benefício atual: nenhuma exceção vaza stack trace ao cliente; erros 500 são
+  registrados; erros de domínio retornam 400 amigável.
+
+================================================================================
+NÍVEL 1.4 — LOGGING
+================================================================================
+
+- Situação atual: IMPLEMENTADO com Serilog (console + arquivo rotativo diário,
+  retenção 30 dias) configurado em Program.cs via builder.Host.UseSerilog. ILogger<T>
+  é injetado e usado nos serviços críticos:
+    * PagamentoService: loga liberação, falha de liberação, escrow.
+    * AvaliacaoService: loga publicação por blind review, expiração, antifraude.
+    * EntregaService: loga aprovação, falha de liberação.
+    * ContratoServico / background services: logam ciclo de vida.
+  Há logging estruturado (templates com {Placeholders}).
+- Problema: (a) o template do arquivo chama-se "logs/openai-.txt" — nome herdado
+  de um handler de OpenAI, semanticamente confuso para logs gerais da aplicação.
+  (b) Não há enriquecimento de contexto (CorrelationId/RequestId) nem PII masking
+  explícito.
+- Impacto: baixo a médio (observabilidade).
+- Ação recomendada (roadmap): renomear o sink para "logs/tratoo-.txt"; adicionar
+  enrichers (RequestId, UserId) e Serilog.Sinks estruturados (Seq/Elastic) em prod.
+- Benefício atual: rastreabilidade de operações financeiras e de autenticação;
+  auditoria de falhas 500.
+
+OBS sobre auditoria de autenticação/ações: existe a entidade AuditLog (UserId,
+Acao, Ip, DataHora) com repositório dedicado (IAuditLogRepository) — registro de
+ações relevantes exigido pelo Marco Civil (Art. 15). Há também ConsentLog (LGPD).
+
+================================================================================
+NÍVEL 1.5 — TESTES (GAP PRINCIPAL)
+================================================================================
+
+- Situação atual: NÃO EXISTE projeto de testes. A solução tem 3 projetos:
+  Tratoo.API, Tratoo.Domain, Tratoo.Web (estático). Nenhum *.Tests.
+- Problema: ausência total de testes automatizados — o gap mais relevante do
+  Nível 1 para um projeto de entrevista.
+- Impacto: ALTO. Sem testes não há rede de segurança para refatorações; reduz a
+  confiança e é o primeiro item que recrutadores técnicos checam.
+- Ação recomendada (roadmap, PRIORIDADE MÁXIMA): criar Tratoo.Tests (xUnit + Moq
+  + FluentAssertions). Cobertura inicial sugerida (alto valor, baixo acoplamento):
+    * Unitários de regra de negócio:
+        - PropostaProjetoService: "autor da última versão não pode aceitar"
+          (AceitarAsync deve lançar NegocioException quando versaoAtiva.CriadoPor
+          == contratanteId); limite de 10 versões; proposta expirada não aceita.
+        - AvaliacaoService: blind review (publica ambas só quando o par completa);
+          nota fora de 1..5; avaliador == avaliado.
+        - EntregaService: prestador não aprova a própria entrega; status inválido.
+        - PagamentoService: liberação só quando Status == Retido (idempotência).
+    * Integração (WebApplicationFactory + banco InMemory/Testcontainers):
+        - Fluxo de autenticação (login -> cookie -> acesso a rota protegida -> 401
+          sem cookie).
+        - Ownership (prestador A não acessa proposta de prestador B -> 403/erro).
+        - Criação e publicação de projeto.
+- Justificativa: priorizar regras de negócio puras maximiza valor por esforço
+  (são o "coração" do sistema e o que demonstra raciocínio de teste).
+- Benefício: regressão controlada, documentação executável das regras, sinal
+  forte de senioridade.
+
+================================================================================
+NÍVEL 2.1 — SOLID
+================================================================================
+
+- Single Responsibility: BOM. Separação clara em Repositories (acesso a dados),
+  Services (regra de negócio), Endpoints (composição HTTP/DTO), DTOs (transporte).
+  Ponto de atenção: Program.cs é grande (concentra toda a composição) e alguns
+  serviços (PagamentoService) acumulam muitas responsabilidades (gateway, escrow,
+  ledger, disputa) — candidato a sub-serviços.
+- Open/Closed: RAZOÁVEL. O uso de interfaces (IPagamentoService, IEmailService,
+  IArquivoStorageService, IR2PrivateStorageService) permite extensão sem alterar
+  consumidores. O gateway Asaas está atrás de IAsaasGatewayService — trocar de
+  PSP não impacta o domínio.
+- Liskov: OK. Implementações respeitam os contratos das interfaces; não há
+  heranças problemáticas (composição predomina).
+- Interface Segregation: MAJORITARIAMENTE BOM. As interfaces de repositório são
+  específicas por agregado. Após esta auditoria, IEntregaService e
+  IAvaliacaoService foram enxugadas (métodos órfãos removidos), reduzindo
+  "interface inchada".
+- Dependency Inversion: BOM. Serviços dependem de abstrações (interfaces)
+  injetadas; o registro concreto fica isolado em Program.cs. Exceção: alguns
+  serviços de perfil são injetados pela classe concreta (CompetenciaService,
+  PortfolioService) em vez de interface — funciona, mas fere o DIP estrito.
+- Ação recomendada: extrair interfaces para os services de perfil concretos;
+  quebrar PagamentoService em colaboradores (EscrowService, LedgerService,
+  DisputaService).
+
+================================================================================
+NÍVEL 2.2 — INJEÇÃO DE DEPENDÊNCIA
+================================================================================
+
+- Situação atual: BOM. Todos os repositórios e serviços são registrados com
+  AddScoped (ciclo de vida correto para serviços que tocam DbContext, que é
+  Scoped). HttpClients tipados via AddHttpClient (IAsaasGatewayService,
+  IdentidadeService, EmbeddingService) — correto (gerência de socket via
+  HttpClientFactory). Background services via AddHostedService (Singleton, que
+  internamente criam scopes — padrão correto). MemoryCache registrado.
+- Problema: poucos serviços registrados pela classe concreta (sem interface).
+- Impacto: baixo.
+- Ação: ver SOLID/DIP acima.
+- Benefício: testabilidade e desacoplamento já amplamente presentes.
+
+================================================================================
+NÍVEL 2.3 — DTOs
+================================================================================
+
+- Situação atual: BOM. Nenhuma entidade do domínio é exposta diretamente nos
+  endpoints. Há separação em três níveis:
+    * Requests (Tratoo.API/Requests) — contrato de ENTRADA HTTP.
+    * DTOs de resposta (Tratoo.Domain/Features/.../DTOs) — contrato de SAÍDA.
+    * Entidades (Tratoo.Domain/Domain/Models) — nunca serializadas diretamente.
+  Mapeamentos são feitos manualmente nos serviços (MapDetalhe, MapResumo, etc.).
+- Problema: mapeamento manual é verboso e repetitivo (sem AutoMapper/Mapster).
+- Impacto: baixo (mapeamento manual é, inclusive, mais explícito e performático;
+  é uma escolha defensável).
+- Ação: opcional — Mapster para reduzir boilerplate.
+- Benefício: zero vazamento de entidades; contratos estáveis e desacoplados.
+
+================================================================================
+NÍVEL 2.4 — PAGINAÇÃO
+================================================================================
+
+- Situação atual: PARCIAL. Existe paginação pontual:
+    * GET /api/usuarios/{id}/avaliacoes?pagina&tamanho (com clamp 1..20).
+    * Mensagens de chat (page/prestadorId).
+    * Repositórios de avaliação aceitam (pagina, tamanhoPagina).
+  Porém NÃO há um envelope padronizado PagedResult<T> com
+  { Page, PageSize, TotalRecords, TotalPages, Items }, e a maioria dos endpoints
+  de coleção (GET /api/projects, /api/me/propostas, /api/me/contratos,
+  /api/me/projects, busca) retorna LISTAS COMPLETAS.
+- Problema: risco de escala (listas crescem sem limite); resposta sem metadados
+  de paginação.
+- Impacto: médio (performance/escala futura).
+- Ação recomendada (roadmap, esforço médio): criar PagedResult<T> reutilizável e
+  aplicá-lo aos endpoints de listagem. ATENÇÃO: muda o shape da resposta — exige
+  atualização conjunta do frontend (projetos/index.js, minhas-propostas.js, etc.).
+  Por isso NÃO foi aplicado em massa nesta auditoria (evitar quebrar o frontend
+  funcional sem o ajuste correspondente).
+- Benefício: respostas previsíveis, escaláveis e amigáveis a UI com paginação.
+
+================================================================================
+NÍVEL 2.5 — FILTROS
+================================================================================
+
+- Situação atual: BOM nos pontos centrais. A busca de projetos e prestadores
+  (BuscaExtensions + BuscaSemanticaService) suporta filtros e ranqueamento por
+  score composto (embeddings + critérios). A listagem de propostas por projeto
+  aceita filtro de origem (convidado/espontâneo). FiltrosProjetoDTO existe.
+- Problema: filtros estruturados clássicos (faixa de preço, categoria, status,
+  data) não estão expostos de forma uniforme em todos os GETs de coleção.
+- Impacto: baixo a médio.
+- Ação recomendada: padronizar um objeto de filtro por recurso + tradução para
+  Expression no repositório.
+- Benefício: consultas server-side eficientes (em vez de filtrar no cliente).
+
+================================================================================
+NÍVEL 2.6 — SOFT DELETE
+================================================================================
+
+- Situação atual: PARCIAL/INTENCIONAL. O sistema usa predominantemente
+  CICLO DE VIDA POR STATUS em vez de exclusão física:
+    * Projeto: Status (Rascunho/Aberto/EmAndamento/...) + CanceladoEm +
+      MotivoCancelamento.
+    * Proposta: Status (Draft/Submitted/EmNegociacao/Recusada/Expirada/...).
+    * Contrato: Status + CanceladoEm/MotivoCancelamento.
+    * Pagamento: Status (Pendente/Retido/Liberado/EmDisputa/...).
+  Soft delete clássico (IsDeleted/ExcluidoEm) só aparece em EntregaAnexo
+  (ExcluidoEm + filtro de query global por ExcluidoEm == null).
+- Problema: não há um padrão único; entidades onde "apagar" faria sentido
+  (mensagens, itens de portfólio) usam DELETE físico.
+- Impacto: baixo (o modelo por status preserva histórico, que é o objetivo do
+  soft delete). Para entrega/anexos, o soft delete está correto.
+- Ação recomendada (roadmap, esforço médio): se for padronizar, introduzir
+  interface ISoftDeletable (IsDeleted, ExcluidoEm, ExcluidoPorId) + Global Query
+  Filter no OnModelCreating + interceptor no SaveChanges. Migration necessária.
+- Justificativa de NÃO ter feito em massa: alterar o comportamento de exclusão de
+  várias entidades exige migration de schema e revisão de cada fluxo — alto risco
+  sem testes de regressão (ver Nível 1.5). Deve ser feito após a suíte de testes.
+- Benefício do estado atual: histórico financeiro e contratual é imutável
+  (ledger nunca é apagado) — requisito de compliance já satisfeito.
+
+================================================================================
+NÍVEL 2.7 — AUDITORIA
+================================================================================
+
+- Situação atual: PARCIAL.
+    * CriadoEm: presente na maioria das entidades.
+    * AtualizadoEm: presente em Projeto, Proposta, Contrato e outras.
+    * AuditLog (entidade dedicada): registra AÇÕES de usuário (login, assinatura,
+      saque) com IP e timestamp — auditoria de nível de aplicação.
+    * CriadoPor (autoria de versão de proposta), LedgerFinanceiro: rastreiam quem
+      originou o registro no contexto de negócio.
+- Problema: NÃO há colunas sistemáticas CriadoPor/AtualizadoPor/ExcluidoPor em
+  todas as entidades; CriadoEm/AtualizadoEm são preenchidos manualmente (não há
+  interceptor central no SaveChanges).
+- Impacto: médio (rastreabilidade fina).
+- Ação recomendada (roadmap, esforço médio): interface IAuditable +
+  SaveChangesInterceptor que preenche CriadoEm/CriadoPor/AtualizadoEm/AtualizadoPor
+  automaticamente, lendo o usuário do IHttpContextAccessor. Migration necessária.
+- Justificativa de NÃO ter feito em massa: idem soft delete — exige migration e
+  toca todas as entidades; correto fazer após testes.
+- Benefício do estado atual: ações sensíveis (financeiras, autenticação) já são
+  auditadas via AuditLog; timestamps de criação/atualização cobrem o essencial.
+
+
+################################################################################
+# PARTE B — DOCUMENTO TÉCNICO (SEÇÕES 1–10)
+################################################################################
+
+================================================================================
+1. VISÃO GERAL DO SISTEMA
+================================================================================
+
+OBJETIVO
+O Tratoo é um marketplace de serviços que conecta CONTRATANTES (pessoas/empresas
+que precisam de um serviço) a PRESTADORES (freelancers). Diferencia-se por um
+fluxo financeiro com ESCROW (garantia): o dinheiro do contratante fica retido na
+plataforma e só é liberado ao prestador após a aprovação formal da entrega,
+protegendo ambas as partes.
+
+PROBLEMA RESOLVIDO
+Confiança em transações entre desconhecidos. Sem escrow, o prestador teme não
+receber e o contratante teme pagar e não receber o serviço. O Tratoo intermedia:
+- garante ao prestador que o valor já está retido antes de ele começar;
+- garante ao contratante que só paga de fato quando aprova a entrega;
+- oferece disputa e auto-liberação por prazo como salvaguardas.
+
+PÚBLICO-ALVO
+- Prestadores (freelancers de diversas categorias).
+- Contratantes (PF ou PJ) que publicam projetos e contratam.
+
+PRINCIPAIS FLUXOS
+1. Cadastro -> confirmação de e-mail -> onboarding (perfil + identidade LGPD).
+2. Contratante publica PROJETO (com orçamento, prazo, habilidades, idioma).
+3. Descoberta: busca semântica (embeddings) recomenda prestadores/projetos.
+4. Negociação: proposta e contrapropostas versionadas (até 10 versões); a parte
+   que enviou a última versão não pode aceitá-la (regra de turno).
+5. Aceite -> geração de CONTRATO -> assinatura digital com OTP por e-mail
+   (validade jurídica MP 2.200-2/2001) -> hash SHA-256 de integridade -> PDF.
+6. Pagamento: contratante paga via PIX (QR Code Asaas); valor entra em ESCROW.
+7. Execução -> prestador registra ENTREGA formal (descrição, anexos no R2,
+   links) -> contratante APROVA (libera pagamento) ou SOLICITA AJUSTES ou abre
+   DISPUTA.
+8. Liberação do pagamento -> criação dos slots de AVALIAÇÃO bilateral
+   (blind review) -> reputação pública recalculada.
+
+================================================================================
+2. ARQUITETURA
+================================================================================
+
+ESTRUTURA DA SOLUÇÃO (3 projetos)
+- Tratoo.API        : camada de apresentação. Minimal APIs organizadas como
+                      Extension Methods por recurso (ex.: AddEndPointsProjeto).
+                      Contém Requests (DTOs de entrada), middlewares, Program.cs
+                      (composição/DI), BackgroundServices e ClaimsHelper.
+- Tratoo.Domain     : núcleo. Organizado em FEATURE FOLDERS dentro de /Features
+                      (Auth, Avaliacoes, Contratos, IA, Infrastructure, Mensagens,
+                      Pagamentos, Perfis, Projetos, Propostas), cada uma com
+                      DTOs/Repositories/Services. /Domain/Models guarda as
+                      entidades e Enums. /Data guarda os DbContexts. /Migrations
+                      as migrations EF Core.
+- Tratoo.Web        : frontend estático (HTML/CSS/JS puro, sem framework) servido
+                      pela própria API via UseStaticFiles.
+
+CAMADAS E RESPONSABILIDADES
+- Apresentação (API/Endpoints): autenticação/autorização, leitura de claims,
+  mapeamento Request->DTO/comando, retorno HTTP. Sem regra de negócio.
+- Aplicação/Domínio (Services): regras de negócio, validações de invariantes,
+  orquestração transacional, logging de operações críticas.
+- Acesso a dados (Repositories): consultas EF Core, includes, persistência.
+- Infraestrutura: EmailService, R2 storage (público/privado), Asaas gateway,
+  OpenAI embeddings, geração de PDF (QuestPDF).
+
+FLUXO DE UMA REQUISIÇÃO (ex.: aprovar entrega)
+  Browser (cookie httpOnly)
+   -> Middleware: security headers
+   -> UseExceptionHandler (captura erros)
+   -> UseAuthentication (valida JWT do cookie) -> UseAuthorization (role/policy)
+   -> UseRateLimiter
+   -> Guard de onboarding (bloqueia perfis incompletos)
+   -> Endpoint (AddEndPointsContrato): extrai userId das claims
+   -> EntregaService.AprovarEntregaAsync: valida ownership + status, marca
+      aprovada, encerra contrato, cria avaliações pendentes, libera pagamento
+      (reuso de IPagamentoService) — tudo logado e auditado
+   -> Repository.SaveChanges
+   -> resposta JSON (DTO)
+
+PERSISTÊNCIA POLÍGLOTA
+- SQL Server (TratooContext): dados transacionais.
+- PostgreSQL + pgvector (VectorContext): embeddings para busca semântica, com
+  índice HNSW inicializado no startup.
+
+================================================================================
+3. MODELAGEM DE DOMÍNIO
+================================================================================
+
+PRINCIPAIS ENTIDADES (agregados)
+- Usuario (base) -> Prestador / Contratante (especializações). Prestador tem
+  Competencias, Experiencias, Certificacoes, Portfolio, ContaBancaria.
+- UserIdentity / ConsentLog / AuditLog: identidade verificada e compliance LGPD
+  + Marco Civil.
+- Projeto: publicado pelo contratante; tem habilidades (JSON), orçamento,
+  visibilidade, idioma, status, freelancer selecionado.
+- ConviteProjeto: contratante convida prestador para um projeto.
+- PropostaProjeto + PropostaVersao: negociação versionada (cada versão tem
+  CriadoPor — autoria real de quem enviou).
+- ContratoServico (+ ContratoSnapshot, HistoricoContrato): contrato gerado do
+  aceite; assinatura com OTP; hash de integridade; status (Gerado ->
+  AguardandoAssinatura -> Ativo -> AguardandoAprovacaoEntrega -> Encerrado /
+  Cancelado).
+- Entrega (+ EntregaAnexo [soft delete], EntregaLink): comprovação formal de
+  entrega com evidências no R2 privado.
+- Pagamento (+ LedgerFinanceiro [imutável], Disputa): escrow PIX via Asaas,
+  ledger de movimentações, disputas.
+- Avaliacao (+ ReputacaoResumo): avaliação bilateral com blind review.
+- MensagemProjeto: chat por par projeto+prestador.
+
+RELACIONAMENTOS-CHAVE
+- Projeto 1—N Proposta; Proposta 1—N PropostaVersao.
+- Proposta 1—1 ContratoServico (no aceite); ContratoServico 1—1 Pagamento;
+  ContratoServico 1—N Entrega; ContratoServico 1—2 Avaliacao (bilateral).
+- FKs configuradas com DeleteBehavior.Restrict para evitar ciclos de cascade.
+
+REGRAS DE NEGÓCIO RELEVANTES (verificadas no código)
+- Negociação: máx. 10 versões; proposta expirada não é aceita; o autor da última
+  versão não pode aceitá-la (só a outra parte) — frontend e backend.
+- Prestador precisa de chave PIX cadastrada antes de enviar/aceitar proposta.
+- Escrow: pagamento liberado só uma vez (LiberarPagamentoAsync exige
+  Status == Retido) — idempotência financeira.
+- Entrega: prestador não aprova a própria entrega; aprovação encerra o contrato
+  e dispara avaliações + liberação.
+- Avaliação: blind review (ambas publicadas só quando o par completa, ou por
+  expiração de 7 dias); antifraude básico para pares com muitas avaliações mútuas.
+
+DECISÕES DE MODELAGEM
+- Ciclo de vida por STATUS (em vez de exclusão física) preserva histórico.
+- Ledger IMUTÁVEL para rastreabilidade financeira.
+- Snapshot + hash do contrato no momento da assinatura (prova de não-adulteração).
+- Idiomas aceitos do contratante armazenados como JSON (evita tabela de junção
+  para um dado simples).
+
+================================================================================
+4. SEGURANÇA
+================================================================================
+
+AUTENTICAÇÃO
+- JWT assinado (HMAC-SHA via SymmetricSecurityKey) em cookie httpOnly; validação
+  completa de issuer/audience/lifetime; ClockSkew zero.
+- Senhas com BCrypt (hash + salt).
+- MFA no login e OTP (SHA-256) para assinatura de contrato.
+- Reset de senha por OTP com anti-enumeração e rate limit dedicado.
+
+AUTORIZAÇÃO
+- Roles (Prestador/Contratante/Admin) + Policies homônimas.
+- Ownership validado por serviço (prestador edita só o próprio perfil; partes do
+  contrato/proposta validadas antes de qualquer leitura/escrita).
+- Guard de onboarding: usuários autenticados sem perfil completo são bloqueados
+  (403 + codigoErro) em rotas não isentas.
+
+PROTEÇÃO DE DADOS / LGPD
+- UserIdentity, ConsentLog (consentimento), AuditLog (retenção Marco Civil).
+- CPF/CNPJ mascarado nos DTOs de contrato; perfis públicos não expõem dados
+  sensíveis (LGPD Art. 46 citado no código).
+- Buckets R2: público (fotos/portfólio) e privado (PDFs/anexos) com URLs
+  pré-assinadas temporárias.
+
+HARDENING HTTP
+- Headers: X-Content-Type-Options, X-Frame-Options=DENY, Referrer-Policy,
+  Permissions-Policy e Content-Security-Policy; HSTS em produção.
+- Rate limiting por IP em cadastro, login, senha, dados-bancários e OTP.
+
+================================================================================
+5. QUALIDADE DE CÓDIGO
+================================================================================
+
+- SOLID majoritariamente aplicado (ver Parte A, Nível 2.1).
+- DI por abstrações com ciclos de vida corretos (Scoped/Singleton/HttpClient).
+- DTOs em três níveis, sem vazamento de entidades.
+- Separação de responsabilidades por feature folder e por camada.
+- Pontos de melhoria: extrair interfaces dos services de perfil concretos;
+  quebrar PagamentoService; reduzir tamanho de Program.cs (extrair extension
+  methods de configuração: AddAuth, AddRateLimiting, AddPersistence).
+
+================================================================================
+6. ESTRATÉGIAS DE ESCALABILIDADE
+================================================================================
+
+- Paginação: parcial (avaliações, mensagens). Padronizar PagedResult<T> (roadmap).
+- Filtros: busca semântica robusta + filtros pontuais; padronizar filtros
+  estruturados (roadmap).
+- Soft delete: ciclo por status (preserva histórico) + soft delete real em
+  EntregaAnexo; padronização opcional via ISoftDeletable + global query filter.
+- Auditoria: CriadoEm/AtualizadoEm + AuditLog de ações; padronizar
+  CriadoPor/AtualizadoPor via SaveChangesInterceptor (roadmap).
+- Background services já distribuem trabalho assíncrono (expiração, liberação,
+  reindexação) — base para escala horizontal.
+
+================================================================================
+7. TESTABILIDADE
+================================================================================
+
+- Estado atual: arquitetura ALTAMENTE testável (serviços dependem de interfaces),
+  porém SEM testes implementados.
+- Estratégia recomendada:
+    * Unitários (xUnit + Moq + FluentAssertions) para regras de negócio puras.
+    * Integração (WebApplicationFactory) para endpoints e autenticação.
+    * Testcontainers (SQL Server) para testes de repositório fiéis ao provedor.
+- Benefícios: rede de segurança para refatoração, documentação executável,
+  confiança em deploy.
+
+================================================================================
+8. DIFERENCIAIS TÉCNICOS (o que recrutadores/tech leads valorizam)
+================================================================================
+
+[D1] ESCROW + GATEWAY DE PAGAMENTO REAL (Asaas) COM LEDGER IMUTÁVEL E DISPUTAS
+- O que é: retenção de valores com liberação condicionada à aprovação, livro-razão
+  imutável e fluxo de disputa.
+- Como: PagamentoService + LedgerFinanceiro + webhooks idempotentes + endpoints
+  de liberação/disputa/sincronização/reprocessamento.
+- Problema que resolve: confiança financeira entre desconhecidos.
+- Por que é valorizado: integração com PSP real, idempotência e consistência
+  financeira são temas de nível pleno/sênior.
+
+[D2] ASSINATURA DIGITAL COM OTP + HASH DE INTEGRIDADE + PDF
+- O que é: contrato assinado com código por e-mail, snapshot e hash SHA-256.
+- Como: ContratoServicoService + OTP + QuestPDF + R2 privado.
+- Resolve: validade jurídica e prova de não-adulteração.
+- Valorizado: cruza segurança, compliance e geração de documentos.
+
+[D3] BUSCA SEMÂNTICA COM EMBEDDINGS (IA) E BANCO VETORIAL
+- O que é: recomendação por similaridade semântica, não só palavra-chave.
+- Como: OpenAI embeddings (text-embedding-3-small, 1536 dims) + PostgreSQL/pgvector
+  + índice HNSW + score composto + reindexação em background.
+- Resolve: descoberta relevante de prestadores/projetos.
+- Valorizado: IA aplicada com persistência poliglота e indexação assíncrona.
+
+[D4] AVALIAÇÃO BILATERAL COM BLIND REVIEW
+- O que é: notas só se tornam públicas quando ambas as partes avaliam (ou após 7
+  dias), evitando retaliação.
+- Como: AvaliacaoService + expiração em background + antifraude básico.
+- Resolve: viés de avaliação por medo de represália.
+- Valorizado: modelagem de incentivos e regra de negócio não trivial.
+
+[D5] SEGURANÇA EM PROFUNDIDADE
+- O que é: JWT httpOnly + ClockSkew zero + CSP/HSTS + rate limiting + MFA/OTP +
+  LGPD (consentimento/auditoria) + mascaramento de PII.
+- Resolve: superfície de ataque reduzida e compliance.
+- Valorizado: segurança "by design", raramente vista em projetos júnior.
+
+[D6] OBSERVABILIDADE E RESILIÊNCIA OPERACIONAL
+- O que é: Serilog estruturado, tratamento global de exceções, background services
+  para expiração/liberação/reindexação, salvaguardas (auto-liberação, sincronizar,
+  reprocessar transferência).
+- Resolve: operação confiável e diagnóstico de falhas.
+- Valorizado: pensamento de produção, não só "happy path".
+
+================================================================================
+9. AVALIAÇÃO DE MATURIDADE
+================================================================================
+
+CLASSIFICAÇÃO: JÚNIOR FORTE (com vários elementos de nível PLENO).
+
+JUSTIFICATIVA TÉCNICA
+A favor de Pleno:
+- Integração com PSP real, escrow, ledger e idempotência financeira.
+- Segurança em profundidade (JWT correto, CSP/HSTS, rate limiting, MFA/OTP, LGPD).
+- IA aplicada com banco vetorial e indexação assíncrona.
+- Background services, tratamento global de exceções e logging estruturado.
+- Arquitetura em camadas com DI por abstrações e DTOs sem vazamento.
+
+O que segura em Júnior Forte (impede "Pleno Forte"):
+- AUSÊNCIA de testes automatizados (o fator de maior peso).
+- Validação não padronizada (sem FluentValidation) e com alguma duplicação.
+- Paginação/filtros/soft delete/auditoria não sistematizados.
+- Pontos de DIP/SRP a melhorar (services concretos, Program.cs e PagamentoService
+  grandes).
+
+CONCLUSÃO: a amplitude funcional e a infraestrutura são de nível pleno; a
+ausência de testes e de algumas padronizações de maturidade posicionam o projeto
+como JÚNIOR FORTE pronto para saltar a PLENO assim que o roadmap de testes +
+padronizações for executado.
+
+================================================================================
+10. PRÓXIMOS PASSOS (priorizados por impacto x esforço)
+================================================================================
+
+PRIORIDADE 1 — FUNDAMENTAIS (maior impacto, esforço médio)
+  1. Projeto de TESTES (xUnit + Moq + FluentAssertions): unitários de regras de
+     negócio + integração de autenticação/ownership. [Maior salto de maturidade.]
+  2. FluentValidation para Requests no pipeline da API (separando validação de
+     entrada da regra de negócio).
+  3. PagedResult<T> padronizado + aplicação nos GETs de coleção (com ajuste do
+     frontend conjunto).
+
+PRIORIDADE 2 — MATURIDADE (médio impacto)
+  4. SaveChangesInterceptor para auditoria automática (CriadoEm/CriadoPor/
+     AtualizadoEm/AtualizadoPor) via IAuditable + IHttpContextAccessor.
+  5. ISoftDeletable + Global Query Filter (onde fizer sentido) — após os testes.
+  6. ExceptionHandlingMiddleware dedicado + ProblemDetails (RFC 7807).
+  7. Filtros estruturados padronizados (categoria, status, faixa de preço, data).
+  8. Refatorações SOLID: interfaces para services de perfil; quebrar
+     PagamentoService; extrair configuração de Program.cs.
+
+PRIORIDADE 3 — ESCALA E RESILIÊNCIA (infra avançada)
+  9.  Health Checks (AddHealthChecks) para DB/SQL, PostgreSQL, Asaas, R2.
+  10. Cache distribuído (Redis) para reputação, configs e resultados de busca.
+  11. Polly (retry/circuit breaker/timeout) nos HttpClients (Asaas/OpenAI/R2).
+  12. Idempotência explícita por chave nos endpoints de escrita financeira.
+  13. Observabilidade: OpenTelemetry (traces/metrics) + enrichers de correlação;
+      Serilog para Seq/Elastic em produção.
+  14. Mensageria (RabbitMQ) para desacoplar e-mails/indexação/webhooks; consumidores
+      idempotentes.
+  15. CQRS (MediatR) para separar comandos de consultas nos fluxos complexos
+      (pagamento/contrato) — adotar com parcimônia, só onde agrega.
+
+JUSTIFICATIVA DA ORDEM: testes primeiro (viabilizam refatorar com segurança);
+depois padronizações que elevam consistência (validação/paginação/auditoria);
+por fim infra de escala/resiliência, que só compensa com carga real.
+
+================================================================================
+                            FIM DA AUDITORIA
+================================================================================

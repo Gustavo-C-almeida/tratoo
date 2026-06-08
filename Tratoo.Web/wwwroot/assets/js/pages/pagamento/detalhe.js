@@ -15,7 +15,9 @@ const STATUS_LABEL = {
     Aguardando: 'Aguardando pagamento PIX',
     Processando:'Processando',
     Retido:     'Retido em escrow',
+    TransferenciaEmProgresso: 'Transferência em progresso',
     Liberado:   'Liberado ao prestador',
+    FalhaTransferencia: 'Falha na transferência',
     Cancelado:  'Cancelado',
     Falhou:     'Falhou',
     Estornado:  'Estornado',
@@ -27,7 +29,9 @@ const STATUS_CLASS = {
     Aguardando: 'badge-aguardando',
     Processando:'badge-aguardando',
     Retido:     'badge-retido',
+    TransferenciaEmProgresso: 'badge-aguardando',
     Liberado:   'badge-liberado',
+    FalhaTransferencia: 'badge-cancelado',
     Cancelado:  'badge-cancelado',
     Falhou:     'badge-cancelado',
     Estornado:  'badge-encerrado',
@@ -36,8 +40,6 @@ const STATUS_CLASS = {
 
 const LEDGER_LABEL = {
     Entrada:           'Entrada',
-    TaxaPlataforma:    'Taxa da plataforma',
-    LiquidoPrestador:  'Líquido ao prestador',
     Estorno:           'Estorno',
     Transferencia:     'Transferência'
 };
@@ -138,12 +140,15 @@ function renderPagamento(pag) {
             <!-- CABEÇALHO -->
             <header class="contrato-header">
                 <div>
-                    <a href="javascript:history.back()" class="back-link-pag">← Voltar</a>
+                    <a href="javascript:history.back()" class="back-link-pag"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
                     <h1>Pagamento via PIX</h1>
                     <p class="pag-sub">Escrow protegido pela Tratoo</p>
                 </div>
                 <span class="status-badge ${statusClass}">${statusLabel}</span>
             </header>
+
+            <!-- CONFIRMAÇÃO DE PAGAMENTO -->
+            ${renderConfirmacao(pag)}
 
             <!-- QR CODE PIX -->
             ${renderPixSection(pag)}
@@ -163,19 +168,19 @@ function renderPagamento(pag) {
             <section class="pag-secao">
                 <h2>Resumo financeiro</h2>
                 <div class="financeiro-grid">
-                    <div class="financeiro-item">
-                        <span class="fi-label">Valor bruto</span>
+                    <div class="financeiro-item fi-destaque">
+                        <span class="fi-label">Valor do serviço</span>
                         <span class="fi-valor">${fmtBRL(pag.valorBruto)}</span>
                     </div>
-                    <div class="financeiro-item">
-                        <span class="fi-label">Taxa da plataforma (10%)</span>
-                        <span class="fi-valor fi-taxa">− ${fmtBRL(pag.taxaPlataforma)}</span>
-                    </div>
                     <div class="financeiro-item fi-destaque">
-                        <span class="fi-label">Valor líquido ao prestador</span>
-                        <span class="fi-valor fi-liquido">${fmtBRL(pag.valorLiquidoPrestador)}</span>
+                        <span class="fi-label">Valor ao prestador</span>
+                        <span class="fi-valor fi-liquido">${fmtBRL(pag.valorBruto)}</span>
                     </div>
                 </div>
+                ${pag.taxaGateway != null ? `
+                <p class="fi-nota-taxa">
+                    Taxa operacional do gateway (Asaas): ${fmtBRL(pag.taxaGateway)} — cobrada pela operadora de pagamentos, sem impacto no valor recebido pelo prestador.
+                </p>` : ''}
                 <dl class="dados-lista" style="margin-top:1rem">
                     <dt>Iniciado em</dt><dd>${fmtDtHr(pag.criadoEm) || '—'}</dd>
                     ${pag.pagoEm            ? `<dt>Confirmado em</dt><dd>${fmtDtHr(pag.pagoEm)}</dd>` : ''}
@@ -230,6 +235,36 @@ async function carregarBotaoAvaliacao(contratoServicoId) {
     } catch {
         // Sem avaliação pendente ou usuário não é contratante — silencia
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// BANNER DE CONFIRMAÇÃO (PIX recebido — status Retido ou Liberado)
+// ──────────────────────────────────────────────────────────────────────────────
+
+function renderConfirmacao(pag) {
+    // Só exibe quando o PIX já foi recebido (escrow). 'Retido' e 'Liberado' são
+    // os estados em que o pagamento está efetivamente confirmado.
+    if (!['Retido', 'Liberado'].includes(pag.status)) return '';
+
+    const dataConfirmacao = pag.pagoEm
+        ? new Date(pag.pagoEm).toLocaleString('pt-BR')
+        : null;
+
+    // Número amigável do pagamento (primeiros 8 caracteres do GUID).
+    const numero = pag.id ? `#${String(pag.id).slice(0, 8).toUpperCase()}` : '—';
+
+    return `
+        <section class="pag-confirmado" role="status" aria-live="polite">
+            <span class="pag-confirmado-icone" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
+            <div class="pag-confirmado-texto">
+                <h2>Pagamento confirmado com sucesso.</h2>
+                <p class="pag-confirmado-detalhes">
+                    ${dataConfirmacao ? `Confirmado em <strong>${escapeHtml(dataConfirmacao)}</strong> · ` : ''}
+                    Pagamento <strong class="mono">${escapeHtml(numero)}</strong>
+                </p>
+            </div>
+        </section>
+    `;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

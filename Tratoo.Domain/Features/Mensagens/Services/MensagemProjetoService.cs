@@ -112,18 +112,24 @@ namespace Tratoo.Domain.Features.Mensagens
             var ultimas = await _repo.GetUltimasMensagensPorPrestadorAsync(prestadorId);
 
             var result = new List<ChatResumoDTO>();
+            var prestador = await _prestadorRepo.GetByIdAsync(prestadorId);
             foreach (var m in ultimas.OrderByDescending(m => m.EnviadoEm))
             {
                 var total = await _repo.ContarPorAsync(m.ProjetoId, prestadorId);
-                var prestador = await _prestadorRepo.GetByIdAsync(prestadorId);
+                // Para o prestador, o outro participante é o contratante do projeto.
+                var contratante = m.Projeto != null
+                    ? await _usuarioRepo.ObterPorIdAsync(m.Projeto.ContratanteId)
+                    : null;
                 result.Add(new ChatResumoDTO
                 {
                     ProjetoId       = m.ProjetoId,
                     ProjetoTitulo   = m.Projeto?.Titulo ?? string.Empty,
                     PrestadorId     = prestadorId,
                     PrestadorNome   = prestador?.Nome ?? string.Empty,
+                    OutroParticipanteNome = contratante?.Nome ?? "Contratante",
                     UltimaMensagem  = m.Texto.Length > 80 ? m.Texto[..80] + "..." : m.Texto,
                     UltimaMensagemEm = DateTime.SpecifyKind(m.EnviadoEm, DateTimeKind.Utc),
+                    UltimaMensagemPorId = m.RemetenteId,
                     TotalMensagens  = total
                 });
             }
@@ -149,8 +155,11 @@ namespace Tratoo.Domain.Features.Mensagens
                     ProjetoTitulo   = m.Projeto?.Titulo ?? string.Empty,
                     PrestadorId     = m.PrestadorId.Value,
                     PrestadorNome   = prestador?.Nome ?? string.Empty,
+                    // Para o contratante, o outro participante é o prestador.
+                    OutroParticipanteNome = prestador?.Nome ?? "Prestador",
                     UltimaMensagem  = m.Texto.Length > 80 ? m.Texto[..80] + "..." : m.Texto,
                     UltimaMensagemEm = DateTime.SpecifyKind(m.EnviadoEm, DateTimeKind.Utc),
+                    UltimaMensagemPorId = m.RemetenteId,
                     TotalMensagens  = total
                 });
             }

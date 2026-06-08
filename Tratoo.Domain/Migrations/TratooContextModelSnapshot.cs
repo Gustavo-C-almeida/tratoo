@@ -93,13 +93,6 @@ namespace Tratoo.Domain.Migrations
                     b.Property<DateTime?>("PublicadaEm")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("RespostaPublica")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime?>("RespostaPublicaCriadaEm")
-                        .HasColumnType("datetime2");
-
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -115,74 +108,6 @@ namespace Tratoo.Domain.Migrations
                         .IsUnique();
 
                     b.ToTable("Avaliacoes");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.ChatConvite", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("ContratanteId")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("ConviteId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("GETUTCDATE()");
-
-                    b.Property<int>("PrestadorId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProjetoId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConviteId")
-                        .IsUnique();
-
-                    b.HasIndex("PrestadorId");
-
-                    b.HasIndex("ProjetoId");
-
-                    b.HasIndex("ContratanteId", "PrestadorId");
-
-                    b.ToTable("ChatsConvite");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.ChatConviteMensagem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ChatId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("EnviadoEm")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("GETUTCDATE()");
-
-                    b.Property<int>("RemetenteId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Texto")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RemetenteId");
-
-                    b.HasIndex("ChatId", "EnviadoEm");
-
-                    b.ToTable("ChatConviteMensagens");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.ConsentLog", b =>
@@ -216,101 +141,6 @@ namespace Tratoo.Domain.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("ConsentLogs");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.Contrato", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("ConcluidoEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("ContratanteId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("CriadoEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DiretrizesConteudo")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool?>("ExclusividadeSegmento")
-                        .HasColumnType("bit");
-
-                    b.Property<bool?>("ExigeAprovacaoPrevia")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("IniciadoEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool?>("MultaPorNaoEntrega")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("PagoEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool?>("PermiteUsoImagem")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("PlataformaPrincipal")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<DateTime?>("PrazoEntrega")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("PrazoUsoImagemDias")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PrestadorId")
-                        .HasColumnType("int");
-
-                    b.Property<Guid?>("PropostaId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int?>("QuantidadePosts")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("QuantidadeReels")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("QuantidadeStories")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("QuantidadeVideos")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<decimal?>("TaxaPlataforma")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("ValorBruto")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("ValorMulta")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ContratanteId");
-
-                    b.HasIndex("PlataformaPrincipal");
-
-                    b.HasIndex("PrestadorId");
-
-                    b.HasIndex("PropostaId")
-                        .IsUnique()
-                        .HasFilter("[PropostaId] IS NOT NULL");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("Contratos");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.ContratoServico", b =>
@@ -382,6 +212,12 @@ namespace Tratoo.Domain.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
+                    b.Property<string>("UserAgentContratante")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserAgentPrestador")
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CanceladoPorId");
@@ -434,43 +270,6 @@ namespace Tratoo.Domain.Migrations
                         .IsUnique();
 
                     b.ToTable("ContratoSnapshots");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.Conversa", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("ContratanteId")
-                        .HasColumnType("int");
-
-                    b.Property<Guid?>("ContratoId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CriadaEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("EncerradaEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("PrestadorId")
-                        .HasColumnType("int");
-
-                    b.Property<Guid?>("PropostaId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ContratanteId");
-
-                    b.HasIndex("ContratoId");
-
-                    b.HasIndex("PrestadorId");
-
-                    b.HasIndex("PropostaId");
-
-                    b.ToTable("Conversas");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.ConviteProjeto", b =>
@@ -529,6 +328,131 @@ namespace Tratoo.Domain.Migrations
                     b.ToTable("ConvitesProjeto");
                 });
 
+            modelBuilder.Entity("Tratoo.Domain.Models.Entrega", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AprovadaEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("AprovadorId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("AtualizadoEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ContratoServicoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<DateTime>("DataEntrega")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DescricaoEntrega")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("MotivoRejeicao")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("RejeitadaEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContratoServicoId");
+
+                    b.ToTable("Entregas");
+                });
+
+            modelBuilder.Entity("Tratoo.Domain.Models.EntregaAnexo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ChaveR2")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<Guid>("EntregaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ExcluidoEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("NomeArquivo")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<long>("TamanhoArquivo")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TipoArquivo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntregaId");
+
+                    b.ToTable("EntregaAnexos");
+                });
+
+            modelBuilder.Entity("Tratoo.Domain.Models.EntregaLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<string>("Descricao")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<Guid>("EntregaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntregaId");
+
+                    b.ToTable("EntregaLinks");
+                });
+
             modelBuilder.Entity("Tratoo.Domain.Models.Financeiro.ContaBancaria", b =>
                 {
                     b.Property<int>("Id")
@@ -573,7 +497,7 @@ namespace Tratoo.Domain.Migrations
                     b.HasIndex("PrestadorId")
                         .IsUnique();
 
-                    b.ToTable("ContaBancaria");
+                    b.ToTable("ContasBancarias");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.Financeiro.DisputaPagamento", b =>
@@ -702,38 +626,78 @@ namespace Tratoo.Domain.Migrations
                     b.ToTable("WebhookLogs");
                 });
 
-            modelBuilder.Entity("Tratoo.Domain.Models.Mensagem", b =>
+            modelBuilder.Entity("Tratoo.Domain.Models.HistoricoAssinatura", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Acao")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ContratoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("DataEvento")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<string>("Ip")
+                        .IsRequired()
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContratoId");
+
+                    b.HasIndex("ContratoId", "UsuarioId");
+
+                    b.ToTable("HistoricosAssinatura");
+                });
+
+            modelBuilder.Entity("Tratoo.Domain.Models.HistoricoContrato", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("Conteudo")
+                    b.Property<string>("Acao")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid>("ConversaId")
+                    b.Property<Guid>("ContratoServicoId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime>("EnviadaEm")
-                        .HasColumnType("datetime2");
+                    b.Property<DateTime>("DataEvento")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
 
-                    b.Property<bool>("Lida")
-                        .HasColumnType("bit");
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
-                    b.Property<int>("RemetenteId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Tipo")
+                    b.Property<int>("UsuarioId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ConversaId");
+                    b.HasIndex("ContratoServicoId");
 
-                    b.HasIndex("RemetenteId");
-
-                    b.ToTable("Mensagens");
+                    b.ToTable("HistoricosContrato");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.MensagemProjeto", b =>
@@ -793,9 +757,6 @@ namespace Tratoo.Domain.Migrations
                     b.Property<string>("AsaasTransferenciaId")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid?>("ContratoId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<Guid?>("ContratoServicoId")
                         .HasColumnType("uniqueidentifier");
 
@@ -848,11 +809,7 @@ namespace Tratoo.Domain.Migrations
                     b.Property<string>("StatusGateway")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<decimal>("TaxaGateway")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TaxaPlataforma")
+                    b.Property<decimal?>("TaxaGateway")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
@@ -861,8 +818,6 @@ namespace Tratoo.Domain.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ContratoId");
 
                     b.HasIndex("ContratoServicoId");
 
@@ -881,6 +836,9 @@ namespace Tratoo.Domain.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ArquivoUrl")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("DataEmissao")
                         .HasColumnType("datetime2");
@@ -1105,6 +1063,9 @@ namespace Tratoo.Domain.Migrations
                     b.Property<DateTime?>("CanceladoEm")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("CanceladoPorId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Categoria")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
@@ -1136,9 +1097,6 @@ namespace Tratoo.Domain.Migrations
 
                     b.Property<string>("NivelFreelancer")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("NumFreelancersDesejados")
-                        .HasColumnType("int");
 
                     b.Property<decimal>("OrcamentoMax")
                         .HasPrecision(18, 2)
@@ -1183,141 +1141,6 @@ namespace Tratoo.Domain.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("Projetos");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.Proposta", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<bool>("Ativa")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("AtualizadaEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CondicoesGerais")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("ContratanteId")
-                        .HasColumnType("int");
-
-                    b.Property<Guid?>("ContratoId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CriadaEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("DataCancelamento")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Descricao")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("DireitosUsoEntregavel")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("DireitosUsoImagem")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("DuracaoMeses")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Entregaveis")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("HorasEstimadas")
-                        .HasColumnType("int");
-
-                    b.Property<string>("MotivoCancelamento")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("MotivoRecusa")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("PrazoEntrega")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("PrazoResposta")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("PrestadorId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("RespondidaEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("TipoCobranca")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Titulo")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("Valor")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("ValorHora")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("ValorMensal")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("ValorTotal")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("Versao")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ContratanteId");
-
-                    b.HasIndex("PrestadorId");
-
-                    b.ToTable("Propostas");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.PropostaNegociacao", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Autor")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Mensagem")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("PrazoEntregaSugerido")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("PropostaId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal>("ValorSugerido")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PropostaId");
-
-                    b.ToTable("PropostaNegociacao");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.PropostaProjeto", b =>
@@ -1556,7 +1379,13 @@ namespace Tratoo.Domain.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<DateTime?>("ExcluidoEm")
+                        .HasColumnType("datetime2");
+
                     b.Property<bool>("IdentidadeVerificada")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsAdmin")
                         .HasColumnType("bit");
 
                     b.Property<bool>("MFA")
@@ -1607,8 +1436,17 @@ namespace Tratoo.Domain.Migrations
                     b.Property<string>("Descricao")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("Disponibilidade")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EmailContato")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("ExibirIdade")
                         .HasColumnType("bit");
+
+                    b.Property<string>("IdiomasAceitosJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("InscricaoEstadual")
                         .HasColumnType("nvarchar(max)");
@@ -1628,11 +1466,17 @@ namespace Tratoo.Domain.Migrations
                     b.Property<bool>("PagadorVerificado")
                         .HasColumnType("bit");
 
+                    b.Property<string>("PorQueTrabalharComigo")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Segmento")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SiteUrl")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("TamanhoEquipe")
+                        .HasColumnType("int");
 
                     b.ToTable("Contratantes", (string)null);
                 });
@@ -1668,9 +1512,6 @@ namespace Tratoo.Domain.Migrations
                     b.Property<string>("FuncaoExecutada")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("GitHubUrl")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("LinkedinUrl")
                         .HasColumnType("nvarchar(max)");
 
@@ -1688,10 +1529,6 @@ namespace Tratoo.Domain.Migrations
 
                     b.Property<string>("TituloProfissional")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal?>("ValorHora")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal?>("ValorMinimoProjeto")
                         .HasPrecision(18, 2)
@@ -1725,84 +1562,6 @@ namespace Tratoo.Domain.Migrations
                     b.Navigation("Avaliador");
 
                     b.Navigation("ContratoServico");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.ChatConvite", b =>
-                {
-                    b.HasOne("Tratoo.Domain.Models.Contratante", "Contratante")
-                        .WithMany()
-                        .HasForeignKey("ContratanteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.ConviteProjeto", "Convite")
-                        .WithOne()
-                        .HasForeignKey("Tratoo.Domain.Models.ChatConvite", "ConviteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.Prestador.Prestador", "Prestador")
-                        .WithMany()
-                        .HasForeignKey("PrestadorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.Projeto", "Projeto")
-                        .WithMany()
-                        .HasForeignKey("ProjetoId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Contratante");
-
-                    b.Navigation("Convite");
-
-                    b.Navigation("Prestador");
-
-                    b.Navigation("Projeto");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.ChatConviteMensagem", b =>
-                {
-                    b.HasOne("Tratoo.Domain.Models.ChatConvite", "Chat")
-                        .WithMany("Mensagens")
-                        .HasForeignKey("ChatId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.Usuario", "Remetente")
-                        .WithMany()
-                        .HasForeignKey("RemetenteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Chat");
-
-                    b.Navigation("Remetente");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.Contrato", b =>
-                {
-                    b.HasOne("Tratoo.Domain.Models.Contratante", "Contratante")
-                        .WithMany("Contratos")
-                        .HasForeignKey("ContratanteId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Tratoo.Domain.Models.Prestador.Prestador", "Prestador")
-                        .WithMany("Contratos")
-                        .HasForeignKey("PrestadorId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Tratoo.Domain.Models.Proposta", "Proposta")
-                        .WithOne()
-                        .HasForeignKey("Tratoo.Domain.Models.Contrato", "PropostaId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Contratante");
-
-                    b.Navigation("Prestador");
-
-                    b.Navigation("Proposta");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.ContratoServico", b =>
@@ -1848,37 +1607,6 @@ namespace Tratoo.Domain.Migrations
                     b.Navigation("Contrato");
                 });
 
-            modelBuilder.Entity("Tratoo.Domain.Models.Conversa", b =>
-                {
-                    b.HasOne("Tratoo.Domain.Models.Contratante", "Contratante")
-                        .WithMany()
-                        .HasForeignKey("ContratanteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.Contrato", "Contrato")
-                        .WithMany()
-                        .HasForeignKey("ContratoId");
-
-                    b.HasOne("Tratoo.Domain.Models.Prestador.Prestador", "Prestador")
-                        .WithMany()
-                        .HasForeignKey("PrestadorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.Proposta", "Proposta")
-                        .WithMany()
-                        .HasForeignKey("PropostaId");
-
-                    b.Navigation("Contratante");
-
-                    b.Navigation("Contrato");
-
-                    b.Navigation("Prestador");
-
-                    b.Navigation("Proposta");
-                });
-
             modelBuilder.Entity("Tratoo.Domain.Models.ConviteProjeto", b =>
                 {
                     b.HasOne("Tratoo.Domain.Models.Contratante", "Contratante")
@@ -1904,6 +1632,39 @@ namespace Tratoo.Domain.Migrations
                     b.Navigation("Prestador");
 
                     b.Navigation("Projeto");
+                });
+
+            modelBuilder.Entity("Tratoo.Domain.Models.Entrega", b =>
+                {
+                    b.HasOne("Tratoo.Domain.Models.ContratoServico", "ContratoServico")
+                        .WithMany()
+                        .HasForeignKey("ContratoServicoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ContratoServico");
+                });
+
+            modelBuilder.Entity("Tratoo.Domain.Models.EntregaAnexo", b =>
+                {
+                    b.HasOne("Tratoo.Domain.Models.Entrega", "Entrega")
+                        .WithMany("Anexos")
+                        .HasForeignKey("EntregaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entrega");
+                });
+
+            modelBuilder.Entity("Tratoo.Domain.Models.EntregaLink", b =>
+                {
+                    b.HasOne("Tratoo.Domain.Models.Entrega", "Entrega")
+                        .WithMany("Links")
+                        .HasForeignKey("EntregaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entrega");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.Financeiro.ContaBancaria", b =>
@@ -1939,23 +1700,15 @@ namespace Tratoo.Domain.Migrations
                     b.Navigation("Pagamento");
                 });
 
-            modelBuilder.Entity("Tratoo.Domain.Models.Mensagem", b =>
+            modelBuilder.Entity("Tratoo.Domain.Models.HistoricoAssinatura", b =>
                 {
-                    b.HasOne("Tratoo.Domain.Models.Conversa", "Conversa")
-                        .WithMany("Mensagens")
-                        .HasForeignKey("ConversaId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.Usuario", "Remetente")
+                    b.HasOne("Tratoo.Domain.Models.ContratoServico", "Contrato")
                         .WithMany()
-                        .HasForeignKey("RemetenteId")
+                        .HasForeignKey("ContratoId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Conversa");
-
-                    b.Navigation("Remetente");
+                    b.Navigation("Contrato");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.MensagemProjeto", b =>
@@ -1986,17 +1739,10 @@ namespace Tratoo.Domain.Migrations
 
             modelBuilder.Entity("Tratoo.Domain.Models.Pagamento", b =>
                 {
-                    b.HasOne("Tratoo.Domain.Models.Contrato", "Contrato")
-                        .WithMany("Pagamentos")
-                        .HasForeignKey("ContratoId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Tratoo.Domain.Models.ContratoServico", "ContratoServico")
                         .WithMany()
                         .HasForeignKey("ContratoServicoId")
                         .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Contrato");
 
                     b.Navigation("ContratoServico");
                 });
@@ -2131,36 +1877,6 @@ namespace Tratoo.Domain.Migrations
                     b.Navigation("FreelancerSelecionado");
                 });
 
-            modelBuilder.Entity("Tratoo.Domain.Models.Proposta", b =>
-                {
-                    b.HasOne("Tratoo.Domain.Models.Contratante", "Contratante")
-                        .WithMany("PropostasEnviadas")
-                        .HasForeignKey("ContratanteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tratoo.Domain.Models.Prestador.Prestador", "Prestador")
-                        .WithMany("PropostasRecebidas")
-                        .HasForeignKey("PrestadorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Contratante");
-
-                    b.Navigation("Prestador");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.PropostaNegociacao", b =>
-                {
-                    b.HasOne("Tratoo.Domain.Models.Proposta", "Proposta")
-                        .WithMany("Negociacoes")
-                        .HasForeignKey("PropostaId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Proposta");
-                });
-
             modelBuilder.Entity("Tratoo.Domain.Models.PropostaProjeto", b =>
                 {
                     b.HasOne("Tratoo.Domain.Models.ConviteProjeto", "Convite")
@@ -2277,24 +1993,16 @@ namespace Tratoo.Domain.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Tratoo.Domain.Models.ChatConvite", b =>
-                {
-                    b.Navigation("Mensagens");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.Contrato", b =>
-                {
-                    b.Navigation("Pagamentos");
-                });
-
             modelBuilder.Entity("Tratoo.Domain.Models.ContratoServico", b =>
                 {
                     b.Navigation("Snapshot");
                 });
 
-            modelBuilder.Entity("Tratoo.Domain.Models.Conversa", b =>
+            modelBuilder.Entity("Tratoo.Domain.Models.Entrega", b =>
                 {
-                    b.Navigation("Mensagens");
+                    b.Navigation("Anexos");
+
+                    b.Navigation("Links");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.Pagamento", b =>
@@ -2333,21 +2041,9 @@ namespace Tratoo.Domain.Migrations
                     b.Navigation("Propostas");
                 });
 
-            modelBuilder.Entity("Tratoo.Domain.Models.Proposta", b =>
-                {
-                    b.Navigation("Negociacoes");
-                });
-
             modelBuilder.Entity("Tratoo.Domain.Models.PropostaProjeto", b =>
                 {
                     b.Navigation("Versoes");
-                });
-
-            modelBuilder.Entity("Tratoo.Domain.Models.Contratante", b =>
-                {
-                    b.Navigation("Contratos");
-
-                    b.Navigation("PropostasEnviadas");
                 });
 
             modelBuilder.Entity("Tratoo.Domain.Models.Prestador.Prestador", b =>
@@ -2358,15 +2054,11 @@ namespace Tratoo.Domain.Migrations
 
                     b.Navigation("ContaBancaria");
 
-                    b.Navigation("Contratos");
-
                     b.Navigation("Disponibilidades");
 
                     b.Navigation("Experiencias");
 
                     b.Navigation("Portfolio");
-
-                    b.Navigation("PropostasRecebidas");
                 });
 #pragma warning restore 612, 618
         }

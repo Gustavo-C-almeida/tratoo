@@ -1,4 +1,4 @@
-﻿namespace Tratoo.Domain.Features.Perfis
+namespace Tratoo.Domain.Features.Perfis
 {
     /// <summary>Projeto resumido exibido no perfil público do contratante.</summary>
     public class ProjetoResumoPerfilDto
@@ -12,6 +12,8 @@
         public DateTime? PublicadoEm { get; set; }
         public DateTime PrazoEntrega { get; set; }
         public int TotalPropostas { get; set; }
+        /// <summary>Dias entre PublicadoEm e a criação do contrato. Null se não contratado.</summary>
+        public double? DiasAteContratacao { get; set; }
     }
 
     /// <summary>Perfil público do contratante — sem dados sensíveis.</summary>
@@ -23,6 +25,8 @@
         public string? LogoUrl { get; set; }
         public string? SiteUrl { get; set; }
         public string? LinkedinUrl { get; set; }
+        /// <summary>E-mail público de contato — só presente se o contratante o preencheu.</summary>
+        public string? EmailContato { get; set; }
         public string? Segmento { get; set; }
         public string? NomeEmpresa { get; set; }
         public string? LocalizacaoCidade { get; set; }
@@ -32,16 +36,34 @@
         /// <summary>Data de cadastro na plataforma.</summary>
         public DateTime CriadoEm { get; set; }
 
+        // ── Identidade e tipo ────────────────────────────────────────────────
+        /// <summary>"PessoaFisica" ou "PessoaJuridica".</summary>
+        public string? TipoPessoa { get; set; }
+        /// <summary>True quando CPF/CNPJ foi validado (NivelVerificacao >= Identidade). Exibido como selo "Verificado".</summary>
+        public bool EmpresaVerificada { get; set; }
+        /// <summary>True quando o contratante já realizou pagamentos reais na plataforma.</summary>
+        public bool PagadorVerificado { get; set; }
+        /// <summary>Ano de abertura da empresa (PJ). Null para PF ou se não informado.</summary>
+        public int? AnoAbertura { get; set; }
+
+        // ── Contexto da empresa ──────────────────────────────────────────────
+        public string? TamanhoEquipe { get; set; }
+        public List<string> IdiomasAceitos { get; set; } = [];
+        public string? Disponibilidade { get; set; }
+        public string? PorQueTrabalharComigo { get; set; }
+
         // ── Métricas públicas ────────────────────────────────────────────────
         public int TotalProjetosPublicados { get; set; }
         public int TotalProjetosConcluidos { get; set; }
+        public int TotalProjetosAtivos { get; set; }
+        public int TotalContratosConcluidoss { get; set; }
         /// <summary>Percentual (0–100) de projetos publicados que foram concluídos.</summary>
         public int TaxaConclusao { get; set; }
         public double? MediaAvaliacoes { get; set; }
         public int TotalAvaliacoes { get; set; }
         public decimal? ValorMedioProjetos { get; set; }
-        /// <summary>True quando CPF/CNPJ foi validado (NivelVerificacao >= Identidade).</summary>
-        public bool EmpresaVerificada { get; set; }
+        /// <summary>Média de dias entre publicação do projeto e fechamento do contrato.</summary>
+        public double? TempoMedioDecisaoDias { get; set; }
 
         /// <summary>Até 5 projetos mais recentes publicados pelo contratante.</summary>
         public List<ProjetoResumoPerfilDto> UltimosProjetos { get; set; } = [];
@@ -56,11 +78,10 @@
         public string? LogoUrl { get; set; }
         public string? SiteUrl { get; set; }
         public string? LinkedinUrl { get; set; }
+        public string? EmailContato { get; set; }
         public string? Telefone { get; set; }
         public string? Segmento { get; set; }
         public string? NomeEmpresa { get; set; }
-        public string? InscricaoEstadual { get; set; }
-        public string? InscricaoMunicipal { get; set; }
         public DateOnly? DataAbertura { get; set; }
         public string? LocalizacaoCidade { get; set; }
         public string? LocalizacaoEstado { get; set; }
@@ -69,6 +90,12 @@
         public string? TipoPessoa { get; set; }
         /// <summary>Quando true, avaliações não são exibidas publicamente (RN-AV-001).</summary>
         public bool AvaliacoesPrivado { get; set; }
+
+        // ── Novos campos de contexto ─────────────────────────────────────────
+        public string? Disponibilidade { get; set; }
+        public List<string> IdiomasAceitos { get; set; } = [];
+        public string? TamanhoEquipe { get; set; }
+        public string? PorQueTrabalharComigo { get; set; }
 
         // ── Completude ────────────────────────────────────────────────────────
         public int PorcentagemCompletude { get; set; }
@@ -82,7 +109,15 @@
         public string? Descricao { get; set; }
         public string? SiteUrl { get; set; }
         public string? LinkedinUrl { get; set; }
+        public string? EmailContato { get; set; }
         public string? Telefone { get; set; }
         public bool ExibirIdade { get; set; }
+        // ── Editáveis após onboarding ────────────────────────────────────────
+        public string? Segmento { get; set; }
+        public string? NomeEmpresa { get; set; }
+        public string? Disponibilidade { get; set; }
+        public List<string>? IdiomasAceitos { get; set; }
+        public string? TamanhoEquipe { get; set; }
+        public string? PorQueTrabalharComigo { get; set; }
     }
 }

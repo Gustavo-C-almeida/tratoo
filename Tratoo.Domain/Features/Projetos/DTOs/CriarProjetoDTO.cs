@@ -15,7 +15,6 @@ namespace Tratoo.Domain.Features.Projetos
         public NivelFreelancerProjet? NivelFreelancer { get; set; }
         public VisibilidadeProjeto Visibilidade { get; set; } = VisibilidadeProjeto.Publico;
         public IdiomaProjet Idioma { get; set; } = IdiomaProjet.Portugues;
-        public int NumFreelancersDesejados { get; set; } = 1;
         public bool PublicarImediatamente { get; set; } = false;
     }
 }

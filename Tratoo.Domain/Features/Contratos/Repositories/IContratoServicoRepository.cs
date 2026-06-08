@@ -11,6 +11,7 @@ namespace Tratoo.Domain.Features.Contratos
         Task<List<ContratoServico>> GetExpiradosAsync(DateTime agora);
         Task AddAsync(ContratoServico contrato);
         Task AddSnapshotAsync(ContratoSnapshot snapshot);
+        Task AddHistoricoAsync(HistoricoAssinatura historico);
         Task SaveChangesAsync();
     }
 }

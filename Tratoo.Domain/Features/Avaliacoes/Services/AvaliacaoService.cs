@@ -256,44 +256,10 @@ namespace Tratoo.Domain.Features.Avaliacoes
                         AvaliadorFotoUrl = ObterFotoUrl(a.Avaliador),
                         ProjetoTitulo = a.ContratoServico?.Projeto?.Titulo ?? "",
                         AvaliadorEhContratante = a.AvaliadorId == (a.ContratoServico?.ContratanteId ?? -1),
-                        PublicadaEm = a.PublicadaEm ?? a.CriadoEm,
-                        RespostaPublica = a.RespostaPublica,
-                        RespostaPublicaCriadaEm = a.RespostaPublicaCriadaEm
+                        PublicadaEm = a.PublicadaEm ?? a.CriadoEm
                     })
                     .ToList()
             };
-        }
-
-        public async Task<List<MinhaAvaliacaoDto>> ListarMinhasAsync(int userId)
-        {
-            var todas = await _repo.GetMinhasAsync(userId);
-
-            return todas.Select(a =>
-            {
-                bool souAvaliador = a.AvaliadorId == userId;
-
-                // Blind review: quando o usuário é o avaliado e a avaliação ainda está
-                // Pendente, oculta nota e comentário para evitar retaliação (CT-AVAL-012)
-                bool ocultarDados = !souAvaliador && a.Status == StatusAvaliacao.Pendente;
-
-                return new MinhaAvaliacaoDto
-                {
-                    Id = a.Id,
-                    ContratoServicoId = a.ContratoServicoId,
-                    ProjetoTitulo = a.ContratoServico?.Projeto?.Titulo ?? "",
-                    SouAvaliador = souAvaliador,
-                    OutraParteNome = souAvaliador
-                        ? (a.Avaliado?.Nome ?? "Usuário")
-                        : (a.Avaliador?.Nome ?? "Usuário"),
-                    Nota = ocultarDados ? null : a.Nota,
-                    Comentario = a.Status == StatusAvaliacao.Publicada ? a.Comentario : null,
-                    Publica = a.Publica,
-                    Status = a.Status,
-                    StatusDescricao = ObterStatusDescricao(a, souAvaliador),
-                    PublicadaEm = a.PublicadaEm,
-                    CriadoEm = a.CriadoEm
-                };
-            }).ToList();
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -453,58 +419,6 @@ namespace Tratoo.Domain.Features.Avaliacoes
             if (usuario is Domain.Models.Prestador.Prestador p) return p.FotoUrl ?? "";
             if (usuario is Domain.Models.Contratante c) return c.LogoUrl ?? "";
             return "";
-        }
-
-        /// <summary>
-        /// Texto amigável para o status da avaliação no contexto do usuário logado (melhoria #1).
-        /// </summary>
-        private static string ObterStatusDescricao(Avaliacao a, bool souAvaliador)
-        {
-            return a.Status switch
-            {
-                StatusAvaliacao.Publicada => "Publicada",
-                StatusAvaliacao.Oculta => "Encerrada (não avaliada)",
-                StatusAvaliacao.Pendente when souAvaliador && a.Nota != null
-                    => "Aguardando outra parte avaliar",
-                StatusAvaliacao.Pendente when souAvaliador
-                    => "Pendente — avalie agora",
-                StatusAvaliacao.Pendente
-                    => "Será publicada em até 7 dias",
-                _ => a.Status.ToString()
-            };
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        // RESPOSTA PÚBLICA À AVALIAÇÃO (melhoria #2)
-        // ─────────────────────────────────────────────────────────────────────────
-        public async Task ResponderAvaliacaoAsync(Guid avaliacaoId, int userId, ResponderAvaliacaoDto dto)
-        {
-            var avaliacao = await _repo.GetByIdAsync(avaliacaoId)
-                ?? throw new NegocioException("Avaliação não encontrada.");
-
-            if (avaliacao.AvaliadoId != userId)
-                throw new NegocioException("Apenas o avaliado pode responder a esta avaliação.");
-
-            if (avaliacao.Status != StatusAvaliacao.Publicada)
-                throw new NegocioException("Só é possível responder a avaliações publicadas.");
-
-            if (avaliacao.RespostaPublica != null)
-                throw new NegocioException("Você já respondeu a esta avaliação.");
-
-            if (string.IsNullOrWhiteSpace(dto.Resposta))
-                throw new NegocioException("A resposta não pode estar vazia.");
-
-            if (dto.Resposta.Length > 500)
-                throw new NegocioException("A resposta não pode ultrapassar 500 caracteres.");
-
-            avaliacao.RespostaPublica = dto.Resposta.Trim();
-            avaliacao.RespostaPublicaCriadaEm = DateTime.UtcNow;
-
-            await _repo.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Resposta pública registrada na avaliação {Id} pelo avaliado {UserId}.",
-                avaliacaoId, userId);
         }
 
         // ─────────────────────────────────────────────────────────────────────────

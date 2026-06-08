@@ -15,14 +15,14 @@ namespace Tratoo.Domain.Features.Auth
             _config = config;
         }
 
-        public string Gerar(int usuarioId, string email, string nome, string tipo, bool perfilMinimoCompleto)
+        public string Gerar(int usuarioId, string email, string nome, string tipo, bool perfilMinimoCompleto, bool isAdmin = false)
         {
             var chave = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(_config["Jwt:SecretKey"]!));
 
             var credenciais = new SigningCredentials(chave, SecurityAlgorithms.HmacSha256);
 
-            var claims = new[]
+            var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, usuarioId.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, email),
@@ -33,6 +33,11 @@ namespace Tratoo.Domain.Features.Auth
                 new Claim("perfilCompleto", perfilMinimoCompleto ? "true" : "false"),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
+
+            // Role adicional de administrador (definida apenas via seed/banco).
+            // Um admin mantém sua role de origem (Prestador/Contratante) e ganha "Admin".
+            if (isAdmin)
+                claims.Add(new Claim(ClaimTypes.Role, "Admin"));
 
             var expiracao = int.Parse(_config["Jwt:ExpirationHours"] ?? "8");
 

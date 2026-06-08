@@ -8,7 +8,6 @@ namespace Tratoo.Domain.Features.IA
         public string Nome { get; set; } = string.Empty;
         public string? TituloProfissional { get; set; }
         public string? FotoUrl { get; set; }
-        public decimal? ValorHora { get; set; }
         public double MediaAvaliacoes { get; set; }
         public int TotalAvaliacoes { get; set; }
         public int PorcentagemCompleto { get; set; }
@@ -20,7 +19,7 @@ namespace Tratoo.Domain.Features.IA
         public string? Bio { get; set; }
         /// <summary>Cosine similarity 0..1 com a query do usuário.</summary>
         public float Similaridade { get; set; }
-        /// <summary>Score ponderado: 35% semântica + 15% habilidades + 15% avaliação + 10% completude + 10% contratos + 10% verificação + 5% disponibilidade.</summary>
+        /// <summary>Score ponderado: 42% semântica + 22% habilidades + 12% comprovação (competências com experiência/portfólio/certificação) + 8% avaliação + 9% completude + 4% contratos + 3% verificação.</summary>
         public float ScoreComposto { get; set; }
         /// <summary>Competências do prestador que coincidiram com a busca — base para "Possui X, Y e Z".</summary>
         public List<string> CompetenciasMatchadas { get; set; } = [];
@@ -48,7 +47,6 @@ namespace Tratoo.Domain.Features.IA
         /// <summary>Query semântica livre. Ex: "dev backend financeiro pagamentos".</summary>
         public string? Q { get; set; }
         public string? Categoria { get; set; }
-        public decimal? ValorHoraMax { get; set; }
         /// <summary>Filtra apenas prestadores com NivelVerificacao >= 2.</summary>
         public bool? ApenasVerificados { get; set; }
         public double? AvaliacaoMin { get; set; }

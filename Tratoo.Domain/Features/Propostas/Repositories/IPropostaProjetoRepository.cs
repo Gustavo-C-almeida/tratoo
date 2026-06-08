@@ -14,7 +14,6 @@ namespace Tratoo.Domain.Features.Propostas
         Task AddAsync(PropostaProjeto proposta);
         Task AddVersaoAsync(PropostaVersao versao);
         Task<PropostaVersao?> GetVersaoAsync(Guid propostaId, int numeroVersao);
-        Task<List<PropostaVersao>> GetTodasVersoesAsync(Guid propostaId);
         Task SaveChangesAsync();
     }
 }

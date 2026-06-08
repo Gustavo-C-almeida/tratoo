@@ -8,13 +8,11 @@
         public string? Descricao          { get; set; }
         public string? LinkedinUrl        { get; set; }
         public string? PortfolioUrl       { get; set; }
-        public string? GitHubUrl          { get; set; }
         public string? EmailContato       { get; set; }
 
         /// <summary>JSON com até 3 links extras: [{\"titulo\":\"X\",\"url\":\"Y\"}]</summary>
         public string? OutrosLinks        { get; set; }
 
-        public decimal? ValorHora         { get; set; }
         public string?  Telefone          { get; set; }
     }
 }

@@ -77,12 +77,6 @@ namespace Tratoo.Domain.Features.Propostas
             => await _ctx.PropostaVersoes
                 .FirstOrDefaultAsync(v => v.PropostaId == propostaId && v.Versao == numeroVersao);
 
-        public async Task<List<PropostaVersao>> GetTodasVersoesAsync(Guid propostaId)
-            => await _ctx.PropostaVersoes
-                .Where(v => v.PropostaId == propostaId)
-                .OrderBy(v => v.Versao)
-                .ToListAsync();
-
         public async Task SaveChangesAsync()
             => await _ctx.SaveChangesAsync();
     }

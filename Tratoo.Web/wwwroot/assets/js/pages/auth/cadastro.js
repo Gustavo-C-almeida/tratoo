@@ -29,7 +29,7 @@ function mostrarErro(mensagem, tipo = 'cadastro') {
     }
 
     if (erroEl) {
-        erroEl.textContent = mensagem;
+        erroEl.innerHTML = mensagem;
         erroEl.hidden = false;
 
         // Scroll suave até o erro
@@ -65,54 +65,54 @@ function validarCamposCadastro() {
 
     // Validação de nome
     if (!nome) {
-        erros.push('❌ Nome é obrigatório.');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> Nome é obrigatório.');
     } else if (nome.length < 3) {
-        erros.push('❌ Nome inválido (mínimo 3 caracteres).');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> Nome inválido (mínimo 3 caracteres).');
     }
 
     // Validação de email
     const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
     if (!email) {
-        erros.push('❌ E-mail é obrigatório.');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> E-mail é obrigatório.');
     } else if (!emailRegex.test(email)) {
-        erros.push('❌ E-mail inválido. Exemplo: nome@email.com');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> E-mail inválido. Exemplo: nome@email.com');
     }
 
     // Validação de senha
     if (!senha) {
-        erros.push('❌ Senha é obrigatória.');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> Senha é obrigatória.');
     } else {
         const temNumero = /\d/.test(senha);
         const temMaiuscula = /[A-Z]/.test(senha);
         const temEspecial = /[^a-zA-Z0-9]/.test(senha);
 
         if (senha.length < 8) {
-            erros.push('❌ Senha deve ter no mínimo 8 caracteres.');
+            erros.push('<i class="fa-solid fa-circle-xmark"></i> Senha deve ter no mínimo 8 caracteres.');
         }
         if (!temNumero) {
-            erros.push('❌ Senha deve conter pelo menos 1 número.');
+            erros.push('<i class="fa-solid fa-circle-xmark"></i> Senha deve conter pelo menos 1 número.');
         }
         if (!temMaiuscula) {
-            erros.push('❌ Senha deve conter pelo menos 1 letra maiúscula.');
+            erros.push('<i class="fa-solid fa-circle-xmark"></i> Senha deve conter pelo menos 1 letra maiúscula.');
         }
         if (!temEspecial) {
-            erros.push('❌ Senha deve conter pelo menos 1 caractere especial (@, #, $, etc).');
+            erros.push('<i class="fa-solid fa-circle-xmark"></i> Senha deve conter pelo menos 1 caractere especial (@, #, $, etc).');
         }
     }
 
     // Confirmação de senha
     if (senha !== confirmarSenha) {
-        erros.push('❌ As senhas não conferem.');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> As senhas não conferem.');
     }
 
     // Tipo de usuário
     if (!tipo) {
-        erros.push('❌ Tipo de usuário não identificado.');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> Tipo de usuário não identificado.');
     }
 
     // Termos de uso
     if (!aceitouTermos) {
-        erros.push('❌ Você precisa aceitar os Termos de Uso e a Política de Privacidade.');
+        erros.push('<i class="fa-solid fa-circle-xmark"></i> Você precisa aceitar os Termos de Uso e a Política de Privacidade.');
     }
 
     return erros;
@@ -136,7 +136,7 @@ function mostrarFormConfirmacao(email) {
 
     <form id="confirmarForm" class="cadastro__form">
         <div class="cadastro__group">
-            <label for="codigo">🔐 Código de verificação</label>
+            <label for="codigo"><i class="fa-solid fa-lock"></i> Código de verificação</label>
             <input type="text" id="codigo" name="codigo" class="cadastro__codigo-input" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000">
         </div>
 
@@ -167,7 +167,7 @@ function iniciarContadorReenvio() {
 
     let segundos = 60;
     btn.disabled = true;
-    btn.textContent = `Reenviar código (${segundos}s)`;
+    btn.innerHTML = `<i class="fa-solid fa-clock"></i> Reenviar em ${segundos}s`;
 
     reenvioTimer = setInterval(() => {
         segundos--;
@@ -177,7 +177,7 @@ function iniciarContadorReenvio() {
             btn.disabled = false;
             btn.textContent = 'Reenviar código';
         } else {
-            btn.textContent = `Reenviar código (${segundos}s)`;
+            btn.innerHTML = `<i class="fa-solid fa-clock"></i> Reenviar em ${segundos}s`;
         }
     }, 1000);
 }
@@ -188,10 +188,10 @@ function mostrarSucessoFinal(mensagem) {
 
     container.innerHTML = `
         <div class="cadastro__sucesso">
-            <div class="cadastro__sucesso-icone">✓</div>
+            <div class="cadastro__sucesso-icone"><i class="fa-solid fa-check"></i></div>
             <p id="sucesso-texto" class="cadastro__sucesso-texto"></p>
             <p class="cadastro__sucesso-sub">Você já pode fazer login.</p>
-            <a href="/pages/auth/login.html" class="cadastro__button" style="display: inline-block; margin-top: 1rem; text-decoration: none;">Ir para login →</a>
+            <a href="/pages/auth/login.html" class="cadastro__button" style="display: inline-block; margin-top: 1rem; text-decoration: none;">Ir para login <i class="fa-solid fa-arrow-right"></i></a>
         </div>
     `;
 
@@ -211,7 +211,7 @@ document.addEventListener('click', async function (e) {
     try {
         await api.post('/usuarios/cadastro/reenviar-codigo', { email: emailPendente });
         if (feedbackEl) {
-            feedbackEl.textContent = '✓ Novo código enviado! Verifique sua caixa de entrada.';
+            feedbackEl.textContent = 'Novo código enviado! Verifique sua caixa de entrada.';
             feedbackEl.className = 'cadastro__reenvio-feedback cadastro__reenvio-feedback--sucesso';
             feedbackEl.hidden = false;
 
@@ -225,7 +225,7 @@ document.addEventListener('click', async function (e) {
             ?? err?.data?.message
             ?? 'Erro ao reenviar código. Tente novamente.';
         if (feedbackEl) {
-            feedbackEl.textContent = `❌ ${msg}`;
+            feedbackEl.textContent = `${msg}`;
             feedbackEl.className = 'cadastro__reenvio-feedback cadastro__reenvio-feedback--erro';
             feedbackEl.hidden = false;
         }
@@ -277,7 +277,7 @@ document.addEventListener('submit', async function (e) {
             const msg = err?.data?.mensagem
                 ?? err?.data?.message
                 ?? 'Erro ao realizar cadastro. Tente novamente.';
-            mostrarErro(`❌ ${msg}`, 'cadastro');
+            mostrarErro(`<i class="fa-solid fa-circle-xmark"></i> ${msg}`, 'cadastro');
             btn.disabled = false;
             btn.textContent = 'Cadastrar';
         }
@@ -288,12 +288,12 @@ document.addEventListener('submit', async function (e) {
         const codigo = document.getElementById('codigo').value.trim();
 
         if (!codigo) {
-            mostrarErro('❌ Digite o código de verificação.', 'confirmar');
+            mostrarErro('<i class="fa-solid fa-circle-xmark"></i> Digite o código de verificação.', 'confirmar');
             return;
         }
 
         if (!/^\d{6}$/.test(codigo)) {
-            mostrarErro('❌ Código inválido. Digite os 6 dígitos recebidos por e-mail.', 'confirmar');
+            mostrarErro('<i class="fa-solid fa-circle-xmark"></i> Código inválido. Digite os 6 dígitos recebidos por e-mail.', 'confirmar');
             return;
         }
 
@@ -308,12 +308,12 @@ document.addEventListener('submit', async function (e) {
                 email: emailPendente,
                 codigo
             });
-            mostrarSucessoFinal(data.mensagem ?? '✓ Cadastro confirmado com sucesso!');
+            mostrarSucessoFinal(data.mensagem ?? '<i class="fa-solid fa-check"></i> Cadastro confirmado com sucesso!');
         } catch (err) {
             const msg = err?.data?.mensagem
                 ?? err?.data?.message
                 ?? 'Código inválido ou expirado. Tente novamente.';
-            mostrarErro(`❌ ${msg}`, 'confirmar');
+            mostrarErro(`<i class="fa-solid fa-circle-xmark"></i> ${msg}`, 'confirmar');
             btn.disabled = false;
             btn.textContent = 'Confirmar';
         }

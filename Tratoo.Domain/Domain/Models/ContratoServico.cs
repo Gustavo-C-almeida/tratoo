@@ -9,9 +9,11 @@ namespace Tratoo.Domain.Models
         Gerado,
         /// <summary>Ao menos uma parte assinou. Aguardando a outra.</summary>
         AguardandoAssinatura,
-        /// <summary>Ambas as partes assinaram. Contrato em vigor.</summary>
+        /// <summary>Ambas as partes assinaram. Contrato em vigor (em execução).</summary>
         Ativo,
-        /// <summary>Execução concluída com sucesso.</summary>
+        /// <summary>Prestador registrou a entrega formal. Aguardando aprovação do contratante.</summary>
+        AguardandoAprovacaoEntrega,
+        /// <summary>Execução concluída com sucesso (entrega aprovada).</summary>
         Encerrado,
         /// <summary>Cancelado (expiração ou cancelamento manual).</summary>
         Cancelado
@@ -19,7 +21,6 @@ namespace Tratoo.Domain.Models
 
     /// <summary>
     /// Contrato gerado automaticamente ao aceitar uma PropostaProjeto.
-    /// Entidade separada de Contrato (legado) para não quebrar o modelo existente.
     /// </summary>
     public class ContratoServico
     {
@@ -52,9 +53,11 @@ namespace Tratoo.Domain.Models
         // ── Assinaturas ──────────────────────────────────────────────────────────
         public DateTime? AssinadoContratanteEm { get; set; }
         public string? IpContratante { get; set; }
+        public string? UserAgentContratante { get; set; }
 
         public DateTime? AssinadoPrestadorEm { get; set; }
         public string? IpPrestador { get; set; }
+        public string? UserAgentPrestador { get; set; }
 
         // ── Hash de integridade ───────────────────────────────────────────────────
         /// <summary>SHA-256 do ConteudoJson no momento da primeira assinatura. Prova que o conteúdo não foi alterado.</summary>

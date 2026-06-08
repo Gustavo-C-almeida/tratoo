@@ -5,7 +5,6 @@ const root = () => document.getElementById('busca-root');
 const estado = {
     q: '',
     categoria: '',
-    valorHoraMax: '',
     apenasVerificados: false,
     avaliacaoMin: '',
     page: 1,
@@ -49,7 +48,7 @@ function renderPagina() {
                     value="${esc(estado.q)}" autocomplete="off">
                 <button id="btn-buscar" class="bp-search__btn">Buscar</button>
             </div>
-            <p class="bp-hero__examples">Ex: &ldquo;desenvolvedor para integrar pagamentos PIX&rdquo; &middot; &ldquo;designer para criar identidade visual&rdquo;</p>
+            <p class="bp-hero__examples">Ex: &ldquo;designer para criar identidade visual&rdquo; &middot; &ldquo;social media para gerenciar meu Instagram&rdquo; &middot; &ldquo;editor de vídeo para o YouTube&rdquo;</p>
         </div>
     </section>
 
@@ -61,18 +60,18 @@ function renderPagina() {
                 <label>Categoria</label>
                 <select id="fil-cat">
                     <option value="">Todas</option>
-                    <option value="TI">TI & Tecnologia</option>
-                    <option value="Design">Design</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Redacao">Reda\u00E7\u00E3o</option>
+                    <option value="TI">Desenvolvimento de Software</option>
+                    <option value="Design">Design & UX/UI</option>
+                    <option value="Marketing">Marketing Digital</option>
+                    <option value="Redacao">Reda\u00E7\u00E3o & Conte\u00FAdo</option>
+                    <option value="Video">Edi\u00E7\u00E3o de V\u00EDdeo</option>
+                    <option value="Dados">Dados & BI</option>
+                    <option value="Traducao">Tradu\u00E7\u00E3o</option>
+                    <option value="Suporte">Suporte & Assist\u00EAncia Virtual</option>
+                    <option value="Consultoria">Consultoria</option>
                     <option value="Juridico">Jur\u00EDdico</option>
                     <option value="Outros">Outros</option>
                 </select>
-            </div>
-
-            <div class="bp-fg">
-                <label>Valor m\u00E1ximo/hora (R$)</label>
-                <input id="fil-valor" type="number" min="0" step="10" placeholder="ex: 150">
             </div>
 
             <div class="bp-fg">
@@ -106,7 +105,6 @@ function renderPagina() {
 
     // Restaurar filtros
     document.getElementById('fil-cat').value = estado.categoria;
-    document.getElementById('fil-valor').value = estado.valorHoraMax;
     document.getElementById('fil-aval').value = estado.avaliacaoMin;
     document.getElementById('fil-verif').checked = estado.apenasVerificados;
 
@@ -115,7 +113,7 @@ function renderPagina() {
     document.getElementById('inp-q').addEventListener('keydown', e => {
         if (e.key === 'Enter') executarBusca();
     });
-    ['fil-cat', 'fil-valor', 'fil-aval'].forEach(id => {
+    ['fil-cat', 'fil-aval'].forEach(id => {
         document.getElementById(id).addEventListener('change', aplicarFiltros);
     });
     document.getElementById('fil-verif').addEventListener('change', aplicarFiltros);
@@ -132,7 +130,6 @@ function executarBusca() {
 
 function aplicarFiltros() {
     estado.categoria = document.getElementById('fil-cat').value;
-    estado.valorHoraMax = document.getElementById('fil-valor').value;
     estado.avaliacaoMin = document.getElementById('fil-aval').value;
     estado.apenasVerificados = document.getElementById('fil-verif').checked;
     estado.page = 1;
@@ -142,7 +139,6 @@ function aplicarFiltros() {
 function limparFiltros() {
     estado.q = '';
     estado.categoria = '';
-    estado.valorHoraMax = '';
     estado.avaliacaoMin = '';
     estado.apenasVerificados = false;
     estado.page = 1;
@@ -159,7 +155,6 @@ async function buscar() {
     const p = new URLSearchParams();
     if (estado.q) p.set('q', estado.q);
     if (estado.categoria) p.set('categoria', estado.categoria);
-    if (estado.valorHoraMax) p.set('valorHoraMax', estado.valorHoraMax);
     if (estado.apenasVerificados) p.set('apenasVerificados', 'true');
     if (estado.avaliacaoMin) p.set('avaliacaoMin', estado.avaliacaoMin);
     p.set('page', estado.page);
@@ -220,10 +215,6 @@ function renderCard(p, query) {
            </div>`
         : '<span class="bp-card__novo">Novo na plataforma</span>';
 
-    const valor = p.valorHora
-        ? `<span class="bp-card__valor">A partir de ${moeda(p.valorHora)}/h</span>`
-        : '';
-
     // Highlight skills matching query
     const queryTerms = (query || '').toLowerCase().split(/\s+/).filter(Boolean);
     const skills = (p.competencias || []).slice(0, 5).map(s => {
@@ -247,7 +238,6 @@ function renderCard(p, query) {
         ${bio}
         ${skills ? `<div class="bp-card__skills">${skills}</div>` : ''}
         <div class="bp-card__footer">
-            ${valor}
             ${p.contratosEncerrados > 0 ? `<span class="bp-card__projetos">${p.contratosEncerrados} projeto${p.contratosEncerrados !== 1 ? 's' : ''}</span>` : ''}
         </div>
     </article>`;
@@ -266,9 +256,9 @@ function renderPag(count) {
     if (!hasMore && !hasPrev) { pag.innerHTML = ''; return; }
 
     pag.innerHTML = `
-        <button class="bp-pag__btn" ${!hasPrev ? 'disabled' : ''} data-dir="-1">&larr; Anterior</button>
+        <button class="bp-pag__btn" ${!hasPrev ? 'disabled' : ''} data-dir="-1"><i class="fa-solid fa-arrow-left"></i> Anterior</button>
         <span class="bp-pag__num">P\u00E1gina ${estado.page}</span>
-        <button class="bp-pag__btn" ${!hasMore ? 'disabled' : ''} data-dir="1">Pr\u00F3xima &rarr;</button>
+        <button class="bp-pag__btn" ${!hasMore ? 'disabled' : ''} data-dir="1">Pr\u00F3xima <i class="fa-solid fa-arrow-right"></i></button>
     `;
 
     pag.querySelectorAll('button[data-dir]').forEach(btn => {

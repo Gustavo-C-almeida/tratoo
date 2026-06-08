@@ -16,13 +16,11 @@ namespace Tratoo.Domain.Features.Perfis
         public string? TituloProfissional { get; set; }
         public string? Descricao { get; set; }
         public string? FotoUrl { get; set; }
-        public string? GitHubUrl { get; set; }
         public string? EmailContato { get; set; }
 
         /// <summary>JSON com até 3 links extras.</summary>
         public string? OutrosLinks { get; set; }
 
-        public decimal? ValorHora { get; set; }
         public int PorcentagemCompleto { get; set; }
 
         // Campos do perfil mínimo (onboarding)

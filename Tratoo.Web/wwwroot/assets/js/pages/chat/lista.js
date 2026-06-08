@@ -24,8 +24,11 @@ async function carregarChats() {
     root().innerHTML = '<div class="chat-lista-loading">Carregando conversas...</div>';
 
     let chats = [];
+    let usuarioId = null;
     try {
         chats = await api.get('/api/me/chats');
+        const me = await api.get('/api/me');
+        usuarioId = me.id;
     } catch {
         root().innerHTML = '<p class="chat-lista-vazia">Erro ao carregar conversas. Tente novamente.</p>';
         return;
@@ -38,7 +41,7 @@ async function carregarChats() {
                 <h1>Conversas</h1>
             </div>
             <div class="chat-lista-vazia">
-                <span>💬</span>
+                <span><i class="fa-solid fa-comments"></i></span>
                 <p>Nenhuma conversa ainda</p>
                 <small>Suas conversas com prestadores ou contratantes aparecerão aqui.</small>
             </div>
@@ -46,25 +49,27 @@ async function carregarChats() {
         return;
     }
 
-    const itensHtml = chats.map(c => `
+    const itensHtml = chats.map(c => {
+        const outro = c.outroParticipanteNome || c.prestadorNome || 'Participante';
+        const mostrarBadge = c.ultimaMensagemPorId !== usuarioId;
+        return `
     <a class="chat-card"
        href="/pages/chat/detalhe.html?projetoId=${c.projetoId}&prestadorId=${c.prestadorId}"
-       aria-label="Chat sobre ${esc(c.projetoTitulo)} com ${esc(c.prestadorNome)}">
+       aria-label="Chat sobre ${esc(c.projetoTitulo)} com ${esc(outro)}">
         <div class="chat-card-avatar" aria-hidden="true">
-            ${esc(c.prestadorNome.charAt(0).toUpperCase())}
+            ${esc((outro.charAt(0) || '?').toUpperCase())}
         </div>
         <div class="chat-card-body">
             <div class="chat-card-header">
-                <span class="chat-card-nome">${esc(c.prestadorNome)}</span>
+                <span class="chat-card-nome">${esc(outro)}</span>
                 <span class="chat-card-tempo">${tempoAtras(c.ultimaMensagemEm)}</span>
             </div>
-            <div class="chat-card-projeto">${esc(c.projetoTitulo)}</div>
+            <div class="chat-card-projeto"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> ${esc(c.projetoTitulo)}</div>
             <div class="chat-card-preview">${esc(c.ultimaMensagem)}</div>
         </div>
-        <div class="chat-card-badge" aria-label="${c.totalMensagens} mensagens">
-            ${c.totalMensagens}
-        </div>
-    </a>`).join('');
+        ${mostrarBadge ? `<div class="chat-card-badge" aria-label="1 nova mensagem">1</div>` : ''}
+    </a>`;
+    }).join('');
 
     root().innerHTML = `
     <div class="chat-lista-wrap">

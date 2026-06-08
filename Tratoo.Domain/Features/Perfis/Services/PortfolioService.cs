@@ -19,14 +19,6 @@ namespace Tratoo.Domain.Features.Perfis
             _indexador = indexador;
         }
 
-        public async Task<List<PortfolioDTO>> VisualizarAsync(int prestadorId)
-        {
-            var prestador = await _repo.GetCompletoAsync(prestadorId)
-                ?? throw new NegocioException("Prestador não encontrado");
-
-            return MapearLista(prestador.Portfolio);
-        }
-
         public async Task<PortfolioDTO> AdicionarAsync(PortfolioDTO dto)
         {
             if (string.IsNullOrWhiteSpace(dto.LinkExterno) && string.IsNullOrWhiteSpace(dto.ArquivoUrl))

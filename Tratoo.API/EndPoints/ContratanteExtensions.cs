@@ -51,8 +51,15 @@ namespace Tratoo.API.EndPoints
                     Descricao = request.Descricao,
                     SiteUrl = request.SiteUrl,
                     LinkedinUrl = request.LinkedinUrl,
+                    EmailContato = request.EmailContato,
                     Telefone = request.Telefone,
-                    ExibirIdade = request.ExibirIdade
+                    ExibirIdade = request.ExibirIdade,
+                    Segmento = request.Segmento,
+                    NomeEmpresa = request.NomeEmpresa,
+                    Disponibilidade = request.Disponibilidade,
+                    IdiomasAceitos = request.IdiomasAceitos,
+                    TamanhoEquipe = request.TamanhoEquipe,
+                    PorQueTrabalharComigo = request.PorQueTrabalharComigo
                 });
 
                 cache.Remove($"perfil_contratante_{userId.Value}");

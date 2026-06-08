@@ -1,6 +1,8 @@
 ﻿using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 
 namespace Tratoo.API.EndPoints
 {
@@ -71,7 +73,10 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var resultado = await service.LiberarPagamentoAsync(id, userId.Value, dto.ObservacaoContratante);
+                var ip = http.Connection.RemoteIpAddress?.ToString();
+                var userAgent = http.Request.Headers.UserAgent.ToString();
+
+                var resultado = await service.LiberarPagamentoAsync(id, userId.Value, dto.ObservacaoContratante, ip, userAgent);
                 return Results.Ok(resultado);
             }).RequireAuthorization("Contratante");
 
@@ -93,24 +98,8 @@ namespace Tratoo.API.EndPoints
                 return Results.Ok(disputa);
             }).RequireAuthorization();
 
-            // ──────────────────────────────────────────────────────────────────────
-            // RESOLVER DISPUTA (admin)
-            // POST /api/pagamentos/{id}/disputas/{disputaId}/resolver
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapPost("/api/pagamentos/{id:guid}/disputas/{disputaId:guid}/resolver", async (
-                Guid id,
-                Guid disputaId,
-                ResolverDisputaDto dto,
-                HttpContext http,
-                IPagamentoService service) =>
-            {
-                var userId = ExtrairUserId(http);
-                if (userId == null) return Results.Unauthorized();
-
-                // TODO: verificar se o usuário tem role de Admin
-                await service.ResolverDisputaAsync(id, disputaId, userId.Value, dto);
-                return Results.Ok(new { mensagem = "Disputa resolvida com sucesso." });
-            }).RequireAuthorization();
+            // Resolução de disputa: ver área administrativa
+            // POST /api/admin/disputas/{disputaId}/resolver (AdminDisputaExtensions, role Admin)
 
             // ──────────────────────────────────────────────────────────────────────
             // SOLICITAR ESTORNO
@@ -128,24 +117,6 @@ namespace Tratoo.API.EndPoints
                 await service.SolicitarEstornoAsync(id, userId.Value);
                 return Results.Ok(new { mensagem = "Solicitação de estorno enviada ao gateway." });
             }).RequireAuthorization("Contratante");
-
-            // ──────────────────────────────────────────────────────────────────────
-            // SIMULAR PAGAMENTO PIX (sandbox/localhost apenas)
-            // POST /api/pagamentos/{id}/simular
-            // Confirma o pagamento diretamente via API Asaas Sandbox — substitui webhook
-            // Use quando não há ngrok configurado para receber webhooks
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapPost("/api/pagamentos/{id:guid}/simular", async (
-                Guid id,
-                HttpContext http,
-                IPagamentoService service) =>
-            {
-                var userId = ExtrairUserId(http);
-                if (userId == null) return Results.Unauthorized();
-
-                var resultado = await service.SimularConfirmacaoAsync(id, userId.Value);
-                return Results.Ok(resultado);
-            }).RequireAuthorization();
 
             // ──────────────────────────────────────────────────────────────────────
             // SINCRONIZAR STATUS
@@ -172,8 +143,30 @@ namespace Tratoo.API.EndPoints
             app.MapPost("/api/webhooks/asaas", async (
                 HttpContext http,
                 IPagamentoService service,
+                IOptions<AsaasConfig> asaasOptions,
                 ILogger<WebApplication> logger) =>
             {
+                // ── Valida o token de autenticação do webhook ─────────────────
+                // O Asaas envia o token configurado no painel via header
+                // "asaas-access-token". Sem isso, qualquer um poderia forjar eventos
+                // (ex: marcar um pagamento como recebido). Rejeita com 401 se não conferir.
+                var tokenEsperado = asaasOptions.Value.WebhookToken;
+                if (!string.IsNullOrWhiteSpace(tokenEsperado))
+                {
+                    var tokenRecebido = http.Request.Headers["asaas-access-token"].ToString();
+                    var valido =
+                        !string.IsNullOrEmpty(tokenRecebido) &&
+                        CryptographicOperations.FixedTimeEquals(
+                            Encoding.UTF8.GetBytes(tokenRecebido),
+                            Encoding.UTF8.GetBytes(tokenEsperado));
+
+                    if (!valido)
+                    {
+                        logger.LogWarning("Webhook Asaas rejeitado: token de autenticação ausente ou inválido.");
+                        return Results.Unauthorized();
+                    }
+                }
+
                 // ── Lê o payload ──────────────────────────────────────────────
                 string payloadJson;
                 try
@@ -224,6 +217,33 @@ namespace Tratoo.API.EndPoints
                 return Results.Ok(new { received = true, event_type = tipoEvento });
             });
             // webhook é público (sem RequireAuthorization) — segurança via token
+
+            // ──────────────────────────────────────────────────────────────────────
+            // REPROCESSAR TRANSFERÊNCIA FALHA (admin)
+            // POST /api/admin/pagamentos/{id}/reprocessar-transferencia
+            // Reverte FalhaTransferencia → Retido e inicia nova tentativa de liberação.
+            // ──────────────────────────────────────────────────────────────────────
+            app.MapPost("/api/admin/pagamentos/{id:guid}/reprocessar-transferencia", async (
+                Guid id,
+                HttpContext http,
+                IPagamentoService service,
+                ILogger<WebApplication> logger) =>
+            {
+                var adminId = ExtrairUserId(http);
+                if (adminId == null) return Results.Unauthorized();
+
+                logger.LogWarning(
+                    "Admin {AdminId} solicitou reprocessamento da transferência do pagamento {PagamentoId}.",
+                    adminId, id);
+
+                var resultado = await service.ReprocessarTransferenciaAsync(id, adminId.Value);
+                return Results.Ok(new
+                {
+                    mensagem    = "Reprocessamento iniciado. Aguardando confirmação via webhook TRANSFER_DONE.",
+                    pagamentoId = resultado.Id,
+                    statusAtual = resultado.Status.ToString()
+                });
+            }).RequireAuthorization("Admin");
         }
 
         private static int? ExtrairUserId(HttpContext http) => ClaimsHelper.ExtrairUserId(http);

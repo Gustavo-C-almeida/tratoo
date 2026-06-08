@@ -3,9 +3,7 @@
 
 const root = document.getElementById('contratos-root');
 
-const STATUS_LABEL = {
-    Gerado: 'Aguardando assinaturas',
-    AguardandoAssinatura: 'Aguardando outra parte',
+const STATUS_LABEL_FIXO = {
     Ativo: 'Em vigor',
     Encerrado: 'Encerrado',
     Cancelado: 'Cancelado / Expirado'
@@ -18,6 +16,21 @@ const STATUS_CLASS = {
     Encerrado: 'badge-encerrado',
     Cancelado: 'badge-cancelado'
 };
+
+// Resolve label e classe do badge de forma contextual ao usuário atual.
+// Para contratos ainda em fase de assinatura, o texto reflete a perspectiva de quem assina.
+function resolverStatusBadge(c) {
+    if (STATUS_LABEL_FIXO[c.status]) {
+        return { label: STATUS_LABEL_FIXO[c.status], cssClass: STATUS_CLASS[c.status] || '' };
+    }
+
+    // Contrato pendente de assinaturas (Gerado ou AguardandoAssinatura)
+    if (!c.assinadoPorMim) {
+        return { label: 'Aguardando sua assinatura', cssClass: 'badge-gerado' };
+    }
+
+    return { label: 'Aguardando assinatura da outra parte', cssClass: 'badge-aguardando' };
+}
 
 async function init() {
     root.innerHTML = '<p class="loading-msg">Carregando contratos...</p>';
@@ -64,9 +77,11 @@ function renderCard(c) {
 
     const expiraEm = new Date(c.expiraEm).toLocaleDateString('pt-BR');
 
+    const { label: statusLabel, cssClass: statusClass } = resolverStatusBadge(c);
+
     const acoesPendentes = [];
     if (!c.assinadoPorMim && (c.status === 'Gerado' || c.status === 'AguardandoAssinatura')) {
-        acoesPendentes.push(`<span class="pendencia-badge">⚡ Assinatura pendente</span>`);
+        acoesPendentes.push(`<span class="pendencia-badge"><i class="fa-solid fa-bolt"></i> Assinatura pendente</span>`);
     }
 
     return `
@@ -85,7 +100,7 @@ function renderCard(c) {
                         }
                     </p>
                 </div>
-                <span class="status-badge ${STATUS_CLASS[c.status] || ''}">${STATUS_LABEL[c.status] || c.status}</span>
+                <span class="status-badge ${statusClass}">${statusLabel}</span>
             </div>
 
             <div class="contrato-card-info">
@@ -96,10 +111,10 @@ function renderCard(c) {
 
             <div class="contrato-card-assinaturas">
                 <span class="${c.assinadoPorMim ? 'assinado' : 'pendente'}">
-                    Você: ${c.assinadoPorMim ? '✔ Assinado' : '⏳ Pendente'}
+                    Você: ${c.assinadoPorMim ? '<i class="fa-solid fa-check"></i> Assinado' : '<i class="fa-solid fa-hourglass-half"></i> Pendente'}
                 </span>
                 <span class="${c.assinadoPelaOutraParte ? 'assinado' : 'pendente'}">
-                    Outra parte: ${c.assinadoPelaOutraParte ? '✔ Assinado' : '⏳ Pendente'}
+                    Outra parte: ${c.assinadoPelaOutraParte ? '<i class="fa-solid fa-check"></i> Assinado' : '<i class="fa-solid fa-hourglass-half"></i> Pendente'}
                 </span>
             </div>
 

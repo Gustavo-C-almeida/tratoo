@@ -10,20 +10,17 @@ namespace Tratoo.Domain.Features.Mensagens
         private readonly IProjetoRepository _projetoRepo;
         private readonly IPrestadorRepository _prestadorRepo;
         private readonly IEmailService _emailService;
-        private readonly IChatConviteRepository _chatRepo;
 
         public ConviteProjetoService(
             IConviteProjetoRepository repo,
             IProjetoRepository projetoRepo,
             IPrestadorRepository prestadorRepo,
-            IEmailService emailService,
-            IChatConviteRepository chatRepo)
+            IEmailService emailService)
         {
             _repo = repo;
             _projetoRepo = projetoRepo;
             _prestadorRepo = prestadorRepo;
             _emailService = emailService;
-            _chatRepo = chatRepo;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -107,22 +104,6 @@ namespace Tratoo.Domain.Features.Mensagens
 
             await _repo.SaveChangesAsync();
 
-            // Cria o chat de negociação contextualizado (1:1 com convite)
-            var chatExistente = await _chatRepo.GetByConviteIdAsync(convite.Id);
-            if (chatExistente == null)
-            {
-                var chat = new Models.ChatConvite
-                {
-                    ProjetoId = convite.ProjetoId,
-                    ContratanteId = convite.ContratanteId,
-                    PrestadorId = convite.PrestadorId,
-                    ConviteId = convite.Id,
-                    CriadoEm = DateTime.UtcNow
-                };
-                await _chatRepo.AddAsync(chat);
-                await _chatRepo.SaveChangesAsync();
-            }
-
             // Notifica contratante por e-mail (silencioso)
             try
             {
@@ -168,20 +149,6 @@ namespace Tratoo.Domain.Features.Mensagens
                     motivo);
             }
             catch { }
-
-            return MapDTO(convite);
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        // OBTER POR ID
-        // ─────────────────────────────────────────────────────────────────────────
-        public async Task<ConviteProjetoDTO?> ObterPorIdAsync(Guid conviteId, int usuarioId)
-        {
-            var convite = await _repo.GetByIdAsync(conviteId);
-            if (convite == null) return null;
-
-            if (convite.ContratanteId != usuarioId && convite.PrestadorId != usuarioId)
-                throw new NegocioException("Acesso negado.");
 
             return MapDTO(convite);
         }

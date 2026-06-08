@@ -21,9 +21,7 @@ namespace Tratoo.Domain.Features.Propostas
 
         /// <summary>Convite que originou esta proposta (fluxo reverso).</summary>
         public Guid? ConviteId { get; set; }
-
-        /// <summary>Chat de negociação relacionado ao convite (se houver).</summary>
-        public Guid? ChatId { get; set; }
+        public bool FoiConvidado { get; set; }
 
         public StatusPropostaProjeto Status { get; set; }
         public int VersaoAtual { get; set; }

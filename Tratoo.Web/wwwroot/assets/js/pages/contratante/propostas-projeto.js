@@ -33,9 +33,9 @@ const STATUS_LABEL = {
 };
 
 const STATUS_ICON = {
-    Draft: '📝', Submitted: '⏳',
-    EmNegociacao: '🤝', Aceita: '✅',
-    Recusada: '❌', Expirada: '⌛', Convertida: '🔄'
+    Draft: '<i class="fa-solid fa-pen-to-square"></i>', Submitted: '<i class="fa-solid fa-hourglass-half"></i>',
+    EmNegociacao: '<i class="fa-solid fa-handshake"></i>', Aceita: '<i class="fa-solid fa-circle-check"></i>',
+    Recusada: '<i class="fa-solid fa-circle-xmark"></i>', Expirada: '<i class="fa-solid fa-hourglass-end"></i>', Convertida: '<i class="fa-solid fa-arrows-rotate"></i>'
 };
 
 let projetoId = null;
@@ -45,7 +45,7 @@ let propostasAtuais = [];
 async function carregar() {
     projetoId = new URLSearchParams(window.location.search).get('id');
     if (!projetoId) {
-        root().innerHTML = '<div class="error-state"><span class="error-icon">⚠️</span><p class="erro-msg">ID do projeto não informado.</p></div>';
+        root().innerHTML = '<div class="error-state"><span class="error-icon"><i class="fa-solid fa-triangle-exclamation"></i></span><p class="erro-msg">ID do projeto não informado.</p></div>';
         return;
     }
 
@@ -63,12 +63,13 @@ async function carregar() {
         document.title = `Propostas — ${projeto.titulo} — Tratoo`;
         render(projeto, propostas);
     } catch (err) {
-        root().innerHTML = `<div class="error-state"><span class="error-icon">❌</span><p class="erro-msg">${esc(err?.data?.mensagem || 'Erro ao carregar propostas.')}</p></div>`;
+        root().innerHTML = `<div class="error-state"><span class="error-icon"><i class="fa-solid fa-circle-xmark"></i></span><p class="erro-msg">${esc(err?.data?.mensagem || 'Erro ao carregar propostas.')}</p></div>`;
     }
 }
 
 let ordenacao = 'recente';
 let filtroStatus = 'todas';
+let filtroOrigem = 'todas';
 
 function ordenarPropostas(lista) {
     const copia = [...lista];
@@ -85,8 +86,14 @@ function ordenarPropostas(lista) {
 }
 
 function filtrarPropostas(lista) {
-    if (filtroStatus === 'todas') return lista;
-    return lista.filter(p => p.status === filtroStatus);
+    let resultado = lista;
+    if (filtroStatus !== 'todas')
+        resultado = resultado.filter(p => p.status === filtroStatus);
+    if (filtroOrigem === 'convidado')
+        resultado = resultado.filter(p => p.foiConvidado);
+    else if (filtroOrigem === 'espontaneo')
+        resultado = resultado.filter(p => !p.foiConvidado);
+    return resultado;
 }
 
 function render(projeto, propostas) {
@@ -101,6 +108,7 @@ function render(projeto, propostas) {
 
     // Estatísticas
     const totalPropostas = propostas.length;
+    const totalConvidados = propostas.filter(p => p.foiConvidado).length;
     const valorMedio = ativas.length > 0
         ? ativas.reduce((sum, p) => sum + (p.valorTotal || 0), 0) / ativas.length
         : 0;
@@ -143,38 +151,45 @@ function render(projeto, propostas) {
         <!-- Stats Cards -->
         <div class="stats-grid-modern">
             <div class="stat-card-modern">
-                <div class="stat-icon purple">📊</div>
+                <div class="stat-icon purple"><i class="fa-solid fa-chart-column"></i></div>
                 <div class="stat-info">
                     <span class="stat-value">${totalPropostas}</span>
                     <span class="stat-label">Total de propostas</span>
                 </div>
             </div>
             <div class="stat-card-modern">
-                <div class="stat-icon green">💰</div>
+                <div class="stat-icon green"><i class="fa-solid fa-money-bill-wave"></i></div>
                 <div class="stat-info">
                     <span class="stat-value">${moeda(valorMedio)}</span>
                     <span class="stat-label">Valor médio</span>
                 </div>
             </div>
             <div class="stat-card-modern">
-                <div class="stat-icon orange">📅</div>
+                <div class="stat-icon orange"><i class="fa-solid fa-calendar-days"></i></div>
                 <div class="stat-info">
                     <span class="stat-value">${prazoMedio > 0 ? `${prazoMedio} dias` : '—'}</span>
                     <span class="stat-label">Prazo médio</span>
                 </div>
             </div>
             <div class="stat-card-modern">
-                <div class="stat-icon blue">⭐</div>
+                <div class="stat-icon blue"><i class="fa-solid fa-star"></i></div>
                 <div class="stat-info">
                     <span class="stat-value">${ativas.length}</span>
                     <span class="stat-label">Ativas</span>
+                </div>
+            </div>
+            <div class="stat-card-modern">
+                <div class="stat-icon violet"><i class="fa-solid fa-envelope-open-text"></i></div>
+                <div class="stat-info">
+                    <span class="stat-value">${totalConvidados}</span>
+                    <span class="stat-label">Convidados</span>
                 </div>
             </div>
         </div>
 
         ${!propostas.length ? `
         <div class="empty-state-modern">
-            <div class="empty-icon">📭</div>
+            <div class="empty-icon"><i class="fa-solid fa-inbox"></i></div>
             <h3>Nenhuma proposta recebida</h3>
             <p>Ainda não há propostas para este projeto. Compartilhe o projeto para atrair profissionais.</p>
         </div>
@@ -183,16 +198,27 @@ function render(projeto, propostas) {
         <div class="filtros-ordenacao-bar">
             <div class="filtros-status">
                 <button class="filtro-btn ${filtroStatus === 'todas' ? 'active' : ''}" data-filtro="todas">
-                    <span>📋</span> Todas
+                    <span><i class="fa-solid fa-clipboard-list"></i></span> Todas
                 </button>
                 <button class="filtro-btn ${filtroStatus === 'Submitted' ? 'active' : ''}" data-filtro="Submitted">
-                    <span>⏳</span> Aguardando
+                    <span><i class="fa-solid fa-hourglass-half"></i></span> Aguardando
                 </button>
                 <button class="filtro-btn ${filtroStatus === 'EmNegociacao' ? 'active' : ''}" data-filtro="EmNegociacao">
-                    <span>🤝</span> Em negociação
+                    <span><i class="fa-solid fa-handshake"></i></span> Em negociação
                 </button>
                 <button class="filtro-btn ${filtroStatus === 'Aceita' ? 'active' : ''}" data-filtro="Aceita">
-                    <span>✅</span> Aceitas
+                    <span><i class="fa-solid fa-circle-check"></i></span> Aceitas
+                </button>
+            </div>
+            <div class="filtros-origem">
+                <button class="filtro-origem-btn ${filtroOrigem === 'todas' ? 'active' : ''}" data-origem="todas">
+                    <i class="fa-solid fa-users"></i> Todos
+                </button>
+                <button class="filtro-origem-btn ${filtroOrigem === 'convidado' ? 'active' : ''}" data-origem="convidado">
+                    <i class="fa-solid fa-envelope-open-text"></i> Convidados
+                </button>
+                <button class="filtro-origem-btn ${filtroOrigem === 'espontaneo' ? 'active' : ''}" data-origem="espontaneo">
+                    <i class="fa-solid fa-magnifying-glass"></i> Espontâneos
                 </button>
             </div>
             <div class="ordenacao-wrapper">
@@ -224,7 +250,7 @@ function render(projeto, propostas) {
         </div>
         ` : filtroStatus !== 'todas' ? '' : `
         <div class="empty-state-modern small">
-            <div class="empty-icon">📭</div>
+            <div class="empty-icon"><i class="fa-solid fa-inbox"></i></div>
             <p>Nenhuma proposta ativa no momento</p>
         </div>
         `}
@@ -259,12 +285,19 @@ function render(projeto, propostas) {
             render(projetoAtual, propostasAtuais);
         });
     });
+
+    document.querySelectorAll('.filtro-origem-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            filtroOrigem = btn.dataset.origem;
+            render(projetoAtual, propostasAtuais);
+        });
+    });
 }
 
 function renderCardModerno(p, opaco = false) {
     const statusKey = p.status;
     const statusLabel = STATUS_LABEL[statusKey] || statusKey;
-    const statusIcon = STATUS_ICON[statusKey] || '📄';
+    const statusIcon = STATUS_ICON[statusKey] || '<i class="fa-solid fa-file-lines"></i>';
 
     const corStatus = {
         Submitted: 'azul', EmNegociacao: 'amarelo', Aceita: 'verde',
@@ -272,6 +305,7 @@ function renderCardModerno(p, opaco = false) {
     };
 
     const tempoDesdeEnvio = calcularTempoRelativo(p.criadoEm);
+    const dataFormatada = formatarDataHoraUTC(p.criadoEm);
     const prazoRestante = calcularPrazoRestante(p.prazoTotal);
 
     return `
@@ -288,9 +322,15 @@ function renderCardModerno(p, opaco = false) {
                     ${p.prestadorTitulo ? `<p class="prestador-funcao">${esc(p.prestadorTitulo)}</p>` : ''}
                 </div>
             </div>
-            <div class="status-badge-modern ${corStatus[statusKey] || 'cinza'}">
-                <span class="status-icon">${statusIcon}</span>
-                <span class="status-text">${statusLabel}</span>
+            <div class="proposta-badges-area">
+                ${p.foiConvidado ? `
+                <span class="badge-convidado" title="Este prestador foi convidado diretamente para este projeto">
+                    <i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> Convidado
+                </span>` : ''}
+                <div class="status-badge-modern ${corStatus[statusKey] || 'cinza'}">
+                    <span class="status-icon">${statusIcon}</span>
+                    <span class="status-text">${statusLabel}</span>
+                </div>
             </div>
         </div>
         
@@ -299,31 +339,31 @@ function renderCardModerno(p, opaco = false) {
             
             <div class="proposta-meta-grid">
                 <div class="meta-item-modern">
-                    <span class="meta-icon">💰</span>
+                    <span class="meta-icon"><i class="fa-solid fa-money-bill-wave"></i></span>
                     <div class="meta-content">
                         <span class="meta-label">Valor</span>
                         <strong class="meta-value">${moeda(p.valorTotal)}</strong>
                     </div>
                 </div>
                 <div class="meta-item-modern">
-                    <span class="meta-icon">📅</span>
+                    <span class="meta-icon"><i class="fa-solid fa-calendar-days"></i></span>
                     <div class="meta-content">
                         <span class="meta-label">Prazo</span>
                         <strong class="meta-value ${prazoRestante.classe}">${dataFmt(p.prazoTotal)}</strong>
                     </div>
                 </div>
                 <div class="meta-item-modern">
-                    <span class="meta-icon">🔄</span>
+                    <span class="meta-icon"><i class="fa-solid fa-arrows-rotate"></i></span>
                     <div class="meta-content">
                         <span class="meta-label">Versão</span>
                         <strong class="meta-value">${p.versaoAtual || 1}</strong>
                     </div>
                 </div>
                 <div class="meta-item-modern">
-                    <span class="meta-icon">⏱️</span>
+                    <span class="meta-icon"><i class="fa-solid fa-stopwatch"></i></span>
                     <div class="meta-content">
                         <span class="meta-label">Enviada</span>
-                        <strong class="meta-value">${tempoDesdeEnvio}</strong>
+                        <strong class="meta-value" title="${tempoDesdeEnvio} (${dataFormatada} UTC)">${dataFormatada}</strong>
                     </div>
                 </div>
             </div>
@@ -340,14 +380,41 @@ function renderCardModerno(p, opaco = false) {
     </a>`;
 }
 
+function formatarDataHoraUTC(data) {
+    if (!data) return '—';
+    // Garante parsing correto de UTC (adiciona 'Z' se não estiver presente)
+    const dataString = typeof data === 'string' ? data : String(data);
+    const dataFormatada = dataString.includes('Z') || dataString.includes('+')
+        ? new Date(dataString)
+        : new Date(dataString + 'Z');
+
+    if (isNaN(dataFormatada.getTime())) return '—';
+
+    const dia = dataFormatada.getUTCDate();
+    const mes = dataFormatada.getUTCMonth() + 1;
+    const ano = dataFormatada.getUTCFullYear();
+    const horas = String(dataFormatada.getUTCHours()).padStart(2, '0');
+    const minutos = String(dataFormatada.getUTCMinutes()).padStart(2, '0');
+
+    return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
+}
+
 function calcularTempoRelativo(data) {
     if (!data) return '—';
-    const diff = Date.now() - new Date(data).getTime();
+    // Garante parsing correto de UTC
+    const dataString = typeof data === 'string' ? data : String(data);
+    const dataFormatada = dataString.includes('Z') || dataString.includes('+')
+        ? new Date(dataString)
+        : new Date(dataString + 'Z');
+
+    if (isNaN(dataFormatada.getTime())) return '—';
+
+    const diff = Date.now() - dataFormatada.getTime();
     const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
     const horas = Math.floor(diff / (1000 * 60 * 60));
     const minutos = Math.floor(diff / (1000 * 60));
 
-    if (minutos < 60) return `${minutos} min atrás`;
+    if (minutos < 60) return `${Math.max(minutos, 0)} min atrás`;
     if (horas < 24) return `${horas} h atrás`;
     return `${dias} d atrás`;
 }

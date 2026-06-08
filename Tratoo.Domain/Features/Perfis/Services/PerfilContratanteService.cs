@@ -28,6 +28,10 @@ namespace Tratoo.Domain.Features.Perfis
             var c = await _repo.GetByIdAsync(id)
                 ?? throw new NegocioException("Contratante não encontrado");
 
+            // Conta excluída (Soft Delete — LGPD): perfil não é mais acessível
+            if (c.ExcluidoEm != null)
+                throw new NegocioException("Contratante não encontrado");
+
             var identity = await _identidadeRepo.ObterPorUserIdAsync(id);
 
             int? idade = null;
@@ -35,6 +39,7 @@ namespace Tratoo.Domain.Features.Perfis
                 idade = CalcularIdade(identity.DataNascimento.Value);
 
             var (totalProjetos, concluidos, valorMedio) = await _repo.GetMetricasProjetosAsync(id);
+            var (projetosAtivos, contratosConcluidoss, tempoMedioDecisao) = await _repo.GetMetricasAdicionaisAsync(id);
             var reputacao = await _avaliacaoRepo.GetReputacaoAsync(id);
             var ultimosProjetos = await _repo.GetUltimosProjetosAsync(id, 5);
 
@@ -53,19 +58,32 @@ namespace Tratoo.Domain.Features.Perfis
                 LogoUrl = c.LogoUrl,
                 SiteUrl = c.SiteUrl,
                 LinkedinUrl = c.LinkedinUrl,
+                EmailContato = c.EmailContato,
                 Segmento = c.Segmento,
                 NomeEmpresa = c.NomeEmpresa,
                 LocalizacaoCidade = c.Endereco?.Cidade,
                 LocalizacaoEstado = c.Endereco?.Estado,
                 Idade = idade,
                 CriadoEm = c.DataCadastro,
+                TipoPessoa = c.TipoPessoa?.ToString(),
+                EmpresaVerificada = empresaVerificada,
+                PagadorVerificado = c.PagadorVerificado,
+                AnoAbertura = c.DataAbertura?.Year,
+                TamanhoEquipe = c.TamanhoEquipe?.ToString(),
+                IdiomasAceitos = c.GetIdiomasAceitos(),
+                Disponibilidade = c.Disponibilidade?.ToString(),
+                PorQueTrabalharComigo = c.PorQueTrabalharComigo,
                 TotalProjetosPublicados = totalProjetos,
                 TotalProjetosConcluidos = concluidos,
+                TotalProjetosAtivos = projetosAtivos,
+                TotalContratosConcluidoss = contratosConcluidoss,
                 TaxaConclusao = taxaConclusao,
                 MediaAvaliacoes = reputacao?.MediaGeral,
                 TotalAvaliacoes = reputacao?.TotalAvaliacoes ?? 0,
                 ValorMedioProjetos = valorMedio,
-                EmpresaVerificada = empresaVerificada,
+                TempoMedioDecisaoDias = tempoMedioDecisao.HasValue
+                    ? Math.Round(tempoMedioDecisao.Value, 1)
+                    : null,
                 UltimosProjetos = ultimosProjetos.Select(p => new ProjetoResumoPerfilDto
                 {
                     Id           = p.Id,
@@ -102,11 +120,10 @@ namespace Tratoo.Domain.Features.Perfis
                 LogoUrl = c.LogoUrl,
                 SiteUrl = c.SiteUrl,
                 LinkedinUrl = c.LinkedinUrl,
+                EmailContato = c.EmailContato,
                 Telefone = c.Telefone,
                 Segmento = c.Segmento,
                 NomeEmpresa = c.NomeEmpresa,
-                InscricaoEstadual = c.InscricaoEstadual,
-                InscricaoMunicipal = c.InscricaoMunicipal,
                 DataAbertura = c.DataAbertura,
                 LocalizacaoCidade = c.Endereco?.Cidade,
                 LocalizacaoEstado = c.Endereco?.Estado,
@@ -114,6 +131,10 @@ namespace Tratoo.Domain.Features.Perfis
                 Idade = idade,
                 TipoPessoa = c.TipoPessoa?.ToString(),
                 AvaliacoesPrivado = c.AvaliacoesPrivado,
+                Disponibilidade = c.Disponibilidade?.ToString(),
+                IdiomasAceitos = c.GetIdiomasAceitos(),
+                TamanhoEquipe = c.TamanhoEquipe?.ToString(),
+                PorQueTrabalharComigo = c.PorQueTrabalharComigo,
                 PorcentagemCompletude = porcentagem,
                 ProximoPassoCompletude = proximoPasso
             };
@@ -137,11 +158,41 @@ namespace Tratoo.Domain.Features.Perfis
                     throw new NegocioException("URL do LinkedIn inválida. Use o formato https://linkedin.com/...");
             }
 
+            if (!string.IsNullOrWhiteSpace(dto.EmailContato) &&
+                !dto.EmailContato.Contains('@'))
+                throw new NegocioException("E-mail de contato inválido.");
+
+            if (dto.PorQueTrabalharComigo is not null && dto.PorQueTrabalharComigo.Length > 500)
+                throw new NegocioException("Seção 'Por que trabalhar comigo' muito longa. Limite: 500 caracteres.");
+
             c.Descricao = dto.Descricao;
             c.SiteUrl = dto.SiteUrl;
             c.LinkedinUrl = dto.LinkedinUrl;
+            c.EmailContato = string.IsNullOrWhiteSpace(dto.EmailContato) ? null : dto.EmailContato.Trim();
             c.Telefone = dto.Telefone;
             c.ExibirIdade = dto.ExibirIdade;
+            c.PorQueTrabalharComigo = string.IsNullOrWhiteSpace(dto.PorQueTrabalharComigo) ? null : dto.PorQueTrabalharComigo.Trim();
+
+            if (!string.IsNullOrWhiteSpace(dto.Segmento))
+                c.Segmento = dto.Segmento.Trim();
+
+            if (!string.IsNullOrWhiteSpace(dto.NomeEmpresa))
+                c.NomeEmpresa = dto.NomeEmpresa.Trim();
+
+            if (!string.IsNullOrWhiteSpace(dto.Disponibilidade) &&
+                Enum.TryParse<DisponibilidadeContratante>(dto.Disponibilidade, out var disp))
+                c.Disponibilidade = disp;
+            else if (dto.Disponibilidade == null)
+                c.Disponibilidade = null;
+
+            if (!string.IsNullOrWhiteSpace(dto.TamanhoEquipe) &&
+                Enum.TryParse<TamanhoEquipe>(dto.TamanhoEquipe, out var tam))
+                c.TamanhoEquipe = tam;
+            else if (dto.TamanhoEquipe == null)
+                c.TamanhoEquipe = null;
+
+            if (dto.IdiomasAceitos is not null)
+                c.SetIdiomasAceitos(dto.IdiomasAceitos);
 
             c.VerificarPerfilMinimo();
             await _repo.UpdateAsync(c);
@@ -182,10 +233,11 @@ namespace Tratoo.Domain.Features.Perfis
         }
 
         /// <summary>
-        /// Calcula a percentagem de completude do perfil do contratante (0–100)
-        /// e sugere o próximo passo mais impactante.
-        /// Pontuação: LogoUrl=15, Descricao>=50=20, LinkedinUrl=10, SiteUrl=10,
-        ///            NomeEmpresa ou Segmento=20, Cidade=15, Telefone=10.
+        /// Calcula a percentagem de completude do perfil do contratante (0–100).
+        /// Pontuação: LogoUrl=10, Descricao>=50=15, LinkedinUrl=8, SiteUrl=8,
+        ///            NomeEmpresa ou Segmento=15, Cidade=10, Telefone=8,
+        ///            EmailContato=8, PorQueTrabalharComigo=8, Disponibilidade=5,
+        ///            IdiomasAceitos=5. Total=100.
         /// </summary>
         public static (int Porcentagem, string? ProximoPasso) CalcularCompletude(Contratante c)
         {
@@ -193,39 +245,59 @@ namespace Tratoo.Domain.Features.Perfis
             string? proximoPasso = null;
 
             if (!string.IsNullOrWhiteSpace(c.LogoUrl))
-                score += 15;
+                score += 10;
             else
-                proximoPasso ??= "Adicione uma foto ou logo para transmitir mais credibilidade (+15%)";
+                proximoPasso ??= "Adicione uma foto ou logo para transmitir mais credibilidade (+10%)";
 
             if (!string.IsNullOrWhiteSpace(c.Descricao) && c.Descricao.Length >= 50)
-                score += 20;
-            else
-                proximoPasso ??= "Escreva uma bio com pelo menos 50 caracteres (+20%)";
-
-            if (!string.IsNullOrWhiteSpace(c.LinkedinUrl))
-                score += 10;
-            else
-                proximoPasso ??= "Adicione seu LinkedIn — contratantes com LinkedIn recebem 3× mais propostas de qualidade (+10%)";
-
-            if (!string.IsNullOrWhiteSpace(c.SiteUrl))
-                score += 10;
-            else
-                proximoPasso ??= "Adicione o site da empresa (+10%)";
-
-            if (!string.IsNullOrWhiteSpace(c.NomeEmpresa) || !string.IsNullOrWhiteSpace(c.Segmento))
-                score += 20;
-            else
-                proximoPasso ??= "Informe o nome da empresa ou segmento de atuação (+20%)";
-
-            if (!string.IsNullOrWhiteSpace(c.Endereco?.Cidade))
                 score += 15;
             else
-                proximoPasso ??= "Informe sua cidade para aparecer em buscas regionais (+15%)";
+                proximoPasso ??= "Escreva uma bio com pelo menos 50 caracteres (+15%)";
 
-            if (!string.IsNullOrWhiteSpace(c.Telefone))
+            if (!string.IsNullOrWhiteSpace(c.NomeEmpresa) || !string.IsNullOrWhiteSpace(c.Segmento))
+                score += 15;
+            else
+                proximoPasso ??= "Informe o nome da empresa ou segmento de atuação (+15%)";
+
+            if (!string.IsNullOrWhiteSpace(c.Endereco?.Cidade))
                 score += 10;
             else
-                proximoPasso ??= "Adicione um telefone de contato (+10%)";
+                proximoPasso ??= "Informe sua cidade para aparecer em buscas regionais (+10%)";
+
+            if (!string.IsNullOrWhiteSpace(c.LinkedinUrl))
+                score += 8;
+            else
+                proximoPasso ??= "Adicione seu LinkedIn — contratantes com LinkedIn recebem propostas de maior qualidade (+8%)";
+
+            if (!string.IsNullOrWhiteSpace(c.SiteUrl))
+                score += 8;
+            else
+                proximoPasso ??= "Adicione o site da empresa (+8%)";
+
+            if (!string.IsNullOrWhiteSpace(c.Telefone))
+                score += 8;
+            else
+                proximoPasso ??= "Adicione um telefone de contato (+8%)";
+
+            if (!string.IsNullOrWhiteSpace(c.EmailContato))
+                score += 8;
+            else
+                proximoPasso ??= "Adicione um e-mail de contato público (+8%)";
+
+            if (!string.IsNullOrWhiteSpace(c.PorQueTrabalharComigo))
+                score += 8;
+            else
+                proximoPasso ??= "Preencha 'Por que trabalhar comigo' para atrair melhores prestadores (+8%)";
+
+            if (c.Disponibilidade.HasValue)
+                score += 5;
+            else
+                proximoPasso ??= "Informe sua disponibilidade para novos prestadores (+5%)";
+
+            if (!string.IsNullOrWhiteSpace(c.IdiomasAceitosJson))
+                score += 5;
+            else
+                proximoPasso ??= "Informe os idiomas aceitos nos projetos (+5%)";
 
             return (score, proximoPasso);
         }

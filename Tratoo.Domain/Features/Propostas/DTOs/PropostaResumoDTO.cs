@@ -16,6 +16,7 @@ namespace Tratoo.Domain.Features.Propostas
         public StatusPropostaProjeto Status { get; set; }
         public PropostaSenderType SenderType { get; set; } = PropostaSenderType.Prestador;
         public Guid? ConviteId { get; set; }
+        public bool FoiConvidado { get; set; }
         public int VersaoAtual { get; set; }
         public DateTime ValidoAte { get; set; }
         public DateTime CriadoEm { get; set; }

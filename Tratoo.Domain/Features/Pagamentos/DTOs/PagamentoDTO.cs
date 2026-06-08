@@ -31,8 +31,6 @@ namespace Tratoo.Domain.Features.Pagamentos
         public Guid PagamentoId { get; set; }
         public StatusPagamento Status { get; set; }
         public decimal ValorBruto { get; set; }
-        public decimal TaxaPlataforma { get; set; }
-        public decimal ValorLiquidoPrestador { get; set; }
 
         /// <summary>Payload copia-e-cola do PIX.</summary>
         public string? PixPayload { get; set; }
@@ -53,8 +51,6 @@ namespace Tratoo.Domain.Features.Pagamentos
         public Guid? ContratoServicoId { get; set; }
         public StatusPagamento Status { get; set; }
         public decimal ValorBruto { get; set; }
-        public decimal TaxaPlataforma { get; set; }
-        public decimal ValorLiquidoPrestador { get; set; }
         public MetodoPagamento Metodo { get; set; }
         public DateTime CriadoEm { get; set; }
         public DateTime? PagoEm { get; set; }
@@ -70,6 +66,13 @@ namespace Tratoo.Domain.Features.Pagamentos
         public DateTime? PixExpiracao { get; set; }
         public string? AsaasCobrancaId { get; set; }
         public string? StatusGateway { get; set; }
+
+        /// <summary>
+        /// Taxa operacional do gateway (Asaas). Exclusivamente informativo — não afeta
+        /// nenhum cálculo. Exibido apenas em contexto administrativo/auditoria.
+        /// </summary>
+        public decimal? TaxaGateway { get; set; }
+
         public List<LedgerEntradaDto> Ledger { get; set; } = [];
         public List<DisputaResumoDto> Disputas { get; set; } = [];
     }

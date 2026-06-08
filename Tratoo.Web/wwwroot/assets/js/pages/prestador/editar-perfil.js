@@ -26,7 +26,7 @@ function renderizarFormulario(d) {
     root().innerHTML = `
     <div class="perfil-page">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-            <a href="perfil.html" style="font-size:14px;color:#64748b;text-decoration:none">← Voltar ao perfil</a>
+            <a href="perfil.html" style="font-size:14px;color:#64748b;text-decoration:none"><i class="fa-solid fa-arrow-left"></i> Voltar ao perfil</a>
             <h1 style="font-size:22px;font-weight:700;color:#0f172a">Editar Perfil</h1>
         </div>
 
@@ -56,7 +56,7 @@ function renderizarFormulario(d) {
                 <div class="form-group">
                     <label>Título profissional</label>
                     <input type="text" id="p-titulo" value="${escHtml(d.tituloProfissional ?? '')}" maxlength="80"
-                        placeholder="Ex: Desenvolvedor Full-Stack | React & .NET">
+                        placeholder="Ex: Designer UI/UX | Figma & Illustrator, Redator, Consultor...">
                 </div>
                 <div class="form-group">
                     <label>Bio (mínimo 100 caracteres para pontuar)</label>
@@ -68,47 +68,28 @@ function renderizarFormulario(d) {
                     <div class="form-group">
                         <label>Área de especialização</label>
                         <input type="text" id="p-area" value="${escHtml(d.areaEspecializacao ?? '')}"
-                            placeholder="Ex: Desenvolvimento Web">
+                            placeholder="Ex: Design Gráfico, Marketing Digital, Tradução...">
                     </div>
                     <div class="form-group">
                         <label>Função executada</label>
                         <input type="text" id="p-funcao" value="${escHtml(d.funcaoExecutada ?? '')}"
-                            placeholder="Ex: Desenvolvedor Backend">
+                            placeholder="Ex: Designer, Social Media, Editor de Vídeo...">
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Valor por hora (R$)</label>
-                        <input type="number" id="p-valor" value="${d.valorHora ?? ''}" min="0" step="0.01"
-                            placeholder="0,00">
-                    </div>
-                    <div class="form-group">
-                        <label>Telefone / WhatsApp</label>
-                        <input type="tel" id="p-telefone" value="${escHtml(d.telefone ?? '')}"
-                            placeholder="(11) 9 0000-0000">
-                    </div>
+                <div class="form-group">
+                    <label>Telefone / WhatsApp</label>
+                    <input type="tel" id="p-telefone" value="${escHtml(d.telefone ?? '')}"
+                        placeholder="(11) 9 0000-0000">
                 </div>
                 <div class="form-group">
                     <label>E-mail de contato público</label>
                     <input type="email" id="p-email-contato" value="${escHtml(d.emailContato ?? '')}"
                         placeholder="contato@exemplo.com">
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>LinkedIn</label>
-                        <input type="url" id="p-linkedin" value="${escHtml(d.linkedinUrl ?? '')}"
-                            placeholder="https://linkedin.com/in/...">
-                    </div>
-                    <div class="form-group">
-                        <label>GitHub</label>
-                        <input type="url" id="p-github" value="${escHtml(d.gitHubUrl ?? '')}"
-                            placeholder="https://github.com/...">
-                    </div>
-                </div>
                 <div class="form-group">
-                    <label>URL do portfólio externo</label>
-                    <input type="url" id="p-portfolio-url" value="${escHtml(d.portfolioUrl ?? '')}"
-                        placeholder="https://meuportfolio.com">
+                    <label>LinkedIn</label>
+                    <input type="url" id="p-linkedin" value="${escHtml(d.linkedinUrl ?? '')}"
+                        placeholder="https://linkedin.com/in/...">
                 </div>
 
                 <!-- Links extras (até 3) -->
@@ -144,6 +125,34 @@ function renderizarFormulario(d) {
             <p id="privacidade-ok" class="form-sucesso" hidden></p>
             <button type="button" class="btn-salvar" id="btn-privacidade" style="margin-top:14px">Salvar preferência</button>
         </div>
+
+        <!-- DADOS BANCÁRIOS -->
+        <div class="perfil-secao">
+            <h2 class="perfil-secao__titulo">Dados Bancários (recebimento via PIX)</h2>
+            <p style="font-size:13px;color:#64748b;margin-bottom:12px">
+                Necessários para receber os pagamentos liberados. Por segurança, qualquer alteração
+                exige confirmação por um código enviado ao seu e-mail.
+            </p>
+            <div id="dados-bancarios-container">
+                <p style="font-size:13px;color:#94a3b8">Carregando...</p>
+            </div>
+        </div>
+
+        <!-- ZONA DE PERIGO — EXCLUSÃO DE CONTA (LGPD) -->
+        <div class="perfil-secao" style="border:1px solid #fecaca;background:#fef2f2">
+            <h2 class="perfil-secao__titulo" style="color:#b91c1c">Excluir conta</h2>
+            <p style="font-size:13px;color:#7f1d1d;line-height:1.6;margin-bottom:14px">
+                Esta ação é <strong>permanente</strong>. Sua conta será desativada e seus dados pessoais
+                (nome, e-mail, foto, CPF/CNPJ) serão anonimizados, e seu perfil deixará de aparecer nas
+                buscas. Propostas, contratos, pagamentos e avaliações são mantidos por obrigação legal,
+                exibindo "Usuário indisponível" no seu lugar. Você não conseguirá mais acessar esta conta.
+            </p>
+            <p id="excluir-conta-err" class="form-erro" hidden></p>
+            <button type="button" class="btn-salvar" id="btn-excluir-conta"
+                    style="background:#dc2626;border-color:#dc2626">
+                <i class="fa-solid fa-trash-can" aria-hidden="true"></i> Excluir minha conta
+            </button>
+        </div>
     </div>`;
 
     // Contador de caracteres da bio
@@ -157,6 +166,210 @@ function renderizarFormulario(d) {
     });
 
     document.getElementById('btn-privacidade').addEventListener('click', salvarPrivacidade);
+
+    document.getElementById('btn-excluir-conta').addEventListener('click', excluirConta);
+
+    carregarDadosBancarios();
+}
+
+async function excluirConta() {
+    const erro = document.getElementById('excluir-conta-err');
+    erro.hidden = true;
+
+    const confirmacao = prompt('Esta ação é permanente e não pode ser desfeita.\n\nPara confirmar a exclusão da sua conta, digite EXCLUIR:');
+    if (confirmacao === null) return;
+    if (confirmacao.trim().toUpperCase() !== 'EXCLUIR') {
+        erro.textContent = 'Confirmação incorreta. Digite EXCLUIR para confirmar.';
+        erro.hidden = false;
+        return;
+    }
+
+    const btn = document.getElementById('btn-excluir-conta');
+    btn.disabled = true;
+    btn.textContent = 'Excluindo...';
+
+    try {
+        await api.delete('/usuarios/conta');
+        alert('Sua conta foi excluída. Você será redirecionado.');
+        window.location.href = '/pages/auth/login.html';
+    } catch (err) {
+        erro.textContent = err?.data?.mensagem ?? 'Erro ao excluir a conta.';
+        erro.hidden = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-trash-can" aria-hidden="true"></i> Excluir minha conta';
+    }
+}
+
+// ── Dados bancários (fluxo seguro com token por e-mail) ─────────────────────────
+// Nunca persistir dados bancários em localStorage/sessionStorage — apenas em memória.
+
+function bancEsc(s) { return escHtml(s == null ? '' : String(s)); }
+
+async function carregarDadosBancarios() {
+    const cont = document.getElementById('dados-bancarios-container');
+    if (!cont) return;
+    try {
+        const d = await api.get('/prestadores/me/dados-bancarios');
+        renderDadosBancariosView(d);
+    } catch (e) {
+        cont.innerHTML = `<p class="form-erro">Não foi possível carregar os dados bancários.</p>`;
+    }
+}
+
+function renderDadosBancariosView(d) {
+    const cont = document.getElementById('dados-bancarios-container');
+    const tipoLabel = {
+        CPF: 'CPF', CNPJ: 'CNPJ', Email: 'E-mail', Telefone: 'Telefone', Aleatoria: 'Chave aleatória'
+    };
+
+    if (d && d.configurado) {
+        cont.innerHTML = `
+            <div class="banc-view">
+                <div class="banc-linha"><span>Banco</span><strong>${bancEsc(d.banco)}</strong></div>
+                <div class="banc-linha"><span>Agência</span><strong>${bancEsc(d.agenciaMascarada)}</strong></div>
+                <div class="banc-linha"><span>Conta</span><strong>${bancEsc(d.contaMascarada)}</strong></div>
+                <div class="banc-linha"><span>Tipo de chave</span><strong>${bancEsc(tipoLabel[d.tipoPix] || d.tipoPix)}</strong></div>
+                <div class="banc-linha"><span>Chave PIX</span><strong>${bancEsc(d.chavePixMascarada)}</strong></div>
+            </div>
+            <p style="font-size:12px;color:#94a3b8;margin-top:8px">
+                Atualizado em ${d.atualizadoEm ? new Date(d.atualizadoEm).toLocaleDateString('pt-BR') : '—'}
+            </p>
+            <button type="button" class="btn-salvar" id="btn-banc-alterar" style="margin-top:12px">Alterar dados bancários</button>`;
+    } else {
+        cont.innerHTML = `
+            <p style="font-size:13px;color:#64748b">Você ainda não cadastrou seus dados bancários.</p>
+            <button type="button" class="btn-salvar" id="btn-banc-alterar" style="margin-top:8px">Cadastrar dados bancários</button>`;
+    }
+
+    document.getElementById('btn-banc-alterar').addEventListener('click', solicitarTokenBancario);
+}
+
+async function solicitarTokenBancario() {
+    const btn = document.getElementById('btn-banc-alterar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Enviando código...'; }
+    try {
+        await api.post('/prestadores/me/dados-bancarios/solicitar-alteracao', {});
+        renderTokenBancario();
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Alterar dados bancários'; }
+        alert(e?.data?.mensagem || 'Erro ao solicitar o código.');
+    }
+}
+
+function renderTokenBancario() {
+    const cont = document.getElementById('dados-bancarios-container');
+    cont.innerHTML = `
+        <div class="banc-token">
+            <p style="font-size:13px;color:#334155">
+                Enviamos um código de confirmação para o seu e-mail. Ele expira em <strong>10 minutos</strong>.
+            </p>
+            <div class="form-group" style="max-width:220px">
+                <label for="banc-token-input">Código de confirmação</label>
+                <input type="text" id="banc-token-input" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="6" placeholder="000000">
+            </div>
+            <p id="banc-token-err" class="form-erro" hidden></p>
+            <div style="display:flex;gap:8px;margin-top:8px">
+                <button type="button" class="btn-salvar" id="btn-banc-confirmar">Confirmar código</button>
+                <button type="button" class="btn-secundario" id="btn-banc-cancelar">Cancelar</button>
+            </div>
+        </div>`;
+
+    document.getElementById('btn-banc-confirmar').addEventListener('click', confirmarTokenBancario);
+    document.getElementById('btn-banc-cancelar').addEventListener('click', carregarDadosBancarios);
+    document.getElementById('banc-token-input').focus();
+}
+
+async function confirmarTokenBancario() {
+    const erro = document.getElementById('banc-token-err');
+    erro.hidden = true;
+    const token = document.getElementById('banc-token-input').value.trim();
+    if (!token) { erro.hidden = false; erro.textContent = 'Informe o código.'; return; }
+
+    const btn = document.getElementById('btn-banc-confirmar');
+    btn.disabled = true; btn.textContent = 'Confirmando...';
+    try {
+        await api.post('/prestadores/me/dados-bancarios/confirmar', { token });
+        renderEdicaoBancaria();
+    } catch (e) {
+        btn.disabled = false; btn.textContent = 'Confirmar código';
+        erro.hidden = false;
+        erro.textContent = e?.data?.mensagem || 'Código inválido.';
+    }
+}
+
+function renderEdicaoBancaria() {
+    const cont = document.getElementById('dados-bancarios-container');
+    cont.innerHTML = `
+        <div class="banc-edit">
+            <p class="form-sucesso" style="margin-bottom:10px"><i class="fa-solid fa-check"></i> Identidade confirmada. Preencha e salve seus dados (você tem 10 minutos).</p>
+            <div class="form-row">
+                <div class="form-group" style="flex:0 0 200px">
+                    <label for="banc-banco">Banco</label>
+                    <input type="text" id="banc-banco" placeholder="Ex: Nubank" maxlength="60">
+                </div>
+                <div class="form-group" style="flex:0 0 120px">
+                    <label for="banc-agencia">Agência</label>
+                    <input type="text" id="banc-agencia" inputmode="numeric" placeholder="0001" maxlength="10">
+                </div>
+                <div class="form-group">
+                    <label for="banc-conta">Conta (com dígito)</label>
+                    <input type="text" id="banc-conta" inputmode="numeric" placeholder="123456-7" maxlength="20">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:0 0 200px">
+                    <label for="banc-tipo">Tipo de chave PIX</label>
+                    <select id="banc-tipo">
+                        <option value="CPF">CPF</option>
+                        <option value="CNPJ">CNPJ</option>
+                        <option value="Email">E-mail</option>
+                        <option value="Telefone">Telefone</option>
+                        <option value="Aleatoria">Chave aleatória</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="banc-chave">Chave PIX</label>
+                    <input type="text" id="banc-chave" placeholder="Informe a chave conforme o tipo" maxlength="120">
+                </div>
+            </div>
+            <p id="banc-edit-err" class="form-erro" hidden></p>
+            <div style="display:flex;gap:8px;margin-top:8px">
+                <button type="button" class="btn-salvar" id="btn-banc-salvar">Salvar dados bancários</button>
+                <button type="button" class="btn-secundario" id="btn-banc-cancelar2">Cancelar</button>
+            </div>
+        </div>`;
+
+    document.getElementById('btn-banc-salvar').addEventListener('click', salvarDadosBancarios);
+    document.getElementById('btn-banc-cancelar2').addEventListener('click', carregarDadosBancarios);
+}
+
+async function salvarDadosBancarios() {
+    const erro = document.getElementById('banc-edit-err');
+    erro.hidden = true;
+
+    const payload = {
+        banco: document.getElementById('banc-banco').value.trim(),
+        agencia: document.getElementById('banc-agencia').value.trim(),
+        conta: document.getElementById('banc-conta').value.trim(),
+        tipoPix: document.getElementById('banc-tipo').value,
+        chavePix: document.getElementById('banc-chave').value.trim(),
+    };
+
+    if (!payload.banco || !payload.agencia || !payload.conta || !payload.chavePix) {
+        erro.hidden = false; erro.textContent = 'Preencha todos os campos.'; return;
+    }
+
+    const btn = document.getElementById('btn-banc-salvar');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    try {
+        const atualizado = await api.put('/prestadores/me/dados-bancarios', payload);
+        renderDadosBancariosView(atualizado);
+    } catch (e) {
+        btn.disabled = false; btn.textContent = 'Salvar dados bancários';
+        erro.hidden = false;
+        erro.textContent = e?.data?.mensagem || 'Erro ao salvar. Talvez seja necessário confirmar o código novamente.';
+    }
 }
 
 function renderizarLinksExtrasForm(json) {
@@ -171,7 +384,7 @@ function renderizarLinksExtrasForm(json) {
             <div class="form-group">
                 <input type="url" placeholder="URL" value="${escHtml(l.url ?? '')}" class="link-url">
             </div>
-            <button type="button" class="btn-icon btn-icon--danger" onclick="removerLinkExtra(${i})">✕</button>
+            <button type="button" class="btn-icon btn-icon--danger" onclick="removerLinkExtra(${i})"><i class="fa-solid fa-xmark"></i></button>
         </div>
     `).join('');
 }
@@ -192,7 +405,7 @@ function adicionarLinkExtra() {
         <div class="form-group">
             <input type="url" placeholder="URL" class="link-url">
         </div>
-        <button type="button" class="btn-icon btn-icon--danger" onclick="removerLinkExtra(${i})">✕</button>
+        <button type="button" class="btn-icon btn-icon--danger" onclick="removerLinkExtra(${i})"><i class="fa-solid fa-xmark"></i></button>
     `;
     wrap.appendChild(div);
 }
@@ -266,12 +479,9 @@ async function salvarPerfil() {
         descricao:          document.getElementById('p-bio').value.trim()    || null,
         areaEspecializacao: document.getElementById('p-area').value.trim()   || null,
         funcaoExecutada:    document.getElementById('p-funcao').value.trim() || null,
-        valorHora:          parseFloat(document.getElementById('p-valor').value) || null,
         telefone:           document.getElementById('p-telefone').value.trim() || null,
         emailContato:       document.getElementById('p-email-contato').value.trim() || null,
         linkedinUrl:        document.getElementById('p-linkedin').value.trim() || null,
-        gitHubUrl:          document.getElementById('p-github').value.trim()   || null,
-        portfolioUrl:       document.getElementById('p-portfolio-url').value.trim() || null,
         outrosLinks:        coletarLinksExtras()
     };
 

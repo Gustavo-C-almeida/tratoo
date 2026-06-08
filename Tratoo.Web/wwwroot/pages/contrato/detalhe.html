@@ -6,20 +6,44 @@
     <title>Contrato — Tratoo</title>
     <link rel="stylesheet" href="/assets/css/main.css">
     <link rel="stylesheet" href="/assets/css/pages/contrato/detalhe.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 </head>
 <body>
     <div id="app-header"></div>
     <div id="contrato-root"></div>
 
-    <!-- Modal de assinatura -->
+    <!-- Modal de assinatura — Etapa 1: confirmação de leitura -->
     <div id="modal-assinar" class="modal-overlay" style="display:none">
         <div class="modal-box">
             <h3>Assinar contrato digitalmente</h3>
-            <p>Ao clicar em <strong>Assinar</strong>, você confirma que leu e concorda com todos os termos deste contrato.</p>
+            <p>Ao continuar, você confirma que leu e concorda com todos os termos deste contrato.</p>
             <p class="aviso-legal">Esta assinatura tem validade jurídica nos termos da MP 2.200-2/2001 e da Lei 14.129/2021.</p>
+            <p style="font-size:0.85rem;color:#6b7280;margin-top:8px">Um código de confirmação será enviado ao seu e-mail.</p>
             <div class="modal-actions">
                 <button id="modal-cancelar-btn" class="btn-secundario">Cancelar</button>
-                <button id="modal-assinar-btn" class="btn-assinar">Assinar</button>
+                <button id="modal-solicitar-otp-btn" class="btn-assinar">Continuar <i class="fa-solid fa-arrow-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de assinatura — Etapa 2: inserção do código OTP -->
+    <div id="modal-otp" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Confirmar identidade</h3>
+            <p>Insira o código de 6 dígitos enviado ao seu e-mail para concluir a assinatura.</p>
+            <div class="modal-campo" style="margin-top:16px">
+                <label for="otp-input">Código de verificação</label>
+                <input id="otp-input" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+                       placeholder="000000" autocomplete="one-time-code"
+                       style="font-size:1.5rem;letter-spacing:0.5rem;text-align:center;width:100%;padding:12px 8px;border:1px solid #d1d5db;border-radius:8px">
+                <p id="otp-erro" style="color:#ef4444;font-size:0.82rem;margin-top:6px;display:none"></p>
+            </div>
+            <p style="font-size:0.8rem;color:#9ca3af;margin-top:8px;display:flex;align-items:center;gap:4px">O código expira em 10 minutos.
+               <button id="btn-reenviar-otp" class="btn-reenviar-otp"><i class="fa-solid fa-rotate-right"></i> Reenviar</button>
+            </p>
+            <div class="modal-actions">
+                <button id="modal-otp-cancelar-btn" class="btn-secundario">Voltar</button>
+                <button id="modal-otp-confirmar-btn" class="btn-assinar">Assinar digitalmente</button>
             </div>
         </div>
     </div>
@@ -40,18 +64,62 @@
         </div>
     </div>
 
-    <!-- Modal de entrega -->
+    <!-- Modal de entrega formal -->
     <div id="modal-entrega" class="modal-overlay" style="display:none">
-        <div class="modal-box">
-            <h3>Registrar entrega</h3>
-            <p>Ao registrar a entrega, você informa ao contratante que o serviço foi concluído e está pronto para revisão.</p>
-            <p style="font-size:0.85rem;color:#dc2626;margin-top:0.5rem">
-                <strong>Atenção:</strong> após registrar a entrega, o cancelamento direto não estará mais disponível.
-                Em caso de disputa, será necessário abrir uma contestação.
-            </p>
+        <div class="modal-box modal-box-lg">
+            <h3>Registrar entrega do serviço</h3>
+            <p>Informe os detalhes da entrega e anexe as evidências do trabalho concluído.</p>
+
+            <div class="modal-campo">
+                <label for="entrega-descricao">Descrição da entrega <span class="obrigatorio">*</span></label>
+                <textarea id="entrega-descricao" rows="3" placeholder="Descreva o que está sendo entregue..."></textarea>
+            </div>
+
+            <div class="modal-campo">
+                <label for="entrega-observacoes">Observações <span class="opcional">(opcional)</span></label>
+                <textarea id="entrega-observacoes" rows="2" placeholder="Notas adicionais para o contratante..."></textarea>
+            </div>
+
+            <div class="modal-campo">
+                <label for="entrega-data">Data da entrega</label>
+                <input id="entrega-data" type="date">
+            </div>
+
+            <div class="modal-campo">
+                <label>Links externos <span class="opcional">(opcional)</span></label>
+                <div id="entrega-links-lista"></div>
+                <button type="button" id="entrega-add-link" class="btn-secundario btn-sm">+ Adicionar link</button>
+            </div>
+
+            <div class="modal-campo">
+                <label for="entrega-arquivos">Anexos <span class="opcional">(até 10 arquivos, 20 MB cada)</span></label>
+                <input id="entrega-arquivos" type="file" multiple
+                       accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip">
+                <div id="entrega-arquivos-lista" class="entrega-arquivos-preview"></div>
+                <p class="entrega-formatos">Formatos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, ZIP</p>
+            </div>
+
+            <p class="aviso-legal">Após registrar, o cancelamento direto fica indisponível enquanto a entrega aguarda aprovação.</p>
+
             <div class="modal-actions">
                 <button id="modal-entrega-fechar" class="btn-secundario">Voltar</button>
-                <button id="modal-entrega-btn" class="btn-registrar-entrega">Confirmar entrega</button>
+                <button id="modal-entrega-btn" class="btn-registrar-entrega">Enviar entrega</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de solicitar ajustes (rejeitar entrega) -->
+    <div id="modal-rejeitar" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <h3>Solicitar ajustes</h3>
+            <p>Descreva o que precisa ser ajustado. O prestador poderá registrar uma nova entrega.</p>
+            <div class="modal-campo">
+                <label for="rejeitar-motivo">Motivo <span class="obrigatorio">*</span></label>
+                <textarea id="rejeitar-motivo" rows="4" placeholder="Explique os ajustes necessários..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button id="modal-rejeitar-fechar" class="btn-secundario">Voltar</button>
+                <button id="modal-rejeitar-btn" class="btn-cancelar-contrato">Solicitar ajustes</button>
             </div>
         </div>
     </div>

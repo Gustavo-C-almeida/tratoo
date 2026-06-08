@@ -5,6 +5,10 @@ namespace Tratoo.Domain.Features.Perfis
 {
     public class CompetenciaService
     {
+        // Níveis de proficiência válidos: 1=Básico, 3=Intermediário, 4=Avançado, 5=Especialista.
+        // O nível 2 (Iniciante) foi descontinuado.
+        private static readonly int[] NiveisValidos = { 1, 3, 4, 5 };
+
         private readonly IPrestadorRepository _repo;
         private readonly PrestadorIndexadorService _indexador;
 
@@ -12,22 +16,6 @@ namespace Tratoo.Domain.Features.Perfis
         {
             _repo = repo;
             _indexador = indexador;
-        }
-
-        public async Task<List<CompetenciaDTO>> VisualizarAsync(int prestadorId)
-        {
-            var prestador = await _repo.GetCompletoAsync(prestadorId)
-                ?? throw new NegocioException("Prestador não encontrado");
-
-            return prestador.Competencias
-                .Select(c => new CompetenciaDTO
-                {
-                    Id          = c.Id,
-                    PrestadorId = c.PrestadorId,
-                    Nome        = c.Nome,
-                    Nivel       = c.Nivel,
-                })
-                .ToList();
         }
 
         public async Task AdicionarAsync(CompetenciaDTO dto)
@@ -38,8 +26,8 @@ namespace Tratoo.Domain.Features.Perfis
             if (dto.Nome.Length > 80)
                 throw new NegocioException("O nome da competência deve ter no máximo 80 caracteres.");
 
-            if (dto.Nivel < 1 || dto.Nivel > 5)
-                throw new NegocioException("O nível deve ser entre 1 (Básico) e 5 (Especialista).");
+            if (!NiveisValidos.Contains(dto.Nivel))
+                throw new NegocioException("Nível inválido. Use Básico, Intermediário, Avançado ou Especialista.");
 
             var prestador = await _repo.GetCompletoAsync(dto.PrestadorId)
                 ?? throw new NegocioException("Prestador não encontrado");
@@ -57,23 +45,6 @@ namespace Tratoo.Domain.Features.Perfis
 
             await _repo.SaveAsync();
             await _indexador.IndexarAsync(dto.PrestadorId);
-        }
-
-        public async Task EditarAsync(int prestadorId, int competenciaId, int nivel)
-        {
-            if (nivel < 1 || nivel > 5)
-                throw new NegocioException("O nível deve ser entre 1 (Básico) e 5 (Especialista).");
-
-            var prestador = await _repo.GetCompletoAsync(prestadorId)
-                ?? throw new NegocioException("Prestador não encontrado");
-
-            var competencia = prestador.Competencias.FirstOrDefault(c => c.Id == competenciaId)
-                ?? throw new NegocioException("Competência não encontrada para este prestador");
-
-            competencia.Nivel = nivel;
-
-            await _repo.SaveAsync();
-            await _indexador.IndexarAsync(prestadorId);
         }
 
         public async Task RemoverAsync(int competenciaId, int prestadorId)

@@ -10,13 +10,12 @@ namespace Tratoo.API.EndPoints
             // GET /api/busca/prestadores
             // Busca semântica de prestadores com filtros e ranking composto.
             // Aberta ao público — sem autenticação.
-            // Query: q, categoria, valorHoraMax, apenasVerificados, avaliacaoMin, page, pageSize
+            // Query: q, categoria, apenasVerificados, avaliacaoMin, page, pageSize
             // ──────────────────────────────────────────────────────────────────────
             app.MapGet("/api/busca/prestadores", async (
                 BuscaSemanticaService service,
                 string? q,
                 string? categoria,
-                decimal? valorHoraMax,
                 bool? apenasVerificados,
                 double? avaliacaoMin,
                 int? page,
@@ -26,7 +25,6 @@ namespace Tratoo.API.EndPoints
                 {
                     Q                 = q,
                     Categoria         = categoria,
-                    ValorHoraMax      = valorHoraMax,
                     ApenasVerificados = apenasVerificados,
                     AvaliacaoMin      = avaliacaoMin,
                     Page              = page ?? 1,

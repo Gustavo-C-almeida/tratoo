@@ -23,5 +23,11 @@ namespace Tratoo.Domain.Features.Perfis
 
         /// <summary>Retorna os N projetos publicados mais recentes do contratante, ordenados por PublicadoEm desc.</summary>
         Task<List<Projeto>> GetUltimosProjetosAsync(int contratanteId, int quantidade = 5);
+
+        /// <summary>
+        /// Métricas adicionais: projetos ativos (Aberto), contratos encerrados com sucesso
+        /// e média de dias entre publicação do projeto e criação do contrato.
+        /// </summary>
+        Task<(int ProjetosAtivos, int ContratosConcluidoss, double? TempoMedioDecisaoDias)> GetMetricasAdicionaisAsync(int contratanteId);
     }
 }

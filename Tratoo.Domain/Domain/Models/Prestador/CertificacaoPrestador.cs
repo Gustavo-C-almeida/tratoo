@@ -18,6 +18,9 @@ namespace Tratoo.Domain.Models.Prestador
         /// <summary>Link para verificação/validação do certificado.</summary>
         public string? LinkVerificacao { get; set; }
 
+        /// <summary>URL do certificado anexado (PDF ou imagem) armazenado no Cloudflare R2.</summary>
+        public string? ArquivoUrl { get; set; }
+
         public int PrestadorId { get; set; }
         public Prestador Prestador { get; set; }
         public ICollection<CompetenciaCertificacao> CompetenciaCertificacoes { get; set; }
