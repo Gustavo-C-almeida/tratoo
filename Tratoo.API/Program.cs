@@ -88,6 +88,7 @@ builder.Services.AddScoped<ICadastroService, CadastroService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<IIdentidadeService, IdentidadeService>();
 builder.Services.AddScoped<IExclusaoContaService, ExclusaoContaService>();
+builder.Services.Configure<Tratoo.Domain.Config.EmailSettings>(builder.Configuration.GetSection("Email"));
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IVerificacaoMFAService, VerificacaoMFAService>();
 builder.Services.AddScoped<ICacheTempService, CacheTempService>();

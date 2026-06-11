@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Mail;
+using Microsoft.Extensions.Options;
 using Tratoo.Domain.Config;
 using Tratoo.Domain.Exceptions;
 
@@ -7,13 +8,17 @@ namespace Tratoo.Domain.Features.Infrastructure
 {
     public class EmailService : IEmailService
     {
+        private readonly EmailSettings _settings;
+
+        public EmailService(IOptions<EmailSettings> options) => _settings = options.Value;
+
         public async Task EnviarCodigoVerificacaoAsync(string emailDestino, string codigo)
         {
             try
             {
                 using var mensagem = new MailMessage
                 {
-                    From = new MailAddress(EmailConfig.Remetente, "Tratoo - Verificação de Conta"),
+                    From = new MailAddress(_settings.Remetente, "Tratoo - Verificação de Conta"),
                     Subject = "Seu código de verificação",
                     Body = $@"
 Olá!
@@ -483,11 +488,11 @@ Equipe Tratoo");
 
         // ── helpers ──────────────────────────────────────────────────────────────
 
-        private static MailMessage CriarMensagem(string destino, string assunto, string corpo)
+        private MailMessage CriarMensagem(string destino, string assunto, string corpo)
         {
             var msg = new MailMessage
             {
-                From = new MailAddress(EmailConfig.Remetente, "Tratoo"),
+                From = new MailAddress(_settings.Remetente, "Tratoo"),
                 Subject = assunto,
                 Body = corpo,
                 IsBodyHtml = false
@@ -496,10 +501,10 @@ Equipe Tratoo");
             return msg;
         }
 
-        private static SmtpClient CriarSmtp() =>
-            new SmtpClient(EmailConfig.ServidorSmtp, EmailConfig.PortaSmtp)
+        private SmtpClient CriarSmtp() =>
+            new SmtpClient(_settings.ServidorSmtp, _settings.PortaSmtp)
             {
-                Credentials = new NetworkCredential(EmailConfig.Remetente, EmailConfig.Senha),
+                Credentials = new NetworkCredential(_settings.Remetente, _settings.Senha),
                 EnableSsl = true
             };
     }
