@@ -564,37 +564,6 @@ dotnet run --project Tratoo.API
 
 Acesse a aplicação na URL exibida no console (porta definida em `Tratoo.API/Properties/launchSettings.json`). Em `ASPNETCORE_ENVIRONMENT=Development`, o **Swagger** fica disponível em `/swagger` e os endpoints de **seed** (incluindo promoção de um usuário a administrador) são habilitados.
 
----
 
-## Roadmap Técnico
-
-### Prioridade 1 — Fundamentais
-| Item | Descrição |
-|------|-----------|
-| Testes automatizados | xUnit + Moq + FluentAssertions (unitários de regra de negócio + integração) |
-| FluentValidation | Separar validação de entrada da regra de negócio |
-| `PagedResult<T>` | Padronizar paginação nos GETs de coleção |
-
-### Prioridade 2 — Maturidade
-| Item | Descrição |
-|------|-----------|
-| Auditoria automática | `SaveChangesInterceptor` para `CriadoPor/AtualizadoPor` |
-| Soft delete padronizado | `ISoftDeletable` + Global Query Filter |
-| Exception middleware | Classe dedicada + `ProblemDetails` (RFC 7807) |
-| Filtros estruturados | Objeto de filtro por recurso |
-| Refatorações SOLID | Interfaces para services de perfil; quebrar `PagamentoService` |
-
-### Prioridade 3 — Escala e Resiliência
-Health Checks · Cache distribuído (Redis) · Polly (retry/circuit breaker/timeout) · Idempotência explícita nos endpoints financeiros · OpenTelemetry · Mensageria (RabbitMQ) · CQRS onde agregar valor.
-
----
-
-## Compliance Legal
-
-- **Marco Civil da Internet (Lei 12.965/2014)** — retenção de logs de ações relevantes (`AuditLog`).
-- **LGPD (Lei 13.709/2018)** — consentimento explícito (`ConsentLog`), criptografia de PII e exclusão de conta com anonimização e preservação de registros legais.
-- **MP 2.200-2/2001** — assinatura eletrônica simples com garantias (OTP + hash SHA-256 + IP); **não** utiliza certificado ICP-Brasil.
-
----
 
 <sub>README descritivo do projeto Tratoo — estudo de arquitetura .NET com escrow, contratos digitais, busca semântica e fluxo administrativo de disputas.</sub>
