@@ -46,69 +46,125 @@ Sobre valores: no MVP a plataforma não cobra taxa própria — o valor é repas
 
 ## Como Funciona (Fluxo End-to-End)
 
-Cada etapa descreve o quê acontece, como a tecnologia viabiliza e por quê a regra existe.
+### 1. Página inicial e escolha de papel
 
-### 1. Cadastro e Onboarding
+A página inicial apresenta o que a plataforma faz e para quem ela serve. Ao clicar em "Começar", o usuário escolhe em qual contexto se encaixa: "Quero contratar serviços" ou "Sou um prestador de serviços". O design das duas opções é igual; o que muda é que o cadastro já nasce apontado para o tipo certo de usuário.
 
-- O usuário cria a conta, confirma o e-mail e escolhe seu papel — Contratante (contrata serviços) ou Prestador (oferece serviços). Depois completa o perfil mínimo.
-- `POST /usuarios/cadastro` envia um OTP por e-mail (`EmailService`) e guarda dados em cache; `POST /usuarios/cadastro/confirmar` valida o código. Em `POST /usuarios/onboarding`, CPF/CNPJ é validado e criptografado em repouso (AES, `DataProtector`) em `UserIdentity`.
-- Confirmar e-mail evita contas falsas; criptografia atende LGPD; o onboarding guard impede uso com perfil incompleto.
+### 2. Cadastro e confirmação de e-mail
 
-### 2. Publicação do Projeto
+O formulário pede nome, e-mail, senha, confirmação de senha e a opção de ativar MFA (segunda camada de segurança). Independentemente do MFA, o sistema sempre envia um código de confirmação para o e-mail fornecido — sem isso o cadastro não é efetivado. Isso impede que alguém registre um e-mail que não é dele.
 
-- O contratante descreve a necessidade — escopo, prazo, orçamento e competências.
-- `POST /projetos` cria o `Projeto`; é transformado em embedding (`ProjetoIndexadorService` → OpenAI) e indexado no pgvector.
-- Representar como vetor permite encontrar profissionais por significado, não apenas palavras-chave.
+Internamente: `POST /usuarios/cadastro` envia um OTP via `EmailService` e guarda os dados em cache. `POST /usuarios/cadastro/confirmar` valida o código e persiste o usuário. CPF/CNPJ informado no onboarding é criptografado em repouso via AES (`DataProtector`) e armazenado em `UserIdentity`.
 
-### 3. Descoberta de Profissionais
+### 3. Onboarding (perfil mínimo obrigatório)
 
-- O contratante recebe sugestões de prestadores compatíveis, ou convida alguém diretamente.
-- `BuscaSemanticaService` busca em duas camadas: pgvector retorna top-100 por distância de cosseno (HNSW), C# aplica filtros + score composto (ver [Busca Semântica](#busca-semântica-openai--pgvector)).
-- Competências, experiências, certificações e portfólio entram no ranqueamento — aproximando à intenção real.
+No primeiro acesso, o sistema direciona para uma página de onboarding onde o usuário completa o perfil mínimo antes de poder usar a plataforma. Isso é obrigatório: se alguém tentar pular pela URL, o Onboarding Guard intercepta e devolve ao onboarding até que o perfil mínimo esteja completo (403 `ONBOARDING_PENDENTE`).
 
-### 4. Negociação Versionada
+O formulário se adapta ao tipo de pessoa: pessoa jurídica (caso típico de contratante empresa) exibe campos de CNPJ, razão social e segmento; pessoa física exibe CPF e dados pessoais.
 
-- O prestador envia uma proposta (valor, prazo, escopo). O contratante pode aceitar, recusar ou fazer contraproposta.
-- Cada rodada vira uma `PropostaVersao` (até 10 versões). Regra de turno obrigatório: quem enviou a última versão não pode aceitá-la. Partes trocam mensagens por projeto (`MensagemProjeto`, REST com polling), liberadas por convite.
-- Histórico versionado preserva a evolução; turno obrigatório impede que um lado "aceite a si mesmo".
+### 4. Perfil do contratante
 
-### 5. Geração e Assinatura do Contrato
+Após o onboarding, o contratante pode editar seu perfil com: foto, biografia ou apresentação da empresa, site, perfil do LinkedIn, telefone (campo privado — só a plataforma vê) e uma configuração de privacidade que controla se as avaliações recebidas ficam visíveis publicamente.
 
-- Ao aceitar, o sistema gera o contrato automaticamente; ambas as partes assinam.
-- `ContratoServico` nasce com status `Gerado`. Assinatura exige OTP por e-mail (6 dígitos, 10 min, máx. 5 tentativas). Na 1ª assinatura: calcula `ConteudoHash` (SHA-256) e registra IP → `AguardandoAssinatura`. Na 2ª: valida hash, grava `ContratoSnapshot` imutável e gera PDF (QuestPDF) no bucket privado R2.
-- OTP vincula signatário, IP rastreia, hash prova integridade, snapshot/PDF preservam conteúdo — base legal MP 2.200-2/2001 (sem certificado ICP-Brasil).
+### 5. Perfil do prestador
 
-### 6. Pagamento em Garantia (Escrow)
+O perfil do prestador é a vitrine de trabalho dele. Cada elemento preenchido impacta diretamente no ranqueamento da busca semântica.
 
-- O contratante paga via PIX, mas o valor não vai imediatamente ao prestador — fica retido.
-- `POST /api/pagamentos/iniciar` cria cobrança PIX no Asaas (QR Code). Ao confirmar, Asaas chama webhook `PAYMENT_RECEIVED` e `Pagamento` passa a `Retido`. Cada movimento registrado em `LedgerFinanceiro` (imutável).
-- Contratante só libera ao receber; prestador tem certeza que o dinheiro está reservado.
+- Completude: barra de progresso mostrando quantos % do perfil estão preenchidos, com dicas do que falta (foto, bio, competências, portfólio etc.). O campo `PorcentagemCompleto` é calculado pelo sistema.
+- Portfólio: cards dos melhores trabalhos, cada um podendo ter imagens ou PDF (upload para R2 privado), link externo (GitHub, Behance, site...), descrição e competências utilizadas naquele trabalho.
+- Competências: habilidades com nível definido (Básico, Intermediário, Avançado, Especialista) e vinculadas ao portfólio e às experiências.
+- Experiência profissional: cargos anteriores, empresa, datas, responsabilidades, opção de marcar como emprego atual e competências utilizadas.
+- Certificações: certificados com data de validade, anexo (PDF ou imagem no R2) e link de verificação.
+- Avaliações: nota média, distribuição de estrelas, comentários recebidos e opção de resposta pública.
+- Profissionais similares: exibidos no perfil público para aumentar a chance de descoberta.
 
-### 7. Entrega Formal
+### 6. Criação de projeto e recomendação inteligente
 
-- O prestador executa e registra oficialmente a entrega, com descrição, anexos e links.
-- `EntregaService` cria `Entrega` (com `EntregaAnexo` no R2 privado e `EntregaLink`), move contrato para `AguardandoAprovacaoEntrega` e registra em `HistoricoContrato`.
-- Entrega vira parte do histórico auditável do contrato e dispara a etapa de aprovação.
+O contratante cria um projeto informando título, descrição, categoria, orçamento, prazo e as habilidades que procura. O projeto pode ser salvo como rascunho (`Rascunho`) para revisão antes de publicar, ou publicado imediatamente (`Aberto`). Projetos rascunho não aparecem na busca pública — a publicação é um passo separado. Ao publicar, `ProjetoIndexadorService` transforma a descrição em embedding (OpenAI `text-embedding-3-small`, 1536 dims) e indexa no PostgreSQL/pgvector.
 
-### 8. Aprovação e Liberação do Pagamento
+Ao visualizar o projeto, o sistema apresenta o prestador mais recomendado. O `BuscaSemanticaService` opera em duas camadas: pgvector retorna os top-100 por distância de cosseno (índice HNSW), e em seguida C# aplica filtros e um score composto:
 
-- O contratante aprova a entrega ou solicita ajustes.
-- Ao aprovar: `EntregaService.AprovarEntregaAsync` encerra contrato, cria slots de avaliação (blind review) e libera pagamento via `IPagamentoService` — dispara transferência PIX ao prestador no Asaas. Liberação é definitiva com webhook `TRANSFER_DONE`. Ao solicitar ajustes: contrato volta a `Ativo` e prestador reenvia.
-- Repasse integral condicionado à aprovação. Se contratante não agir no prazo, background service libera automaticamente — protegendo prestador.
+| Fator | Peso |
+|-------|------|
+| Similaridade semântica | 35% |
+| Habilidades (match exato) | 15% |
+| Reputação | 15% |
+| Completude do perfil | 10% |
+| Contratos concluídos | 10% |
+| Verificação de identidade | 10% |
+| Disponibilidade | 5% |
 
-### 9. Avaliações (*Blind Review*)
+O capricho no perfil — competências, experiências, portfólio — faz diferença real no ranqueamento. A partir da sugestão, o contratante pode enviar um convite diretamente ao prestador.
 
-- As duas partes se avaliam após encerramento.
-- Ao liberar pagamento, `AvaliacaoService` cria 2 slots. Notas só ficam públicas quando ambos avaliam; após 7 dias, publica-se a preenchida e oculta-se vazia (`AvaliacaoExpiracaoService`). Reputação e embeddings recalculados.
-- Blind review impede avaliação retaliatória — ninguém vê a nota do outro antes de enviar a sua.
+### 7. Convites e busca de projetos
 
-### 10. Disputa e Resolução Administrativa
+Lado do prestador ao receber um convite: aparece uma notificação com os detalhes do projeto (escopo, valor, prazo). Ele aceita ou recusa. Se aceitar, entra oficialmente como candidato e imediatamente ganha acesso ao chat do projeto — ele e o contratante podem conversar desde esse momento para alinhar expectativas antes de qualquer proposta.
 
-- Havendo desacordo, contratante abre disputa e valor permanece retido.
-- `POST /api/pagamentos/{id}/disputar` cria `DisputaPagamento` e pagamento vai para `EmDisputa`. Administrador resolve pela área restrita (ver [Área Administrativa](#área-administrativa)): favor contratante (estorno + `Cancelado`) ou prestador (liberação + `Encerrado`). Tudo registrado em `HistoricoContrato`, `AuditLog` e `LedgerFinanceiro`.
-- Mediação imparcial com trilha completa — decisão é definitiva e não reabre.
+O prestador também pode buscar projetos ativamente na seção "Buscar Projetos", que exibe todos os projetos públicos dos contratantes. Os filtros disponíveis são: categoria, orçamento, prazo e palavra-chave. Cada card do projeto mostra título, descrição resumida, valor, habilidades exigidas e número de propostas enviadas. Depois de escolher, o prestador lê com calma e, se achar que dá conta, envia a proposta.
 
-### Gestão da Conta
+Além da busca manual, o sistema também recomenda projetos ao prestador automaticamente (`GET /api/busca/projetos/recomendados`), cruzando o perfil dele — competências, portfólio, experiências — contra os projetos abertos. Quanto mais completo o perfil, mais relevantes as recomendações.
+
+O chat do projeto é liberado quando existe uma proposta entre as partes — seja ela enviada pelo prestador (espontânea ou após aceitar um convite) ou criada pelo contratante via fluxo de convite. Sem proposta, o acesso ao chat é negado (403). Funciona por REST com polling (3 s com aba ativa, 30 s em segundo plano) — não usa WebSocket. As duas partes conversam nele durante toda a negociação, podendo trocar mensagens, tirar dúvidas e alinhar detalhes antes de fechar no contrato.
+
+### 8. Proposta e negociação versionada
+
+A proposta tem dois estados antes de chegar ao contratante: o prestador primeiro cria um rascunho (`POST /api/propostas`) com valor, prazo, escopo e marcos de entrega, revisa e então envia explicitamente (`POST /api/propostas/{id}/enviar`). Só após o envio ela aparece para o contratante.
+
+O contratante pode aceitar, recusar ou fazer uma contraproposta. Cada rodada vira uma `PropostaVersao` (até 10 versões), com regra de turno obrigatório: quem enviou a última versão não pode aceitá-la — o que impede que um lado "aceite a si mesmo". Recusar encerra a proposta sem gerar contrato; o prestador pode cancelar a própria proposta enquanto ela está pendente.
+
+Na tela de propostas recebidas, o contratante vê um selo "Convidado" nas propostas de quem ele chamou diretamente e pode filtrar entre propostas de convidados e espontâneas, o que ajuda a organizar quando o projeto recebe muitos candidatos. Todo o histórico de versões fica registrado, versão por versão.
+
+Ao aceitar, o sistema gera automaticamente um contrato pendente de assinatura dos dois lados.
+
+### 9. Contrato e assinatura digital
+
+Cada parte assina com um OTP enviado por e-mail (6 dígitos, validade de 10 minutos, máximo de 5 tentativas). Na primeira assinatura, o sistema calcula o `ConteudoHash` (SHA-256) do contrato e registra o IP — status muda para `AguardandoAssinatura`. Na segunda, valida o hash, grava um `ContratoSnapshot` imutável com os dados das partes, gera o PDF (QuestPDF) e o armazena no bucket R2 privado.
+
+Se alguém tentar alterar qualquer dado depois, o hash detecta. O snapshot congela o que foi acordado. Base legal: MP 2.200-2/2001 (assinatura eletrônica simples, sem certificado ICP-Brasil).
+
+Após a segunda assinatura, o PDF do contrato fica disponível para ambas as partes via URL pré-assinada temporária (15 minutos, gerada sob demanda no R2 privado).
+
+### 10. Pagamento em garantia (escrow)
+
+Com o contrato assinado, o sistema leva o contratante para o pagamento. O valor não vai direto ao prestador — fica retido na plataforma (escrow). `POST /api/pagamentos/iniciar` cria a cobrança PIX no Asaas e retorna o QR Code. O contratante paga; o Asaas chama o webhook `PAYMENT_RECEIVED` e o `Pagamento` passa para `Retido`. Cada movimentação é registrada em `LedgerFinanceiro` (imutável).
+
+A tela mostra de forma transparente o valor bruto, a taxa operacional do gateway (campo `TaxaGateway`, meramente informativo — não é deduzido do repasse) e o que o prestador recebe.
+
+O prestador tem a garantia de que o dinheiro existe e está reservado. O contratante tem a garantia de que ele só sai quando o serviço for entregue.
+
+### 11. Execução e chat
+
+Com o pagamento feito, o projeto entra em andamento. As partes continuam se comunicando pelo chat do projeto. Quando o prestador termina, ele registra a entrega formalmente.
+
+### 12. Entrega formal
+
+O prestador registra a entrega com descrição, observações, data, links externos e anexos (arquivos enviados ao bucket R2 privado). `EntregaService` cria a entidade `Entrega` com status `PendenteAprovacao`, move o contrato para `AguardandoAprovacaoEntrega`, atualiza `EntregaRegistradaEm` e registra em `HistoricoContrato`. O contratante é notificado.
+
+### 13. Aprovação e liberação do pagamento
+
+O contratante confere a entrega. Se estiver tudo certo, aprova — `AprovarEntregaAsync` encerra o contrato, cria os slots de avaliação (blind review) e dispara `IPagamentoService.LiberarPagamentoAsync`, que inicia a transferência PIX ao prestador no Asaas. O webhook `TRANSFER_DONE` confirma e o pagamento vai para `Liberado`.
+
+Se houver algo a corrigir, o contratante solicita ajustes com um motivo obrigatório — a entrega vai para `Rejeitada`, o contrato volta a `Ativo` e o prestador pode enviar uma nova entrega.
+
+Se o contratante não agir dentro do prazo, `PagamentoLiberacaoService` (background) libera automaticamente — protegendo quem trabalhou.
+
+### 14. Cancelamento e estorno
+
+Cancelamento de contrato: qualquer das partes pode cancelar, mas o sistema trata de forma justa — antes do pagamento é gratuito; com contrato ativo sem entrega, pode haver taxa de 5%; com entrega já registrada, o cancelamento é bloqueado e o caminho passa a ser a disputa. A regra usa `EntregaRegistradaEm` para determinar a situação.
+
+Estorno de pagamento: antes de qualquer liberação ao prestador, o contratante pode solicitar estorno diretamente (`POST /api/pagamentos/{id}/estornar`). Isso aciona a devolução via Asaas sem necessidade de abrir disputa — um caminho mais simples para casos onde houve erro no pagamento ou acordo entre as partes. Diferente da disputa, o estorno não passa por análise administrativa.
+
+### 15. Disputa e resolução administrativa
+
+Se o contratante discordar da entrega em vez de aprovar ou solicitar ajustes, pode abrir uma disputa. `POST /api/pagamentos/{id}/disputar` cria `DisputaPagamento` e o pagamento vai para `EmDisputa` — a liberação automática por prazo fica suspensa. Um administrador resolve pela área restrita: a favor do contratante (estorno + `Cancelado`) ou do prestador (liberação + `Encerrado`). A decisão é imutável e gera trilha em `HistoricoContrato`, `AuditLog` e `LedgerFinanceiro`.
+
+### 16. Avaliação às cegas e reputação
+
+Com o contrato encerrado e o pagamento liberado, os dois se avaliam. É uma avaliação às cegas (blind review): nenhum dos lados vê a nota do outro até que ambos avaliem, ou até o prazo de 7 dias acabar. Após esse ponto, `AvaliacaoExpiracaoService` publica as avaliações preenchidas e oculta as vazias.
+
+Isso existe para ninguém ter medo de ser honesto. Se a nota aparecesse na hora, dava para esperar, ver o que recebeu, e devolver uma nota de vingança. Às cegas, cada um avalia de verdade. As notas entram na reputação pública do prestador — a nota média, distribuição de estrelas e comentários que aparecem no perfil. Com o tempo, os bons profissionais se destacam.
+
+### Gestão da conta
 
 A qualquer momento o usuário pode atualizar perfil, experiências, certificações e portfólio, configurar chave PIX, ativar MFA, alterar senha ou solicitar exclusão. Na exclusão, dados pessoais são anonimizados (nome → "Usuário indisponível", e-mail removido, login bloqueado, perfil retirado das buscas), mas contratos, pagamentos e avaliações são preservados para fins legais.
 
