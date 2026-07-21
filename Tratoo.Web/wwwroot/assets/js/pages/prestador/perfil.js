@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
 const root = () => document.getElementById('perfil-root');

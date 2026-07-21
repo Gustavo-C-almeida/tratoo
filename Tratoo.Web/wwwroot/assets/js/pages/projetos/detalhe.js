@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Detalhe do projeto + proposta v2 + convites ─────────────────────────────
 
 const root = () => document.getElementById('detalhe-root');

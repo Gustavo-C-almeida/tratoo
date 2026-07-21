@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // Página: /pages/avaliacao/enviar.html?id={guid}
 // Exibe o formulário de avaliação (nota + comentário + privacidade) para um slot pendente.
 

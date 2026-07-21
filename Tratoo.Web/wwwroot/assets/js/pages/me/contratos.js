@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // Página: /pages/me/contratos.html
 // Lista todos os contratos do usuário logado (contratante ou prestador).
 

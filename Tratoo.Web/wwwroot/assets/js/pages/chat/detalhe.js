@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Conversa de projeto — Design Moderno Aprimorado ─────────────────────────
 
 const root = () => document.getElementById('chat-detalhe-root');

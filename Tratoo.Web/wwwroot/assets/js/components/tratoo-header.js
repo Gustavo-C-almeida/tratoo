@@ -1,20 +1,28 @@
-// ── Header inteligente — detecta o tipo e carrega o componente certo ──────────
+// ── <tratoo-header> ──────────────────────────────────────────────────────────
+// Header inteligente como Custom Element (light DOM — usa o CSS global de
+// /assets/css/components/header.css). Detecta a variante pela URL / usuário
+// autenticado, injeta o markup correspondente e liga os comportamentos
+// (dropdown do usuário, menu mobile, link ativo e logout).
+//
+// Substitui o antigo par `core/header.js` (IIFE global) + `<div id="app-header">`,
+// dando um ciclo de vida real (connectedCallback) em vez de um script solto que
+// dependia da ordem de carregamento no <body>.
 
-(function () {
-    var _cachedUser = null;
+export class TratooHeader extends HTMLElement {
+    async connectedCallback() {
+        // connectedCallback pode disparar mais de uma vez se o elemento for movido;
+        // inicializamos apenas uma vez.
+        if (this._initialized) return;
+        this._initialized = true;
 
-    // ── Ponto de entrada ──────────────────────────────────────────────────────
-    async function initHeader() {
-        var el = document.getElementById('app-header');
-        if (!el) return;
-
-        var type = await _detectType();
-        await _loadHeader(el, type);
+        this._user = null;
+        const type = await this._detectType();
+        await this._render(type);
     }
 
-    // ── Detecção do tipo de header baseada na URL ─────────────────────────────
-    async function _detectType() {
-        var path = window.location.pathname;
+    // ── Detecção da variante baseada na URL ───────────────────────────────────
+    async _detectType() {
+        const path = window.location.pathname;
 
         // Páginas de autenticação (header mínimo: só logo)
         if (/\/pages\/auth\/(login|cadastro-cliente|cadastro-prestador|onboarding)\.html/.test(path)) {
@@ -26,10 +34,10 @@
             return 'contratante';
         }
 
-        // Perfil público do prestador — mostra header de acordo com o usuário autenticado
-        // (não apenas "prestador", pois contratantes também devem ver o header deles)
+        // Perfil público do prestador — mostra o header de acordo com o usuário
+        // autenticado (contratantes também devem ver o header deles).
         if (path.includes('/pages/prestador/perfil.html')) {
-            return await _getUserHeaderType('publico');
+            return await this._getUserHeaderType('publico');
         }
 
         // Páginas do prestador (exceto perfil público)
@@ -39,12 +47,12 @@
 
         // Páginas compartilhadas autenticadas — detecta pelo /api/me
         if (/\/pages\/(me|contrato|proposta|pagamento|avaliacao|chat|admin)\//.test(path)) {
-            return await _getUserHeaderType('publico');
+            return await this._getUserHeaderType('publico');
         }
 
-        // Página de projetos — se logado, mostra nav do usuário; senão, header público
+        // Página de projetos — se logado, mostra nav do usuário; senão, público
         if (path.startsWith('/pages/projetos/')) {
-            return await _getUserHeaderType('publico');
+            return await this._getUserHeaderType('publico');
         }
 
         // Raiz, start, termos e qualquer outra coisa -> header público
@@ -52,68 +60,66 @@
     }
 
     // ── Obtém o tipo do usuário (usa cache do auth-guard se disponível) ────────
-    async function _getUserHeaderType(fallback) {
-        // Aproveita o cache já preenchido pelo auth-guard.js
+    async _getUserHeaderType(fallback) {
         if (window.__tratooUser) {
-            _cachedUser = window.__tratooUser;
-            return _cachedUser.tipo === 'Contratante' ? 'contratante' : 'prestador';
+            this._user = window.__tratooUser;
+            return this._user.tipo === 'Contratante' ? 'contratante' : 'prestador';
         }
         try {
-            var res = await fetch('/api/me', { credentials: 'same-origin' });
+            const res = await fetch('/api/me', { credentials: 'same-origin' });
             if (!res.ok) return fallback;
-            var user = await res.json();
-            _cachedUser = user;
+            const user = await res.json();
+            this._user = user;
             return user.tipo === 'Contratante' ? 'contratante' : 'prestador';
         } catch (_) {
             return fallback;
         }
     }
 
-    // ── Injeta o HTML do componente e inicializa comportamentos ───────────────
-    async function _loadHeader(el, type) {
+    // ── Injeta o HTML da variante e inicializa comportamentos ─────────────────
+    async _render(type) {
         try {
-            var res = await fetch('/components/header-' + type + '.html');
+            const res = await fetch('/components/header-' + type + '.html');
             if (!res.ok) return;
-            el.innerHTML = await res.text();
+            this.innerHTML = await res.text();
         } catch (_) {
             return;
         }
 
         if (type === 'contratante' || type === 'prestador') {
-            await _initAuthHeader();
+            await this._initAuthHeader();
         }
 
-        _initMobileMenu();
-        _markActiveLink();
+        this._initMobileMenu();
+        this._markActiveLink();
     }
 
-    // ── Inicializa o header autenticado (nome, dropdown, logout) ──────────────
-    async function _initAuthHeader() {
-        // Busca dados do usuário (usa cache do auth-guard ou chamada anterior)
-        if (!_cachedUser && window.__tratooUser) {
-            _cachedUser = window.__tratooUser;
+    // ── Header autenticado (nome, dropdown, logout) ───────────────────────────
+    async _initAuthHeader() {
+        if (!this._user && window.__tratooUser) {
+            this._user = window.__tratooUser;
         }
-        if (!_cachedUser) {
+        if (!this._user) {
             try {
-                var res = await fetch('/api/me', { credentials: 'same-origin' });
-                if (res.ok) _cachedUser = await res.json();
+                const res = await fetch('/api/me', { credentials: 'same-origin' });
+                if (res.ok) this._user = await res.json();
             } catch (_) {}
         }
 
-        if (_cachedUser) {
-            var nome = _cachedUser.nome || 'Usuário';
-            var inicial = nome.trim().charAt(0).toUpperCase();
+        if (this._user) {
+            const nome = this._user.nome || 'Usuário';
+            const inicial = nome.trim().charAt(0).toUpperCase();
 
-            var nameEl = document.getElementById('header-user-name');
-            var avatarEl = document.getElementById('header-user-avatar');
+            const nameEl = this.querySelector('#header-user-name');
+            const avatarEl = this.querySelector('#header-user-avatar');
             if (nameEl) nameEl.textContent = nome;
             if (avatarEl) avatarEl.textContent = inicial;
 
             // Link da área administrativa — visível apenas para administradores.
-            if (_cachedUser.isAdmin === true) {
-                var nav = document.getElementById('header-nav');
-                if (nav && !document.getElementById('header-admin-link')) {
-                    var adminLink = document.createElement('a');
+            if (this._user.isAdmin === true) {
+                const nav = this.querySelector('#header-nav');
+                if (nav && !this.querySelector('#header-admin-link')) {
+                    const adminLink = document.createElement('a');
                     adminLink.id = 'header-admin-link';
                     adminLink.href = '/pages/admin/disputas.html';
                     adminLink.textContent = 'Disputas (Admin)';
@@ -123,13 +129,13 @@
         }
 
         // Toggle do dropdown
-        var userBtn = document.getElementById('header-user-btn');
-        var dropdown = document.getElementById('header-user-dropdown');
+        const userBtn = this.querySelector('#header-user-btn');
+        const dropdown = this.querySelector('#header-user-dropdown');
 
         if (userBtn && dropdown) {
             userBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
-                var isOpen = dropdown.classList.toggle('open');
+                const isOpen = dropdown.classList.toggle('open');
                 userBtn.setAttribute('aria-expanded', String(isOpen));
             });
 
@@ -148,7 +154,7 @@
         }
 
         // Logout
-        var logoutBtn = document.getElementById('header-logout-btn');
+        const logoutBtn = this.querySelector('#header-logout-btn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', async function () {
                 logoutBtn.textContent = 'Saindo...';
@@ -162,13 +168,13 @@
     }
 
     // ── Hamburger (menu mobile) ───────────────────────────────────────────────
-    function _initMobileMenu() {
-        var toggle = document.getElementById('header-menu-toggle');
-        var nav = document.getElementById('header-nav');
+    _initMobileMenu() {
+        const toggle = this.querySelector('#header-menu-toggle');
+        const nav = this.querySelector('#header-nav');
         if (!toggle || !nav) return;
 
         toggle.addEventListener('click', function () {
-            var isOpen = nav.classList.toggle('open');
+            const isOpen = nav.classList.toggle('open');
             toggle.classList.toggle('active', isOpen);
             toggle.setAttribute('aria-expanded', String(isOpen));
         });
@@ -184,9 +190,9 @@
     }
 
     // ── Marca o link ativo baseado na URL atual ───────────────────────────────
-    function _markActiveLink() {
-        var path = window.location.pathname;
-        var links = document.querySelectorAll('#header-nav a[href]');
+    _markActiveLink() {
+        const path = window.location.pathname;
+        const links = this.querySelectorAll('#header-nav a[href]');
         links.forEach(function (a) {
             if (a.getAttribute('href') === path) {
                 a.classList.add('active');
@@ -194,11 +200,4 @@
             }
         });
     }
-
-    // ── Executa ao DOM estar pronto ───────────────────────────────────────────
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initHeader);
-    } else {
-        initHeader();
-    }
-})();
+}

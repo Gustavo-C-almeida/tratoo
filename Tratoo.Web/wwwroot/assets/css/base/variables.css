@@ -1,6 +1,14 @@
 /* ============================================================================
    TRATOO — Design Tokens
    Fonte unica de verdade para cores, espacamentos, tipografia e efeitos.
+
+   CONVENCAO (ver wwwroot/CONTRIBUTING.md):
+     • Use SEMPRE os tokens abaixo via var(--token) — nao repita valores hex,
+       px ou rem "crus" no CSS de feature.
+     • Classes seguem BEM: bloco / bloco__elemento / bloco--modificador
+       (ex.: .login__form, .cadastro__button, .header-user--admin).
+     • Componentes reutilizaveis (botao, card, badge) devem morar em
+       assets/css/components/ — nao reimplementados por pagina.
    ============================================================================ */
 
 :root {

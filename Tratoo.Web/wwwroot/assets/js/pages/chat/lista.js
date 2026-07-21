@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Lista centralizada de chats ───────────────────────────────────────────────
 
 const root = () => document.getElementById('chat-root');

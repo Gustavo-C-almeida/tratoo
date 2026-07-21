@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Meus projetos (painel do contratante) ────────────────────────────────────
 
 const root = () => document.getElementById('meus-projetos-root');

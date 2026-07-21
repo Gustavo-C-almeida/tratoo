@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Minhas propostas (prestador) ─────────────────────────────────────────────
 
 const root = () => document.getElementById('propostas-root');

@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Estado do onboarding ──────────────────────────────────────────────────────
 const estado = {
     tipoPessoa: null,           // 'PessoaFisica' | 'PessoaJuridica'

@@ -1,3 +1,8 @@
+// ── services/api.js — wrapper central de fetch (ES module) ───────────────────
+// Importe com: `import { api } from '/assets/js/services/api.js';`
+// Centraliza método/headers/credenciais, tratamento de erro `{ status, data }`
+// e o overlay de loading global (com debounce de 200ms).
+
 const API_BASE = '';
 
 // ── Loading overlay global ────────────────────────────────────────────────────
@@ -44,7 +49,7 @@ function _hideLoading() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const api = {
+export const api = {
     async post(endpoint, body) {
         _showLoading();
         try {

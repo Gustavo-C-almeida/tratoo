@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Listagem pública de projetos (US-05) — com busca semântica IA ────────────
 
 const root = () => document.getElementById('projetos-root');
