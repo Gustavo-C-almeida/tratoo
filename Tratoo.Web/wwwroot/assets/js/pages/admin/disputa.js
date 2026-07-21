@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Administração de Disputas — Detalhe + Resolução ─────────────────────────
 
 const root = () => document.getElementById('admin-root');

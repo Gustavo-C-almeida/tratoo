@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Buscar Profissionais — busca semântica com IA ────────────────────────────
 
 const root = () => document.getElementById('busca-root');

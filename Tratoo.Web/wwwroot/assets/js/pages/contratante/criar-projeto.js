@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Criar / publicar projeto (US-04) ─────────────────────────────────────────
 
 const root = () => document.getElementById('criar-projeto-root');

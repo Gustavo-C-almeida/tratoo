@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Editar Perfil Prestador ───────────────────────────────────────────────────
 // Carrega os dados do próprio perfil e permite edição em seções.
 

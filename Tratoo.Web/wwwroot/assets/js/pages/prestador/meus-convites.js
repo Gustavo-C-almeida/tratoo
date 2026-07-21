@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Meus Convites (prestador) ────────────────────────────────────────────────
 
 const root = () => document.getElementById('convites-root');

@@ -1,3 +1,7 @@
+import { api } from '/assets/js/services/api.js';
+import { onReady } from '/assets/js/core/app.js';
+import { escapeHtml, setButtonLoading, showError, getErrorMessage } from '/assets/js/utils/form.js';
+
 // e-mail guardado em memória para os fluxos de MFA e reset de senha
 let emailMFA = null;
 let dadosLoginPendente = null; // Guarda dados temporários do login
@@ -190,13 +194,6 @@ function renderizarSucessoReset() {
     `;
 }
 
-// Função auxiliar para evitar XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // ── Função de redirecionamento ───────────────────────────────────────────────
 
 async function redirecionarAposLogin(perfilCompleto, tipo) {
@@ -226,52 +223,13 @@ async function redirecionarAposLogin(perfilCompleto, tipo) {
 }
 
 // ── Erros ─────────────────────────────────────────────────────────────────────
+// Usam o helper compartilhado utils/form.js (showError): login/MFA rolam até o
+// erro e auto-ocultam após 5s; as telas de reset apenas exibem inline.
 
-function mostrarErroLogin(msg) {
-    const el = document.getElementById('login-erro');
-    if (el) {
-        el.textContent = msg;
-        el.hidden = false;
-
-        // Scroll suave até o erro
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        // Auto-esconder após 5 segundos
-        setTimeout(() => {
-            if (el && !el.hidden) {
-                el.hidden = true;
-            }
-        }, 5000);
-    }
-}
-
-function mostrarErroMFA(msg) {
-    const el = document.getElementById('mfa-erro');
-    if (el) {
-        el.textContent = msg;
-        el.hidden = false;
-
-        // Scroll suave até o erro
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        // Auto-esconder após 5 segundos
-        setTimeout(() => {
-            if (el && !el.hidden) {
-                el.hidden = true;
-            }
-        }, 5000);
-    }
-}
-
-function mostrarErroEsqueceu(msg) {
-    const el = document.getElementById('esqueceu-erro');
-    if (el) { el.textContent = msg; el.hidden = false; }
-}
-
-function mostrarErroResetar(msg) {
-    const el = document.getElementById('resetar-erro');
-    if (el) { el.textContent = msg; el.hidden = false; }
-}
+function mostrarErroLogin(msg)    { showError('login-erro', msg, { autoHideMs: 5000 }); }
+function mostrarErroMFA(msg)      { showError('mfa-erro', msg, { autoHideMs: 5000 }); }
+function mostrarErroEsqueceu(msg) { showError('esqueceu-erro', msg, { scroll: false }); }
+function mostrarErroResetar(msg)  { showError('resetar-erro', msg, { scroll: false }); }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -296,9 +254,7 @@ document.addEventListener('submit', async function (e) {
         }
 
         const btn = form.querySelector('button[type="submit"]');
-        const textoOriginal = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Aguarde...';
+        const restaurarBtn = setButtonLoading(btn, 'Aguarde...');
 
         try {
             const response = await api.post('/usuarios/login', { email, senha });
@@ -318,12 +274,8 @@ document.addEventListener('submit', async function (e) {
             await redirecionarAposLogin(response.perfilCompleto, response.tipo);
 
         } catch (err) {
-            const msg = err?.data?.mensagem
-                ?? err?.data?.message
-                ?? 'E-mail ou senha incorretos.';
-            mostrarErroLogin(msg);
-            btn.disabled = false;
-            btn.textContent = textoOriginal;
+            mostrarErroLogin(getErrorMessage(err, 'E-mail ou senha incorretos.'));
+            restaurarBtn();
         }
     }
 
@@ -343,9 +295,7 @@ document.addEventListener('submit', async function (e) {
         }
 
         const btn = form.querySelector('button[type="submit"]');
-        const textoOriginal = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Verificando...';
+        const restaurarBtn = setButtonLoading(btn, 'Verificando...');
 
         try {
             // Verifica se temos email para validar
@@ -365,13 +315,9 @@ document.addEventListener('submit', async function (e) {
             await redirecionarAposLogin(response.perfilCompleto, response.tipo);
 
         } catch (err) {
-            const msg = err?.data?.mensagem
-                ?? err?.data?.message
-                ?? err?.message
-                ?? 'Código inválido ou expirado. Tente novamente.';
+            const msg = getErrorMessage(err, 'Código inválido ou expirado. Tente novamente.');
             mostrarErroMFA(msg);
-            btn.disabled = false;
-            btn.textContent = textoOriginal;
+            restaurarBtn();
 
             // Se for erro de sessão expirada, limpa os dados e volta ao login
             if (msg.includes('Sessão expirada') || err?.status === 401) {
@@ -393,18 +339,15 @@ document.addEventListener('submit', async function (e) {
         }
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.textContent = 'Enviando...';
+        const restaurarBtn = setButtonLoading(btn, 'Enviando...');
 
         try {
             await api.post('/usuarios/senha/resetar/solicitar', { email });
             // Sempre avança para a tela do código (a API nunca revela se o e-mail existe)
             renderizarFormResetarSenha(email);
         } catch (err) {
-            const msg = err?.data?.mensagem ?? 'Não foi possível enviar o código. Tente novamente.';
-            mostrarErroEsqueceu(msg);
-            btn.disabled = false;
-            btn.textContent = 'Enviar código';
+            mostrarErroEsqueceu(getErrorMessage(err, 'Não foi possível enviar o código. Tente novamente.'));
+            restaurarBtn();
         }
     }
 
@@ -428,8 +371,7 @@ document.addEventListener('submit', async function (e) {
         }
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.textContent = 'Redefinindo...';
+        const restaurarBtn = setButtonLoading(btn, 'Redefinindo...');
 
         try {
             await api.post('/usuarios/senha/resetar', {
@@ -440,10 +382,8 @@ document.addEventListener('submit', async function (e) {
             });
             renderizarSucessoReset();
         } catch (err) {
-            const msg = err?.data?.mensagem ?? 'Código inválido ou expirado. Tente novamente.';
-            mostrarErroResetar(msg);
-            btn.disabled = false;
-            btn.textContent = 'Redefinir senha';
+            mostrarErroResetar(getErrorMessage(err, 'Código inválido ou expirado. Tente novamente.'));
+            restaurarBtn();
         }
     }
 }); // ── fim do handler de submit ──
@@ -482,7 +422,7 @@ document.addEventListener('click', function (e) {
 });
 
 // ── Inicialização ─────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+onReady(() => {
     limparDadosSessao();
     renderizarFormLogin();
 });

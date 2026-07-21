@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Perfil Contratante ────────────────────────────────────────────────────────
 // Público por ID (?id=123) ou próprio perfil quando autenticado como contratante.
 

@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Editar Perfil Contratante ──────────────────────────────────────────────────
 
 const root = () => document.getElementById('editar-root');

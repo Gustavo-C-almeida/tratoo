@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // Página: /pages/contrato/detalhe.html?id={guid}
 // Design Moderno para Detalhe do Contrato
 

@@ -350,9 +350,17 @@
 
 /* ── Landing Footer ──────────────────────────────────────────────────────── */
 
+/* Custom elements <tratoo-header>/<tratoo-footer> são inline por padrão —
+   forçamos display:block para preservar o layout que os antigos
+   <div id="app-header">/<div id="site-footer"> tinham. */
+tratoo-header,
+tratoo-footer {
+    display: block;
+}
+
 /* Sticky footer: empurra o footer ao fundo quando o conteúdo é insuficiente
    para preencher a viewport. Funciona em conjunto com body { display: flex }.  */
-#site-footer {
+tratoo-footer {
     margin-top: auto;
 }
 

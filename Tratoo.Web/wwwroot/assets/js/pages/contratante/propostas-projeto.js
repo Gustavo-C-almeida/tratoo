@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Propostas do projeto (contratante) - Design Moderno ──────────────────────
 
 const root = () => document.getElementById('root');

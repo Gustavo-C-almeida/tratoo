@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // Página: /pages/pagamento/detalhe.html?id={guid}
 // Exibe detalhes do pagamento PIX com escrow, QR Code, ledger e disputas.
 

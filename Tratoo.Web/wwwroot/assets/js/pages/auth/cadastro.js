@@ -1,3 +1,7 @@
+import { api } from '/assets/js/services/api.js';
+import { onReady } from '/assets/js/core/app.js';
+import { setButtonLoading, getErrorMessage } from '/assets/js/utils/form.js';
+
 let emailPendente = null;
 let reenvioTimer = null;
 
@@ -221,9 +225,7 @@ document.addEventListener('click', async function (e) {
         }
         iniciarContadorReenvio();
     } catch (err) {
-        const msg = err?.data?.mensagem
-            ?? err?.data?.message
-            ?? 'Erro ao reenviar código. Tente novamente.';
+        const msg = getErrorMessage(err, 'Erro ao reenviar código. Tente novamente.');
         if (feedbackEl) {
             feedbackEl.textContent = `${msg}`;
             feedbackEl.className = 'cadastro__reenvio-feedback cadastro__reenvio-feedback--erro';
@@ -259,8 +261,7 @@ document.addEventListener('submit', async function (e) {
         const mfa = document.getElementById('mfaHabilitado')?.checked ?? false;
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.textContent = 'Aguarde...';
+        const restaurarBtn = setButtonLoading(btn, 'Aguarde...');
 
         try {
             await api.post('/usuarios/cadastro', {
@@ -274,12 +275,9 @@ document.addEventListener('submit', async function (e) {
             });
             mostrarFormConfirmacao(email);
         } catch (err) {
-            const msg = err?.data?.mensagem
-                ?? err?.data?.message
-                ?? 'Erro ao realizar cadastro. Tente novamente.';
+            const msg = getErrorMessage(err, 'Erro ao realizar cadastro. Tente novamente.');
             mostrarErro(`<i class="fa-solid fa-circle-xmark"></i> ${msg}`, 'cadastro');
-            btn.disabled = false;
-            btn.textContent = 'Cadastrar';
+            restaurarBtn();
         }
     }
 
@@ -300,8 +298,7 @@ document.addEventListener('submit', async function (e) {
         ocultarErro('confirmar');
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.textContent = 'Verificando...';
+        const restaurarBtn = setButtonLoading(btn, 'Verificando...');
 
         try {
             const data = await api.post('/usuarios/cadastro/confirmar', {
@@ -310,18 +307,15 @@ document.addEventListener('submit', async function (e) {
             });
             mostrarSucessoFinal(data.mensagem ?? '<i class="fa-solid fa-check"></i> Cadastro confirmado com sucesso!');
         } catch (err) {
-            const msg = err?.data?.mensagem
-                ?? err?.data?.message
-                ?? 'Código inválido ou expirado. Tente novamente.';
+            const msg = getErrorMessage(err, 'Código inválido ou expirado. Tente novamente.');
             mostrarErro(`<i class="fa-solid fa-circle-xmark"></i> ${msg}`, 'confirmar');
-            btn.disabled = false;
-            btn.textContent = 'Confirmar';
+            restaurarBtn();
         }
     }
 });
 
 // Adicionar validação em tempo real (opcional)
-document.addEventListener('DOMContentLoaded', () => {
+onReady(() => {
     // Remover validação nativa do HTML5
     const forms = document.querySelectorAll('form');
     forms.forEach(form => {

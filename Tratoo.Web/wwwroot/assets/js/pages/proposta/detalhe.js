@@ -1,3 +1,4 @@
+import { api } from '/assets/js/services/api.js';
 // ── Detalhe e negociação de proposta (v3 - Melhorada) ───────────────────────
 
 const root = () => document.getElementById('proposta-root');
