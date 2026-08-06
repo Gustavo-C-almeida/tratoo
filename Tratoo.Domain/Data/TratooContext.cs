@@ -68,7 +68,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<Usuario>()
             .Property(u => u.DataCadastro)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<Usuario>()
             .Property(u => u.Status)
@@ -176,7 +176,7 @@ public class TratooContext : DbContext
         // Ledger é imutável — nunca deve ser atualizado
         modelBuilder.Entity<LedgerFinanceiro>()
             .Property(l => l.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         // =======================
         // DISPUTA PAGAMENTO
@@ -206,7 +206,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<WebhookLog>()
             .Property(w => w.RecebidoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
 
         // =======================
@@ -226,7 +226,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<Avaliacao>()
             .Property(a => a.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<Avaliacao>()
             .Property(a => a.Comentario)
@@ -316,7 +316,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<Projeto>()
             .Property(p => p.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<Projeto>()
             .HasOne(p => p.Contratante)
@@ -346,7 +346,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<PropostaProjeto>()
             .Property(p => p.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<PropostaProjeto>()
             .HasOne(p => p.Projeto)
@@ -379,7 +379,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<PropostaVersao>()
             .Property(v => v.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<PropostaVersao>()
             .HasOne(v => v.Proposta)
@@ -404,7 +404,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<MensagemProjeto>()
             .Property(m => m.EnviadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<MensagemProjeto>()
             .HasOne(m => m.Projeto)
@@ -442,7 +442,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<ContratoServico>()
             .Property(c => c.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<ContratoServico>()
             .HasOne(c => c.Projeto)
@@ -495,7 +495,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<ContratoSnapshot>()
             .Property(s => s.CongeladoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         // =======================
         // HISTORICO ASSINATURA
@@ -506,7 +506,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<HistoricoAssinatura>()
             .Property(h => h.DataEvento)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<HistoricoAssinatura>()
             .Property(h => h.Ip)
@@ -539,7 +539,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<PortfolioPrestador>()
             .Property(p => p.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         // =======================
         // COMPETENCIA ↔ PORTFOLIO
@@ -610,7 +610,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<ConviteProjeto>()
             .Property(c => c.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<ConviteProjeto>()
             .HasOne(c => c.Projeto)
@@ -673,7 +673,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<Entrega>()
             .Property(e => e.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<Entrega>()
             .HasOne(e => e.ContratoServico)
@@ -699,7 +699,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<EntregaAnexo>()
             .Property(a => a.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<EntregaAnexo>()
             .HasOne(a => a.Entrega)
@@ -722,7 +722,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<EntregaLink>()
             .Property(l => l.CriadoEm)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<EntregaLink>()
             .HasOne(l => l.Entrega)
@@ -741,7 +741,7 @@ public class TratooContext : DbContext
 
         modelBuilder.Entity<HistoricoContrato>()
             .Property(h => h.DataEvento)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("timezone('utc', now())");
 
         modelBuilder.Entity<HistoricoContrato>()
             .HasIndex(h => h.ContratoServicoId);

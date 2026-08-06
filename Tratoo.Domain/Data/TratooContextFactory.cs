@@ -24,7 +24,13 @@ namespace Tratoo.Domain.Data
             var connectionString = configuration.GetConnectionString("DefaultConnection");
 
             var optionsBuilder = new DbContextOptionsBuilder<TratooContext>();
-            optionsBuilder.UseSqlServer(connectionString);
+
+            // SetPostgresVersion evita que o EF precise abrir conexão real com o
+            // banco só para detectar a versão do servidor — necessário para
+            // `dotnet ef migrations add` funcionar mesmo com uma connection string
+            // ainda não apontada para um Neon acessível. Ajustar se o Neon rodar
+            // outro major (confere com `SELECT version();`).
+            optionsBuilder.UseNpgsql(connectionString, o => o.SetPostgresVersion(16, 0));
 
             return new TratooContext(optionsBuilder.Options);
         }

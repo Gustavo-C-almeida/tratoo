@@ -32,7 +32,7 @@ builder.Host.UseSerilog((ctx, config) =>
             retainedFileCountLimit: 30));
 
 builder.Services.AddDbContext<TratooContext>(options =>
-    options.UseSqlServer(
+    options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")
     )
 );
@@ -331,12 +331,13 @@ app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
     }
 }));
 
-var caminhoWeb = Path.Combine(
-    Directory.GetCurrentDirectory(),
-    "..",
-    "Tratoo.Web",
-    "wwwroot"
-);
+// Em dev local e no container Docker, o wwwroot do Tratoo.Web fica como pasta
+// irmã (ver Dockerfile). Em publish nativo (ex.: Azure App Service Windows),
+// o MSBuild empacota uma cópia dentro do próprio wwwroot do Tratoo.API — ver
+// target "CopyTratooWebWwwroot" no Tratoo.API.csproj.
+var caminhoWebIrmao = Path.Combine(Directory.GetCurrentDirectory(), "..", "Tratoo.Web", "wwwroot");
+var caminhoWebLocal = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+var caminhoWeb = Directory.Exists(caminhoWebIrmao) ? caminhoWebIrmao : caminhoWebLocal;
 
 app.UseDefaultFiles(new DefaultFilesOptions
 {
