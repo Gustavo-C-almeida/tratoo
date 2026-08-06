@@ -44,7 +44,7 @@ namespace Tratoo.API.BackgroundServices
         private async Task ExpirarContratosAsync(CancellationToken ct)
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var service = scope.ServiceProvider.GetRequiredService<ContratoServicoService>();
+            var service = scope.ServiceProvider.GetRequiredService<IContratoServicoService>();
             await service.ExpirarContratosAsync();
             _logger.LogInformation("Varredura de expiração de contratos concluída em {Hora}.", DateTime.UtcNow);
         }
