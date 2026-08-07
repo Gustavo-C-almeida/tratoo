@@ -13,6 +13,22 @@
     <ProjectReference Include="..\Tratoo.Domain\Tratoo.Domain.csproj" />
   </ItemGroup>
 
+  <!--
+    Empacota o wwwroot do Tratoo.Web dentro do publish do Tratoo.API.
+    Necessário para deploy nativo (ex.: Azure App Service Windows), onde não
+    existe uma pasta irmã "Tratoo.Web" ao lado do conteúdo publicado — só o
+    conteúdo desse projeto é publicado. Em dev local/Docker, o Program.cs
+    prioriza a pasta irmã real, então essa cópia não afeta esses ambientes.
+  -->
+  <Target Name="CopyTratooWebWwwroot" AfterTargets="Publish">
+    <ItemGroup>
+      <TratooWebWwwrootFiles Include="..\Tratoo.Web\wwwroot\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TratooWebWwwrootFiles)"
+          DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.100.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10">

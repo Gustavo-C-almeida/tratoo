@@ -3,14 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entrar - Tratoo</title>
+    <title>Entrar — Tratoo</title>
     <link rel="stylesheet" href="/assets/css/main.css">
     <link rel="stylesheet" href="/assets/css/pages/auth/login.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 </head>
 <body>
     <tratoo-header></tratoo-header>
-    <div id="login" class="login"></div>
+
+    <main class="auth-shell">
+        <div class="card auth-card">
+            <!-- #login é o alvo de innerHTML do page-script (auth/login.js).
+                 Sem class="login": global.css usa `.login` para um link legado. -->
+            <div class="card-body p-4 p-sm-5" id="login"></div>
+        </div>
+
+        <p class="auth-shell__trust">
+            <i class="fa-solid fa-lock" aria-hidden="true"></i>
+            Conexão segura e protegida
+        </p>
+    </main>
+
     <tratoo-footer></tratoo-footer>
 
     <script type="module" src="/assets/js/core/app.js"></script>

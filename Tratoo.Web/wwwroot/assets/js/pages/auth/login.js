@@ -13,39 +13,50 @@ function renderizarFormLogin() {
     const container = document.getElementById('login');
     if (!container) return;
 
+    // NOTA: o <p> de erro NÃO pode receber classe de display (d-flex, d-block):
+    // utils/form.js alterna a visibilidade por `el.hidden`, que seria anulado.
+    // NOTA: o botão de submit não pode conter ícone — setButtonLoading troca o
+    // textContent e o ícone seria perdido ao restaurar.
     container.innerHTML = `
-        <h2 class="login__title">Entrar na Tratoo</h2>
-        <p class="login__subtitle">Acesse sua conta para continuar</p>
-        <form id="loginForm" class="login__form" novalidate>
-            <div class="login__group">
-                <label for="email">E-mail</label>
-                <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    autocomplete="username"
-                    placeholder="seu@email.com"
-                    required
-                >
-            </div>
-            <div class="login__group">
-                <label for="senha">Senha</label>
-                <input
-                    type="password"
-                    id="senha"
-                    name="senha"
-                    autocomplete="current-password"
-                    placeholder="••••••••"
-                    required
-                >
-            </div>
-            <p id="login-erro" class="login__erro" hidden></p>
-            <a href="#" id="esqueceuSenha" class="login__esqueceu">Esqueci minha senha</a>
-            <button type="submit" class="login__button">Entrar</button>
-        </form>
-        <div class="login__rodape">
-            <p>Não tem conta? <a href="/pages/auth/start.html">Cadastre-se</a></p>
+        <div class="text-center mb-4">
+            <h1 class="page-title h3">Entrar na Tratoo</h1>
+            <p class="page-subtitle">Acesse sua conta para continuar</p>
         </div>
+
+        <form id="loginForm" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="email">E-mail</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa-regular fa-envelope" aria-hidden="true"></i></span>
+                    <input type="email" class="form-control" id="email" name="email"
+                           autocomplete="username" placeholder="seu@email.com" required>
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label" for="senha">Senha</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa-solid fa-lock" aria-hidden="true"></i></span>
+                    <input type="password" class="form-control" id="senha" name="senha"
+                           autocomplete="current-password" placeholder="••••••••" required>
+                </div>
+            </div>
+
+            <div class="text-end mb-3">
+                <a href="#" id="esqueceuSenha" class="small fw-semibold text-decoration-none">Esqueci minha senha</a>
+            </div>
+
+            <p id="login-erro" class="alert alert-danger py-2 px-3 small" role="alert" hidden></p>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">Entrar</button>
+        </form>
+
+        <hr class="my-4">
+
+        <p class="text-center small text-secondary mb-0">
+            Não tem conta?
+            <a href="/pages/auth/start.html" class="fw-semibold text-decoration-none">Cadastre-se</a>
+        </p>
     `;
 
     document.getElementById('email')?.focus();
@@ -57,33 +68,37 @@ function renderizarFormMFA(email) {
     if (!container) return;
 
     container.innerHTML = `
-        <h2 class="login__title">Verificação em dois fatores</h2>
-        <div class="login__mfa-info">
-            <p>Enviamos um código de 6 dígitos para</p>
-            <strong>${escapeHtml(email)}</strong>
-            <p>Verifique sua caixa de entrada e spam.</p>
+        <div class="text-center mb-4">
+            <span class="auth-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+            <h1 class="page-title h3">Verificação em dois fatores</h1>
+            <p class="page-subtitle">Enviamos um código de 6 dígitos para</p>
+            <p class="fw-semibold text-body mb-0">${escapeHtml(email)}</p>
         </div>
-        <form id="mfaForm" class="login__form" novalidate>
-            <div class="login__group">
-                <label for="codigoMFA">Código de verificação</label>
-                <input
-                    type="text"
-                    id="codigoMFA"
-                    name="codigoMFA"
-                    class="login__codigo-input"
-                    maxlength="6"
-                    inputmode="numeric"
-                    autocomplete="one-time-code"
-                    placeholder="000000"
-                    required
-                >
+
+        <div class="alert alert-info py-2 px-3 small text-center" role="status">
+            Verifique sua caixa de entrada e a pasta de spam.
+        </div>
+
+        <form id="mfaForm" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="codigoMFA">Código de verificação</label>
+                <input type="text" class="form-control form-control-lg auth-otp"
+                       id="codigoMFA" name="codigoMFA" maxlength="6" inputmode="numeric"
+                       autocomplete="one-time-code" placeholder="000000" required>
             </div>
-            <p id="mfa-erro" class="login__erro" hidden></p>
-            <button type="submit" class="login__button">Verificar código</button>
+
+            <p id="mfa-erro" class="alert alert-danger py-2 px-3 small" role="alert" hidden></p>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">Verificar código</button>
         </form>
-        <div class="login__rodape">
-            <p><a href="#" id="voltarLogin"><i class="fa-solid fa-arrow-left"></i> Voltar ao login</a></p>
-        </div>
+
+        <hr class="my-4">
+
+        <p class="text-center small mb-0">
+            <a href="#" id="voltarLogin" class="fw-semibold text-decoration-none">
+                <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>Voltar ao login
+            </a>
+        </p>
     `;
 
     document.getElementById('codigoMFA')?.focus();
@@ -94,26 +109,34 @@ function renderizarFormEsqueceuSenha() {
     if (!container) return;
 
     container.innerHTML = `
-        <h2 class="login__title">Redefinir senha</h2>
-        <p class="login__subtitle">Digite seu e-mail e enviaremos um código de redefinição.</p>
-        <form id="esqueciSenhaForm" class="login__form" novalidate>
-            <div class="login__group">
-                <label for="emailReset">E-mail da conta</label>
-                <input
-                    type="email"
-                    id="emailReset"
-                    name="emailReset"
-                    autocomplete="username"
-                    placeholder="seu@email.com"
-                    required
-                >
-            </div>
-            <p id="esqueceu-erro" class="login__erro" hidden></p>
-            <button type="submit" class="login__button">Enviar código</button>
-        </form>
-        <div class="login__rodape">
-            <p><a href="#" id="voltarLogin"><i class="fa-solid fa-arrow-left"></i> Voltar ao login</a></p>
+        <div class="text-center mb-4">
+            <span class="auth-icon" aria-hidden="true"><i class="fa-solid fa-key"></i></span>
+            <h1 class="page-title h3">Redefinir senha</h1>
+            <p class="page-subtitle">Digite seu e-mail e enviaremos um código de redefinição.</p>
         </div>
+
+        <form id="esqueciSenhaForm" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="emailReset">E-mail da conta</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa-regular fa-envelope" aria-hidden="true"></i></span>
+                    <input type="email" class="form-control" id="emailReset" name="emailReset"
+                           autocomplete="username" placeholder="seu@email.com" required>
+                </div>
+            </div>
+
+            <p id="esqueceu-erro" class="alert alert-danger py-2 px-3 small" role="alert" hidden></p>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">Enviar código</button>
+        </form>
+
+        <hr class="my-4">
+
+        <p class="text-center small mb-0">
+            <a href="#" id="voltarLogin" class="fw-semibold text-decoration-none">
+                <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>Voltar ao login
+            </a>
+        </p>
     `;
 
     document.getElementById('emailReset')?.focus();
@@ -125,55 +148,46 @@ function renderizarFormResetarSenha(email) {
     if (!container) return;
 
     container.innerHTML = `
-        <h2 class="login__title">Nova senha</h2>
-        <div class="login__mfa-info">
-            <p>Se o endereço abaixo estiver cadastrado, você receberá um código em breve.</p>
-            <strong>${escapeHtml(email)}</strong>
-            <p>Verifique sua caixa de entrada e spam.</p>
+        <div class="text-center mb-4">
+            <span class="auth-icon" aria-hidden="true"><i class="fa-solid fa-lock-open"></i></span>
+            <h1 class="page-title h3">Nova senha</h1>
+            <p class="page-subtitle">Se o endereço abaixo estiver cadastrado, você receberá um código em breve.</p>
+            <p class="fw-semibold text-body mb-0">${escapeHtml(email)}</p>
         </div>
-        <form id="resetarSenhaForm" class="login__form" novalidate>
-            <div class="login__group">
-                <label for="codigoReset">Código recebido</label>
-                <input
-                    type="text"
-                    id="codigoReset"
-                    name="codigoReset"
-                    class="login__codigo-input"
-                    maxlength="6"
-                    inputmode="numeric"
-                    autocomplete="one-time-code"
-                    placeholder="000000"
-                    required
-                >
+
+        <form id="resetarSenhaForm" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="codigoReset">Código recebido</label>
+                <input type="text" class="form-control form-control-lg auth-otp"
+                       id="codigoReset" name="codigoReset" maxlength="6" inputmode="numeric"
+                       autocomplete="one-time-code" placeholder="000000" required>
             </div>
-            <div class="login__group">
-                <label for="novaSenha">Nova senha</label>
-                <input
-                    type="password"
-                    id="novaSenha"
-                    name="novaSenha"
-                    autocomplete="new-password"
-                    placeholder="Mín. 8 chars, maiúscula, número, especial"
-                    required
-                >
+
+            <div class="mb-3">
+                <label class="form-label" for="novaSenha">Nova senha</label>
+                <input type="password" class="form-control" id="novaSenha" name="novaSenha"
+                       autocomplete="new-password" placeholder="Mínimo 8 caracteres, com 1 número" required>
+                <div class="form-text">Use ao menos 8 caracteres, incluindo um número.</div>
             </div>
-            <div class="login__group">
-                <label for="confirmarSenha">Confirmar nova senha</label>
-                <input
-                    type="password"
-                    id="confirmarSenha"
-                    name="confirmarSenha"
-                    autocomplete="new-password"
-                    placeholder="Repita a nova senha"
-                    required
-                >
+
+            <div class="mb-3">
+                <label class="form-label" for="confirmarSenha">Confirmar nova senha</label>
+                <input type="password" class="form-control" id="confirmarSenha" name="confirmarSenha"
+                       autocomplete="new-password" placeholder="Repita a nova senha" required>
             </div>
-            <p id="resetar-erro" class="login__erro" hidden></p>
-            <button type="submit" class="login__button">Redefinir senha</button>
+
+            <p id="resetar-erro" class="alert alert-danger py-2 px-3 small" role="alert" hidden></p>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">Redefinir senha</button>
         </form>
-        <div class="login__rodape">
-            <p><a href="#" id="voltarEsqueceu"><i class="fa-solid fa-arrow-left"></i> Tentar outro e-mail</a></p>
-        </div>
+
+        <hr class="my-4">
+
+        <p class="text-center small mb-0">
+            <a href="#" id="voltarEsqueceu" class="fw-semibold text-decoration-none">
+                <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>Tentar outro e-mail
+            </a>
+        </p>
     `;
 
     document.getElementById('codigoReset')?.focus();
@@ -185,11 +199,13 @@ function renderizarSucessoReset() {
     if (!container) return;
 
     container.innerHTML = `
-        <div class="login__sucesso">
-            <span class="login__sucesso-icone">&#10003;</span>
-            <h2 class="login__title">Senha redefinida!</h2>
-            <p class="login__subtitle">Sua nova senha foi salva com sucesso. Faça login para continuar.</p>
-            <a href="#" id="irParaLogin" class="login__button" style="text-decoration:none;text-align:center;display:block">Fazer login</a>
+        <div class="text-center">
+            <span class="auth-icon auth-icon--success" aria-hidden="true">
+                <i class="fa-solid fa-check"></i>
+            </span>
+            <h1 class="page-title h3">Senha redefinida!</h1>
+            <p class="page-subtitle mb-4">Sua nova senha foi salva com sucesso. Faça login para continuar.</p>
+            <a href="#" id="irParaLogin" class="btn btn-primary btn-lg w-100">Fazer login</a>
         </div>
     `;
 }
@@ -396,28 +412,30 @@ function limparDadosSessao() {
     emailReset = null;
 }
 
+// Usa closest() em vez de comparar e.target.id: os links contêm um <i> de ícone,
+// e um clique exatamente sobre o ícone tem e.target === <i>, não o <a>. Com a
+// comparação direta o clique era silenciosamente ignorado nessa região.
 document.addEventListener('click', function (e) {
-    if (e.target.id === 'voltarLogin') {
-        e.preventDefault();
-        limparDadosSessao();
-        renderizarFormLogin();
-    }
+    const alvo = e.target.closest?.('#voltarLogin, #voltarEsqueceu, #esqueceuSenha, #irParaLogin');
+    if (!alvo) return;
 
-    if (e.target.id === 'voltarEsqueceu') {
-        e.preventDefault();
-        emailReset = null;
-        renderizarFormEsqueceuSenha();
-    }
+    e.preventDefault();
 
-    if (e.target.id === 'esqueceuSenha') {
-        e.preventDefault();
-        renderizarFormEsqueceuSenha();
-    }
+    switch (alvo.id) {
+        case 'voltarLogin':
+        case 'irParaLogin':
+            limparDadosSessao();
+            renderizarFormLogin();
+            break;
 
-    if (e.target.id === 'irParaLogin') {
-        e.preventDefault();
-        limparDadosSessao();
-        renderizarFormLogin();
+        case 'voltarEsqueceu':
+            emailReset = null;
+            renderizarFormEsqueceuSenha();
+            break;
+
+        case 'esqueceuSenha':
+            renderizarFormEsqueceuSenha();
+            break;
     }
 });
 

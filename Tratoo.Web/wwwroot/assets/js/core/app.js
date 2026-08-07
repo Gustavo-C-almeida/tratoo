@@ -10,6 +10,31 @@
 import { TratooHeader } from '/assets/js/components/tratoo-header.js';
 import { TratooFooter } from '/assets/js/components/tratoo-footer.js';
 
+// ── Bootstrap JS (bundle UMD, vendorizado) ───────────────────────────────────
+// Injetado dinamicamente para não exigir uma tag <script> em cada uma das ~36
+// páginas. Os componentes interativos (dropdown, offcanvas, modal, collapse)
+// funcionam por data-api delegado no document, então elementos injetados
+// depois — como o próprio <tratoo-header> — também são cobertos.
+//
+// Vendorizado (e não CDN) porque o CSP da API é `script-src 'self'`: script de
+// terceiro seria bloqueado. Ver Program.cs.
+function carregarBootstrapJs() {
+    if (document.getElementById('bootstrap-bundle')) return Promise.resolve();
+    return new Promise(resolve => {
+        const s = document.createElement('script');
+        s.id = 'bootstrap-bundle';
+        s.src = '/assets/vendor/bootstrap/bootstrap.bundle.min.js';
+        // Resolve mesmo em erro: a página deve renderizar sem os comportamentos
+        // interativos em vez de travar o boot.
+        s.onload = resolve;
+        s.onerror = resolve;
+        document.head.appendChild(s);
+    });
+}
+
+/** Promise resolvida quando o bundle do Bootstrap terminou de carregar. */
+export const bootstrapReady = carregarBootstrapJs();
+
 // ── Registro idempotente dos Custom Elements ─────────────────────────────────
 if (!customElements.get('tratoo-header')) {
     customElements.define('tratoo-header', TratooHeader);

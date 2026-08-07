@@ -1,5 +1,28 @@
-﻿@import url('./base/reset.css');
+/* ============================================================================
+   TRATOO — Folha mestra
+   A ORDEM ABAIXO É SIGNIFICATIVA. Não reordene sem entender a cascata:
+
+   1. Bootstrap (vendor)  — base do framework, precisa vir primeiro para que
+                            tudo depois possa sobrescrevê-lo.
+   2. reset               — normalizações do projeto. Seguro depois do Bootstrap
+                            porque age em ELEMENTOS (a, button, ul) e os
+                            componentes do Bootstrap agem em CLASSES (.btn,
+                            .nav-link), que têm especificidade maior e vencem.
+   3. variables           — design tokens (fonte única de verdade).
+   4. tratoo-theme        — mapeia os tokens para as variáveis do Bootstrap e
+                            aplica o polimento visual. DEVE vir após o Bootstrap.
+   5. global              — estilos legados/compartilhados das telas antigas.
+   6. components          — header e footer.
+
+   Cada página ainda linka o seu próprio pages/<feature>/<page>.css, que é
+   carregado depois desta folha e portanto vence em caso de conflito.
+   ============================================================================ */
+
+@import url('/assets/vendor/bootstrap/bootstrap.min.css');
+
+@import url('./base/reset.css');
 @import url('./base/variables.css');
+@import url('./base/tratoo-theme.css');
 @import url('./base/global.css');
 
 @import url('./components/header.css');

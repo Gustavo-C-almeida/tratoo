@@ -90,7 +90,10 @@ export class TratooHeader extends HTMLElement {
             await this._initAuthHeader();
         }
 
-        this._initMobileMenu();
+        // O menu mobile (offcanvas) e o dropdown do usuário são componentes
+        // nativos do Bootstrap, acionados por data-bs-toggle no próprio markup.
+        // O data-api do Bootstrap é delegado no document, então funciona mesmo
+        // com este header sendo injetado dinamicamente — não há nada a ligar aqui.
         this._markActiveLink();
     }
 
@@ -121,36 +124,12 @@ export class TratooHeader extends HTMLElement {
                 if (nav && !this.querySelector('#header-admin-link')) {
                     const adminLink = document.createElement('a');
                     adminLink.id = 'header-admin-link';
+                    adminLink.className = 'nav-link';   // classe do Bootstrap
                     adminLink.href = '/pages/admin/disputas.html';
                     adminLink.textContent = 'Disputas (Admin)';
                     nav.insertBefore(adminLink, nav.firstChild);
                 }
             }
-        }
-
-        // Toggle do dropdown
-        const userBtn = this.querySelector('#header-user-btn');
-        const dropdown = this.querySelector('#header-user-dropdown');
-
-        if (userBtn && dropdown) {
-            userBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                const isOpen = dropdown.classList.toggle('open');
-                userBtn.setAttribute('aria-expanded', String(isOpen));
-            });
-
-            document.addEventListener('click', function () {
-                dropdown.classList.remove('open');
-                if (userBtn) userBtn.setAttribute('aria-expanded', 'false');
-            });
-
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape') {
-                    dropdown.classList.remove('open');
-                    userBtn.setAttribute('aria-expanded', 'false');
-                    userBtn.focus();
-                }
-            });
         }
 
         // Logout
@@ -165,28 +144,6 @@ export class TratooHeader extends HTMLElement {
                 window.location.href = '/pages/auth/login.html';
             });
         }
-    }
-
-    // ── Hamburger (menu mobile) ───────────────────────────────────────────────
-    _initMobileMenu() {
-        const toggle = this.querySelector('#header-menu-toggle');
-        const nav = this.querySelector('#header-nav');
-        if (!toggle || !nav) return;
-
-        toggle.addEventListener('click', function () {
-            const isOpen = nav.classList.toggle('open');
-            toggle.classList.toggle('active', isOpen);
-            toggle.setAttribute('aria-expanded', String(isOpen));
-        });
-
-        // Fecha ao clicar em um link do nav
-        nav.addEventListener('click', function (e) {
-            if (e.target.tagName === 'A') {
-                nav.classList.remove('open');
-                toggle.classList.remove('active');
-                toggle.setAttribute('aria-expanded', 'false');
-            }
-        });
     }
 
     // ── Marca o link ativo baseado na URL atual ───────────────────────────────
