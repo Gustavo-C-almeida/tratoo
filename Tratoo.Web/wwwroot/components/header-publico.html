@@ -1,29 +1,35 @@
-<link rel="stylesheet" href="/assets/css/components/header.css">
-<header class="header-publico" role="banner">
+<nav class="navbar navbar-expand-lg tratoo-navbar sticky-top" role="banner">
     <div class="container">
 
-        <div class="logo">
-            
-                <img src="https://pub-46c03e8d8c3448c68e945f4231eabfc1.r2.dev/LogoTratoo.png" alt="Tratoo">
-            
-        </div>
+        <a class="navbar-brand" href="/index.html">
+            <img src="https://pub-46c03e8d8c3448c68e945f4231eabfc1.r2.dev/LogoTratoo.png" alt="Tratoo">
+        </a>
 
-        <button class="header-menu-toggle" id="header-menu-toggle"
-                aria-label="Abrir menu" aria-expanded="false" aria-controls="header-nav">
-            <span></span>
-            <span></span>
-            <span></span>
+        <button class="navbar-toggler border-0" type="button"
+                data-bs-toggle="offcanvas" data-bs-target="#header-offcanvas"
+                aria-controls="header-offcanvas" aria-label="Abrir menu">
+            <span class="navbar-toggler-icon"></span>
         </button>
 
-        <nav class="header-nav" id="header-nav" role="navigation" aria-label="Navegação principal">
-            <a href="/pages/auth/cadastro-cliente.html">Quero contratar serviços</a>
-            <a href="/pages/auth/cadastro-prestador.html">Sou um prestador de serviços</a>
-        </nav>
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="header-offcanvas"
+             aria-labelledby="header-offcanvas-title">
+            <div class="offcanvas-header">
+                <span class="offcanvas-title fw-bold" id="header-offcanvas-title">Menu</span>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
+            </div>
 
-        <div class="header-actions">
-            <a href="/pages/auth/login.html" class="btn-login">Entrar</a>
-            <a href="/pages/auth/start.html" class="btn-register">Cadastrar</a>
+            <div class="offcanvas-body align-items-lg-center">
+                <div class="navbar-nav me-auto" id="header-nav" aria-label="Navegação principal">
+                    <a class="nav-link" href="/pages/auth/cadastro-cliente.html">Quero contratar serviços</a>
+                    <a class="nav-link" href="/pages/auth/cadastro-prestador.html">Sou prestador de serviços</a>
+                </div>
+
+                <div class="d-flex flex-column flex-lg-row gap-2 mt-3 mt-lg-0">
+                    <a href="/pages/auth/login.html" class="btn btn-light">Entrar</a>
+                    <a href="/pages/auth/start.html" class="btn btn-primary">Cadastrar</a>
+                </div>
+            </div>
         </div>
 
     </div>
-</header>
+</nav>

@@ -1,158 +1,42 @@
 /* ============================================================================
-   TRATOO — Footer Component
+   TRATOO — Footer
+   Rodapé escuro, montado com o grid do Bootstrap (ver components/footer.html).
+   Carregado depois de global.css em main.css, então vence os estilos legados
+   de .site-footer que ainda existem lá.
    ============================================================================ */
 
 .site-footer {
     background: var(--primary);
-    color: var(--white);
-    padding: var(--space-2xl) var(--space-lg);
-    margin-top: auto;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    padding: var(--space-2xl) 0 var(--space-xl);
 }
 
-.footer-inner {
-    max-width: 75rem;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--space-lg);
-}
-
-/* Logo */
-.footer-logo {
-    flex-shrink: 0;
-}
-
-.footer-logo a {
-    display: inline-block;
-    transition: opacity var(--transition-base), transform var(--transition-base);
-}
-
-.footer-logo a:hover {
-    opacity: 0.8;
-    transform: scale(1.02);
-}
-
-.footer-logo img {
-    height: 2.5rem;
+.site-footer__logo {
+    height: 28px;
     width: auto;
-    display: block;
+    /* Logo colorida sobre fundo escuro: converte para branco translúcido */
+    filter: brightness(0) invert(1);
+    opacity: 0.65;
 }
 
-/* Links */
-.footer-links {
-    display: flex;
-    gap: var(--space-xl);
-    flex-wrap: wrap;
+/* Centraliza a logo no mobile (o grid já alinha à esquerda no desktop) */
+@media (max-width: 767.98px) {
+    .site-footer__logo { margin-inline: auto; }
 }
 
-.footer-links a {
-    color: var(--white);
-    text-decoration: none;
+.site-footer__link {
+    color: var(--text-secondary);
     font-size: var(--text-sm);
+    padding: 0.25rem 0.625rem;
     transition: color var(--transition-base);
-    position: relative;
-    padding: var(--space-xs) 0;
 }
 
-.footer-links a::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 0;
-    height: 2px;
-    background: var(--secondary);
-    transition: width var(--transition-slow);
+.site-footer__link:hover,
+.site-footer__link:focus {
+    color: var(--white);
 }
 
-.footer-links a:hover {
-    color: var(--secondary);
-}
-
-.footer-links a:hover::after {
-    width: 100%;
-}
-
-/* Copyright */
-.footer-copy {
-    color: rgba(255, 255, 255, 0.7);
+.site-footer__copy {
     font-size: var(--text-xs);
-    margin: 0;
-    flex-shrink: 0;
-}
-
-/* ── Sticky footer ───────────────────────────────────────────────────────── */
-
-body {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-}
-
-main {
-    flex: 1;
-}
-
-/* ── Responsive ──────────────────────────────────────────────────────────── */
-
-@media (max-width: 768px) {
-    .site-footer {
-        padding: var(--space-xl) var(--space-md);
-    }
-
-    .footer-inner {
-        flex-direction: column;
-        text-align: center;
-        gap: var(--space-md);
-    }
-
-    .footer-links {
-        justify-content: center;
-        gap: var(--space-lg);
-    }
-
-    .footer-links a {
-        font-size: 0.8125rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .site-footer {
-        padding: var(--space-lg) var(--space-md);
-    }
-
-    .footer-inner {
-        gap: var(--space-sm);
-    }
-
-    .footer-logo img {
-        height: 2rem;
-    }
-
-    .footer-links {
-        gap: var(--space-md);
-    }
-
-    .footer-links a {
-        font-size: var(--text-xs);
-    }
-}
-
-/* ── Accessibility ───────────────────────────────────────────────────────── */
-
-.footer-links a:focus-visible {
-    outline: 2px solid var(--secondary);
-    outline-offset: 2px;
-    border-radius: 0.25rem;
-}
-
-/* ── Dark mode ───────────────────────────────────────────────────────────── */
-
-@media (prefers-color-scheme: dark) {
-    .site-footer {
-        background: var(--primary-dark);
-    }
+    color: var(--gray-600);
 }

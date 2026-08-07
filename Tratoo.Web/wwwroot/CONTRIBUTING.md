@@ -1,11 +1,19 @@
 # Front-end do Tratoo — Guia de Contribuição
 
-Front-end **HTML/CSS/JavaScript puro** (sem framework, sem bundler, sem npm),
-servido como arquivos estáticos por `Tratoo.Web`. Este guia descreve as
-convenções para manter o código consistente, organizado e escalável.
+Front-end **HTML/CSS/JavaScript**, servido como arquivos estáticos por
+`Tratoo.Web`. A camada visual usa **Bootstrap 5.3**, vendorizado em
+`assets/vendor/bootstrap/`. Este guia descreve as convenções para manter o
+código consistente, organizado e escalável.
 
-> Regra de ouro: **nada de dependência de build**. Tudo roda direto no browser
-> via ES Modules nativos e Custom Elements nativos.
+> Regra de ouro: **nada de dependência de build**. Sem bundler, sem npm. Tudo
+> roda direto no browser via ES Modules e Custom Elements nativos — o Bootstrap
+> entra como CSS + bundle UMD já compilados.
+
+**Por que vendorizado e não CDN:** o CSP da API é `script-src 'self'`
+(ver `Program.cs`), então script de terceiro seria bloqueado pelo navegador.
+Vendorizar também mantém o front funcionando offline e sem dependência externa
+em produção. O bundle JS é injetado uma única vez por `core/app.js` — **não
+adicione `<script>` do Bootstrap nas páginas**.
 
 ---
 
@@ -150,11 +158,40 @@ de cadastro em `#cadastro`) devem migrar para Custom Element de forma incrementa
 - `main.css` compõe `reset + variables + global + components` via `@import`; cada
   página linka ainda o seu `pages/<feature>/<page>.css`.
 
-### Dívida técnica conhecida (consolidação incremental)
+### Bootstrap primeiro, CSS customizado por exceção
 
-O CSS de feature ainda reimplementa botões/badges por conta própria
-(ex.: `.btn-aceitar`, `.btn-recusar`, `.badge-aberta`). O maior ofensor é
-`pages/proposta/detalhe.css` (>3.000 linhas, com regras duplicadas). O caminho
-recomendado — a ser feito com **revisão visual** — é extrair um sistema único de
-`.btn` / `.card` / `.badge` para `components/` e migrar as páginas uma a uma,
-validando cada tela antes de remover as classes antigas.
+A ordem de carregamento em `main.css` **é significativa** (há um comentário no
+próprio arquivo explicando). Resumo: Bootstrap → reset → tokens → tema → global
+→ componentes → CSS da página.
+
+Ao construir uma tela:
+
+1. **Use o componente do Bootstrap** (`card`, `btn`, `form-control`, `modal`,
+   `offcanvas`, `badge`, `table`, grid `row`/`col-*`) e as classes utilitárias
+   (`d-flex`, `gap-3`, `mb-4`, `text-secondary`…).
+2. **Só escreva CSS** para o que o framework não cobre. O CSS da página deve ser
+   pequeno — compare com `pages/auth/login.css` (~80 linhas) e
+   `pages/prestador/buscar.css` (~120 linhas), ambos já migrados.
+3. **Não redefina cores/raios/sombras**: ajuste `base/tratoo-theme.css`, que é a
+   ponte entre os tokens e as variáveis `--bs-*`. Mudança lá vale para o sistema
+   inteiro.
+
+Classes prontas do tema, para não reinventar: `.page-title` / `.page-subtitle`,
+`.tratoo-page` (largura e respiro padrão da tela), `.card-hover`,
+`.badge-soft-*` (status), `.empty-state`, `.skeleton`.
+
+### Dois cuidados que quebram silenciosamente
+
+- **Elemento de erro não pode ter classe de display.** `utils/form.js#showError`
+  alterna `el.hidden`; uma classe como `d-flex` anula o `display:none` do
+  `[hidden]` e o erro fica sempre visível. Use só `class="alert alert-danger"`.
+- **Botão de submit não pode conter ícone.** `setButtonLoading` troca o
+  `textContent`; qualquer `<i>` dentro é apagado e não volta ao restaurar.
+
+### Migração em andamento
+
+`components/` (header, footer) e as páginas `auth/login` e `prestador/buscar` já
+usam Bootstrap. As demais mantêm o CSS artesanal e continuam funcionando — a
+cascata foi montada para que convivam. Migre uma página por vez, **validando a
+tela no browser** antes de remover as classes antigas. O maior ofensor pendente
+é `pages/proposta/detalhe.css` (~3.900 linhas, com regras duplicadas).

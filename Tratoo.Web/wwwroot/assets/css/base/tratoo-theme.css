@@ -1,0 +1,474 @@
+/* ============================================================================
+   TRATOO — Tema Bootstrap
+   Ponte entre os design tokens do Tratoo (base/variables.css) e as variáveis
+   do Bootstrap 5.3, mais o polimento visual que dá aparência de produto SaaS.
+
+   CARREGADO DEPOIS de vendor/bootstrap/bootstrap.min.css e de variables.css
+   (ver main.css). Tudo aqui sobrescreve o Bootstrap padrão.
+
+   IDENTIDADE (mantida e refinada):
+     • Primary  = slate #0F172A — premium, contraste ~17:1 com branco.
+     • Brand    = verde #22C55E — a cor da marca, usada em acentos/badges.
+     • Success  = verde #15803D — versão ACESSÍVEL do verde para botões sólidos.
+
+   NOTA DE ACESSIBILIDADE (por que dois verdes):
+     #22C55E sobre branco tem contraste 2.3:1 — reprova em WCAG AA (mín. 4.5:1).
+     Como fundo de botão com texto branco ele é ilegível. Por isso o verde da
+     marca continua nos acentos (badges, ícones, bordas, destaques) e os botões
+     sólidos usam #15803D (5.1:1 — aprova AA). A identidade é preservada; só o
+     uso em superfícies grandes muda.
+   ============================================================================ */
+
+:root {
+    /* ── Paleta Bootstrap ← tokens Tratoo ────────────────────────────────── */
+    --bs-primary:        #0F172A;
+    --bs-primary-rgb:    15, 23, 42;
+    --bs-secondary:      #64748B;
+    --bs-secondary-rgb:  100, 116, 139;
+    --bs-success:        #15803D;
+    --bs-success-rgb:    21, 128, 61;
+    --bs-danger:         #DC2626;
+    --bs-danger-rgb:     220, 38, 38;
+    --bs-warning:        #F59E0B;
+    --bs-warning-rgb:    245, 158, 11;
+    --bs-info:           #2563EB;
+    --bs-info-rgb:       37, 99, 235;
+    --bs-light:          #F1F5F9;
+    --bs-dark:           #0F172A;
+
+    /* Verde da marca — acentos, não superfícies grandes de texto */
+    --tratoo-brand:      #22C55E;
+    --tratoo-brand-rgb:  34, 197, 94;
+
+    /* ── Superfícies e texto ─────────────────────────────────────────────── */
+    --bs-body-bg:              #F8FAFC;
+    --bs-body-color:           #1E293B;
+    --bs-body-color-rgb:       30, 41, 59;
+    --bs-secondary-color:      #64748B;
+    --bs-tertiary-color:       #94A3B8;
+    --bs-emphasis-color:       #0F172A;
+    --bs-border-color:         #E2E8F0;
+    --bs-border-color-translucent: rgba(15, 23, 42, 0.08);
+
+    /* ── Tipografia ──────────────────────────────────────────────────────── */
+    --bs-body-font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --bs-body-font-size:   1rem;
+    --bs-body-line-height: 1.6;
+    --bs-heading-color:    #0F172A;
+
+    /* ── Raios (mais suaves que o padrão do Bootstrap) ───────────────────── */
+    --bs-border-radius:    0.5rem;
+    --bs-border-radius-sm: 0.375rem;
+    --bs-border-radius-lg: 0.75rem;
+    --bs-border-radius-xl: 1rem;
+    --bs-border-radius-pill: 9999px;
+
+    /* ── Sombras (escala do Tratoo — mais suaves e frias) ────────────────── */
+    --bs-box-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+    --bs-box-shadow:    0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+    --bs-box-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+
+    /* ── Links ───────────────────────────────────────────────────────────── */
+    --bs-link-color:            #1D4ED8;
+    --bs-link-color-rgb:        29, 78, 216;
+    --bs-link-hover-color:      #1E40AF;
+}
+
+/* ============================================================================
+   TIPOGRAFIA — hierarquia clara
+   ============================================================================ */
+
+h1, .h1 { font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; }
+h2, .h2 { font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+h3, .h3,
+h4, .h4 { font-weight: 700; letter-spacing: -0.01em; }
+h5, .h5,
+h6, .h6 { font-weight: 600; }
+
+/* Título de página padrão — usado no topo de cada tela */
+.page-title {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--bs-emphasis-color);
+    margin-bottom: 0.25rem;
+}
+
+.page-subtitle {
+    color: var(--bs-secondary-color);
+    font-size: 0.9375rem;
+    margin-bottom: 0;
+}
+
+/* ============================================================================
+   BOTÕES
+   ============================================================================ */
+
+.btn {
+    --bs-btn-font-weight: 600;
+    --bs-btn-padding-y: 0.5625rem;
+    --bs-btn-padding-x: 1.125rem;
+    --bs-btn-font-size: 0.9375rem;
+    transition: transform 150ms ease, box-shadow 150ms ease,
+                background-color 150ms ease, border-color 150ms ease;
+}
+
+/* Elevação sutil no hover — o "toque premium". Desativado para quem
+   prefere menos movimento (respeitado globalmente por reset.css). */
+.btn:not(:disabled):not(.disabled):hover {
+    transform: translateY(-1px);
+}
+
+.btn:active { transform: translateY(0); }
+
+.btn-primary {
+    --bs-btn-bg: #0F172A;
+    --bs-btn-border-color: #0F172A;
+    --bs-btn-hover-bg: #1E293B;
+    --bs-btn-hover-border-color: #1E293B;
+    --bs-btn-active-bg: #020617;
+    --bs-btn-active-border-color: #020617;
+    --bs-btn-disabled-bg: #94A3B8;
+    --bs-btn-disabled-border-color: #94A3B8;
+}
+
+.btn-primary:not(:disabled):hover {
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+}
+
+.btn-success {
+    --bs-btn-bg: #15803D;
+    --bs-btn-border-color: #15803D;
+    --bs-btn-hover-bg: #166534;
+    --bs-btn-hover-border-color: #166534;
+    --bs-btn-active-bg: #14532D;
+}
+
+.btn-success:not(:disabled):hover {
+    box-shadow: 0 8px 20px rgba(21, 128, 61, 0.3);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: #0F172A;
+    --bs-btn-border-color: #CBD5E1;
+    --bs-btn-hover-bg: #0F172A;
+    --bs-btn-hover-border-color: #0F172A;
+    --bs-btn-hover-color: #fff;
+}
+
+.btn-light {
+    --bs-btn-bg: #F1F5F9;
+    --bs-btn-border-color: #E2E8F0;
+    --bs-btn-hover-bg: #E2E8F0;
+    --bs-btn-hover-border-color: #CBD5E1;
+    --bs-btn-color: #334155;
+}
+
+/* Botão em estado de carregamento (usado por utils/form.js) */
+.btn[data-loading="true"] {
+    pointer-events: none;
+    opacity: 0.75;
+}
+
+/* ============================================================================
+   FORMULÁRIOS
+   ============================================================================ */
+
+.form-label {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #334155;
+    margin-bottom: 0.375rem;
+}
+
+.form-control,
+.form-select {
+    --bs-border-radius: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    border-color: #E2E8F0;
+    font-size: 0.9375rem;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--tratoo-brand);
+    box-shadow: 0 0 0 3px rgba(var(--tratoo-brand-rgb), 0.15);
+}
+
+.form-control::placeholder { color: #94A3B8; }
+
+.form-control.is-invalid,
+.form-select.is-invalid {
+    border-color: var(--bs-danger);
+}
+
+.form-control.is-invalid:focus {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+/* Input group com ícone à esquerda (busca, e-mail, etc.) */
+.input-group-text {
+    background: #F8FAFC;
+    border-color: #E2E8F0;
+    color: #64748B;
+}
+
+/* ============================================================================
+   CARDS
+   ============================================================================ */
+
+.card {
+    --bs-card-border-color: #E2E8F0;
+    --bs-card-border-radius: 0.75rem;
+    --bs-card-inner-border-radius: 0.75rem;
+    --bs-card-bg: #fff;
+    --bs-card-spacer-y: 1.25rem;
+    --bs-card-spacer-x: 1.25rem;
+    box-shadow: var(--bs-box-shadow-sm);
+}
+
+.card-header {
+    background: transparent;
+    border-bottom-color: #F1F5F9;
+    font-weight: 700;
+    color: var(--bs-emphasis-color);
+}
+
+/* Card interativo — para listagens clicáveis (projetos, prestadores) */
+.card-hover {
+    transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--bs-box-shadow-lg);
+    border-color: #CBD5E1;
+}
+
+/* ============================================================================
+   BADGES — status do domínio (proposta, contrato, pagamento)
+   ============================================================================ */
+
+.badge {
+    --bs-badge-font-weight: 600;
+    --bs-badge-padding-x: 0.625rem;
+    --bs-badge-padding-y: 0.375rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.01em;
+}
+
+/* Badges suaves (fundo claro + texto escuro) — mais legíveis que os sólidos
+   para status repetidos em listas. */
+.badge-soft-success { background: #DCFCE7; color: #166534; }
+.badge-soft-warning { background: #FEF3C7; color: #92400E; }
+.badge-soft-danger  { background: #FEE2E2; color: #991B1B; }
+.badge-soft-info    { background: #DBEAFE; color: #1E40AF; }
+.badge-soft-neutral { background: #F1F5F9; color: #475569; }
+
+/* ============================================================================
+   NAVBAR (header)
+   ============================================================================ */
+
+.navbar {
+    --bs-navbar-padding-y: 0.75rem;
+}
+
+.tratoo-navbar {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid #F1F5F9;
+}
+
+.tratoo-navbar .navbar-brand img { height: 34px; width: auto; }
+
+.tratoo-navbar .nav-link {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #64748B;
+    padding: 0.5rem 0.875rem;
+    border-radius: 0.5rem;
+    transition: color 150ms ease, background-color 150ms ease;
+}
+
+.tratoo-navbar .nav-link:hover { color: #0F172A; background: #F1F5F9; }
+
+.tratoo-navbar .nav-link.active {
+    color: #0F172A;
+    font-weight: 600;
+    background: #F1F5F9;
+}
+
+/* Avatar circular com a inicial do usuário */
+.tratoo-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #0F172A, #334155);
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* ============================================================================
+   DROPDOWN
+   ============================================================================ */
+
+.dropdown-menu {
+    --bs-dropdown-border-color: #E2E8F0;
+    --bs-dropdown-border-radius: 0.75rem;
+    --bs-dropdown-link-hover-bg: #F1F5F9;
+    --bs-dropdown-link-active-bg: #F1F5F9;
+    --bs-dropdown-link-active-color: #0F172A;
+    --bs-dropdown-font-size: 0.9375rem;
+    box-shadow: var(--bs-box-shadow-lg);
+    padding: 0.375rem;
+}
+
+.dropdown-item { border-radius: 0.5rem; font-weight: 500; }
+
+/* ============================================================================
+   TABELAS
+   ============================================================================ */
+
+.table {
+    --bs-table-border-color: #F1F5F9;
+    --bs-table-hover-bg: #F8FAFC;
+    font-size: 0.9375rem;
+}
+
+.table > thead th {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748B;
+    border-bottom-width: 1px;
+    background: #F8FAFC;
+    white-space: nowrap;
+}
+
+.table > tbody td { vertical-align: middle; }
+
+/* Tabelas sempre roláveis horizontalmente no mobile */
+.table-responsive { border-radius: 0.75rem; }
+
+/* ============================================================================
+   MODAIS / OFFCANVAS
+   ============================================================================ */
+
+.modal-content {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.15);
+}
+
+.modal-header { border-bottom-color: #F1F5F9; }
+.modal-header .modal-title { font-weight: 700; }
+.modal-footer { border-top-color: #F1F5F9; }
+
+.offcanvas { border: none; }
+.offcanvas-header { border-bottom: 1px solid #F1F5F9; }
+
+/* ============================================================================
+   ALERTAS
+   ============================================================================ */
+
+.alert {
+    --bs-alert-border-radius: 0.75rem;
+    border: 1px solid transparent;
+    font-size: 0.9375rem;
+}
+
+.alert-success { background: #DCFCE7; border-color: #BBF7D0; color: #166534; }
+.alert-danger  { background: #FEE2E2; border-color: #FECACA; color: #991B1B; }
+.alert-warning { background: #FEF3C7; border-color: #FDE68A; color: #92400E; }
+.alert-info    { background: #DBEAFE; border-color: #BFDBFE; color: #1E40AF; }
+
+/* ============================================================================
+   ESTADOS DE UX — vazio, carregando, foco
+   ============================================================================ */
+
+/* Empty state — usado quando uma listagem não tem resultados */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    color: var(--bs-secondary-color);
+}
+
+.empty-state__icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 9999px;
+    background: #F1F5F9;
+    color: #94A3B8;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.empty-state__title {
+    font-weight: 700;
+    color: var(--bs-emphasis-color);
+    font-size: 1.0625rem;
+    margin-bottom: 0.375rem;
+}
+
+.empty-state__text {
+    font-size: 0.9375rem;
+    max-width: 42ch;
+    margin: 0 auto 1.25rem;
+}
+
+/* Skeleton de carregamento — placeholder animado para listas */
+.skeleton {
+    background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    border-radius: 0.5rem;
+}
+
+@keyframes skeleton-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+
+/* Foco visível e consistente — acessibilidade por teclado */
+:focus-visible {
+    outline: 2px solid var(--tratoo-brand);
+    outline-offset: 2px;
+}
+
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(var(--tratoo-brand-rgb), 0.3);
+}
+
+/* ============================================================================
+   LAYOUT — largura e espaçamento padronizados
+   ============================================================================ */
+
+/* Container de conteúdo das telas internas. Aplicado no <main> de cada página
+   para que todas compartilhem a mesma largura e respiro vertical. */
+.tratoo-page {
+    max-width: 1200px;
+    margin-inline: auto;
+    padding: 2rem 1.5rem 4rem;
+    width: 100%;
+}
+
+.tratoo-page--narrow { max-width: 760px; }
+.tratoo-page--wide   { max-width: 1360px; }
+
+@media (max-width: 576px) {
+    .tratoo-page { padding: 1.25rem 1rem 3rem; }
+}

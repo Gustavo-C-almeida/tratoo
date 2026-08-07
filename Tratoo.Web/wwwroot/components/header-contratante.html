@@ -1,40 +1,56 @@
-<link rel="stylesheet" href="/assets/css/components/header.css">
-<header class="header-contratante" role="banner">
+<nav class="navbar navbar-expand-lg tratoo-navbar sticky-top" role="banner">
     <div class="container">
 
-        <div class="logo">
-                <img src="https://pub-46c03e8d8c3448c68e945f4231eabfc1.r2.dev/LogoTratoo.png" alt="Tratoo">
-            
-        </div>
+        <a class="navbar-brand" href="/pages/contratante/meus-projetos.html">
+            <img src="https://pub-46c03e8d8c3448c68e945f4231eabfc1.r2.dev/LogoTratoo.png" alt="Tratoo">
+        </a>
 
-        <button class="header-menu-toggle" id="header-menu-toggle"
-                aria-label="Abrir menu" aria-expanded="false" aria-controls="header-nav">
-            <span></span>
-            <span></span>
-            <span></span>
+        <button class="navbar-toggler border-0" type="button"
+                data-bs-toggle="offcanvas" data-bs-target="#header-offcanvas"
+                aria-controls="header-offcanvas" aria-label="Abrir menu">
+            <span class="navbar-toggler-icon"></span>
         </button>
 
-        <nav class="header-nav" id="header-nav" role="navigation" aria-label="Navegação do contratante">
-            <a href="/pages/contratante/meus-projetos.html">Meus Projetos</a>
-            <a href="/pages/me/contratos.html">Contratos</a>
-            <a href="/pages/chat/index.html">Mensagens</a>
-        </nav>
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="header-offcanvas"
+             aria-labelledby="header-offcanvas-title">
+            <div class="offcanvas-header">
+                <span class="offcanvas-title fw-bold" id="header-offcanvas-title">Menu</span>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
+            </div>
 
-        <div class="header-user">
-            <button class="header-user-btn" id="header-user-btn"
-                    aria-haspopup="true" aria-expanded="false" aria-controls="header-user-dropdown">
-                <span class="header-user-avatar" id="header-user-avatar" aria-hidden="true">U</span>
-                <span class="header-user-name" id="header-user-name">Carregando...</span>
-                <svg class="header-user-chevron" aria-hidden="true" width="12" height="8" viewBox="0 0 12 8" fill="none">
-                    <path d="M1 1L6 6L11 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-            </button>
-            <div class="header-user-dropdown" id="header-user-dropdown" role="menu" aria-label="Menu do usuário">
-                <a href="/pages/contratante/perfil.html" role="menuitem">Meu Perfil</a>
-                <div class="header-dropdown-divider" role="separator"></div>
-                <button id="header-logout-btn" role="menuitem" class="header-logout-btn">Sair</button>
+            <div class="offcanvas-body align-items-lg-center">
+                <div class="navbar-nav me-auto" id="header-nav" aria-label="Navegação do contratante">
+                    <a class="nav-link" href="/pages/contratante/meus-projetos.html">Meus Projetos</a>
+                    <a class="nav-link" href="/pages/me/contratos.html">Contratos</a>
+                    <a class="nav-link" href="/pages/chat/index.html">Mensagens</a>
+                </div>
+
+                <div class="dropdown mt-3 mt-lg-0">
+                    <button class="btn btn-light d-flex align-items-center gap-2 w-100 w-lg-auto"
+                            id="header-user-btn" type="button"
+                            data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">
+                        <span class="tratoo-avatar" id="header-user-avatar" aria-hidden="true">U</span>
+                        <span class="text-truncate" id="header-user-name" style="max-width:14ch">Carregando...</span>
+                        <i class="fa-solid fa-chevron-down ms-auto ms-lg-1 small opacity-50" aria-hidden="true"></i>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end w-100 w-lg-auto"
+                        id="header-user-dropdown" aria-labelledby="header-user-btn">
+                        <li>
+                            <a class="dropdown-item" href="/pages/contratante/perfil.html">
+                                <i class="fa-regular fa-user me-2 opacity-75" aria-hidden="true"></i>Meu Perfil
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button type="button" class="dropdown-item text-danger" id="header-logout-btn">
+                                <i class="fa-solid fa-arrow-right-from-bracket me-2 opacity-75" aria-hidden="true"></i>Sair
+                            </button>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
 
     </div>
-</header>
+</nav>

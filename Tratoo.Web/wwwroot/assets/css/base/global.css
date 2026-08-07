@@ -290,7 +290,11 @@
     flex: 1;
 }
 
-.btn-primary {
+/* NOTA: `:not(.btn)` isola este botão legado do `.btn-primary` do Bootstrap.
+   Sem isso, esta regra sobrescreveria padding/raio/display dos botões novos
+   (`class="btn btn-primary"`), já que global.css é carregado depois do tema.
+   Telas ainda não migradas (start.html) continuam usando esta versão. */
+.btn-primary:not(.btn) {
     display: inline-flex;
     align-items: center;
     justify-content: center;

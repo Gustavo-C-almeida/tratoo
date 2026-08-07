@@ -1,529 +1,114 @@
-/* ── Buscar Profissionais — Tratoo IA Search ──────────────────────────────── */
+/* ============================================================================
+   TRATOO — Busca de profissionais
+   Markup gerado por assets/js/pages/prestador/buscar.js com componentes do
+   Bootstrap (card, form-select, offcanvas, pagination, badge). Aqui ficam só
+   o hero e os ajustes de card que o framework não cobre.
 
-/* ── Hero ─────────────────────────────────────────────────────────────────── */
+   Substituiu ~530 linhas de CSS artesanal (grid, filtros, cards, spinner e
+   paginação feitos à mão).
+   ============================================================================ */
+
+/* ── Hero de busca ───────────────────────────────────────────────────────── */
 
 .bp-hero {
-    background: linear-gradient(160deg, var(--primary) 0%, var(--primary-dark) 100%);
+    background: linear-gradient(160deg, var(--primary) 0%, var(--primary-light) 100%);
+    padding: var(--space-3xl) 0 var(--space-2xl);
     color: var(--white);
-    padding: 3rem 1.5rem 2.5rem;
-    text-align: center;
-}
-
-.bp-hero__inner {
-    max-width: 680px;
-    margin: 0 auto;
 }
 
 .bp-hero__title {
-    font-size: clamp(1.5rem, 5vw, 2.25rem);
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
     font-weight: 800;
     letter-spacing: -0.03em;
-    margin-bottom: 0.4rem;
-    line-height: 1.2;
+    color: var(--white);
+    margin-bottom: var(--space-sm);
 }
 
 .bp-hero__sub {
-    color: var(--text-muted);
-    font-size: clamp(0.88rem, 3vw, 1rem);
-    margin-bottom: 1.75rem;
+    color: var(--text-light);
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-xl);
 }
 
-/* ── Search bar ───────────────────────────────────────────────────────────── */
-
-.bp-search {
-    position: relative;
-    display: flex;
-    align-items: center;
-    background: var(--surface);
+/* A barra de busca "flutua" sobre o hero */
+.bp-hero__search {
+    box-shadow: var(--shadow-xl);
     border-radius: var(--radius-lg);
-    overflow: hidden;
-    box-shadow: var(--shadow-lg);
-    max-width: 640px;
-    margin: 0 auto;
 }
 
-.bp-search__icon {
-    position: absolute;
-    left: 1rem;
-    color: var(--text-muted);
-    display: flex;
-    pointer-events: none;
+.bp-hero__search .form-control,
+.bp-hero__search .input-group-text {
+    background: var(--surface);
 }
 
-.bp-search__input {
-    flex: 1;
-    border: none;
-    padding: 1rem 1rem 1rem 3rem;
-    font-size: 1rem;
-    color: var(--text);
-    background: transparent;
-    outline: none;
-    min-width: 0;
+/* Cantos arredondados corretos nas pontas do input-group */
+.bp-hero__search > :first-child {
+    border-top-left-radius: var(--radius-lg);
+    border-bottom-left-radius: var(--radius-lg);
 }
 
-.bp-search__input::placeholder {
-    color: var(--text-muted);
+.bp-hero__search > :last-child {
+    border-top-right-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
 }
 
-.bp-search__btn {
-    background: var(--secondary);
-    color: var(--white);
-    border: none;
-    padding: 0.85rem 1.5rem;
-    font-size: 0.95rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.2s;
-    white-space: nowrap;
-    letter-spacing: 0.01em;
-}
-
-.bp-search__btn:hover {
-    background: var(--secondary-dark);
+/* Remove o realce de foco do input central para o grupo parecer um só campo */
+.bp-hero__search .form-control:focus {
+    box-shadow: none;
+    border-color: var(--border);
 }
 
 .bp-hero__examples {
-    color: var(--gray-600);
-    font-size: 0.78rem;
-    margin-top: 1rem;
-    line-height: 1.6;
-    opacity: 0.7;
+    margin: var(--space-lg) 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: 1.7;
 }
 
-/* ── Layout ───────────────────────────────────────────────────────────────── */
-
-.bp-layout {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-    max-width: 1200px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-}
-
-@media (min-width: 768px) {
-    .bp-layout {
-        grid-template-columns: 260px 1fr;
-        gap: 2rem;
-        padding: 0 1.5rem;
-    }
-}
-
-@media (min-width: 1024px) {
-    .bp-layout {
-        grid-template-columns: 280px 1fr;
-    }
-}
-
-/* ── Filters sidebar ──────────────────────────────────────────────────────── */
-
-.bp-filters {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 1.25rem;
-    height: fit-content;
-    position: sticky;
-    top: 1.5rem;
-}
-
-.bp-filters__title {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--border);
-}
-
-.bp-fg {
-    margin-bottom: 1rem;
-}
-
-.bp-fg label {
-    display: block;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 0.35rem;
-}
-
-.bp-fg select,
-.bp-fg input[type="number"] {
-    width: 100%;
-    padding: 0.55rem 0.75rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 0.88rem;
-    color: var(--text);
-    background: var(--bg);
-    transition: border-color 0.15s;
-}
-
-.bp-fg select:focus,
-.bp-fg input:focus {
-    outline: none;
-    border-color: var(--secondary);
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
-}
-
-.bp-fg--check label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    font-weight: 500;
-    color: var(--text);
-    font-size: 0.88rem;
-}
-
-.bp-fg--check input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--secondary);
-    cursor: pointer;
-}
-
-.bp-filters__clear {
-    width: 100%;
-    padding: 0.5rem;
-    background: none;
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 0.82rem;
-    cursor: pointer;
-    transition: all 0.15s;
-    margin-top: 0.5rem;
-}
-
-.bp-filters__clear:hover {
-    color: var(--error);
-    border-color: var(--error);
-}
-
-/* ── Results area ─────────────────────────────────────────────────────────── */
-
-.bp-results__bar {
-    margin-bottom: 1rem;
-}
-
-.bp-results__count {
-    font-size: 0.88rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-/* ── Card grid ────────────────────────────────────────────────────────────── */
-
-.bp-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-}
-
-@media (min-width: 640px) {
-    .bp-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (min-width: 1024px) {
-    .bp-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-/* ── Provider card ────────────────────────────────────────────────────────── */
+/* ── Card do prestador ───────────────────────────────────────────────────── */
 
 .bp-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 1.25rem;
     cursor: pointer;
-    transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.bp-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
-    border-color: var(--secondary);
-}
-
-.bp-card:focus-visible {
-    outline: 2px solid var(--secondary);
-    outline-offset: 2px;
-}
-
-/* Top: photo + name */
-.bp-card__top {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
 }
 
 .bp-card__foto {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
+    width: 56px;
+    height: 56px;
     object-fit: cover;
-    flex-shrink: 0;
-    border: 2px solid var(--border);
 }
 
 .bp-card__foto--placeholder {
-    display: flex;
+    background: linear-gradient(135deg, var(--primary), var(--gray-700));
+    color: var(--white);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: var(--primary);
-    color: var(--white);
-    font-size: 1.1rem;
-    font-weight: 700;
-    border-color: transparent;
 }
 
+/* `min-width: 0` permite que o text-truncate do nome funcione dentro do flex.
+   O Bootstrap não tem utilitário para isso (não existe `min-w-0`). */
 .bp-card__info {
     min-width: 0;
 }
 
-.bp-card__nome {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin: 0;
-}
-
-.bp-card__titulo {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin: 0;
-}
-
-/* Verified badge */
-.bp-badge {
-    display: inline-block;
-    font-size: 0.68rem;
-    font-weight: 700;
-    padding: 0.1rem 0.45rem;
-    border-radius: 4px;
-    margin-top: 0.15rem;
-}
-
-.bp-badge--verif {
-    background: var(--success-light);
-    color: var(--secondary-dark);
-}
-
-/* Rating */
-.bp-card__rating {
-    display: flex;
-    align-items: center;
-    gap: 0.2rem;
-    font-size: 0.82rem;
-}
-
-.bp-star {
-    color: var(--border);
-    font-size: 0.9rem;
-    line-height: 1;
-}
-
-.bp-star--on {
-    color: var(--warning);
-}
-
-.bp-card__rating-num {
-    font-weight: 700;
-    color: var(--text);
-    margin-left: 0.25rem;
-}
-
-.bp-card__rating-cnt {
-    color: var(--text-muted);
-    font-size: 0.75rem;
-}
-
-.bp-card__novo {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    font-style: italic;
-}
-
-/* Bio */
+/* Bio limitada a 3 linhas — mantém todos os cards do grid com altura parecida */
 .bp-card__bio {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    line-height: 1.5;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    margin: 0;
+    margin-bottom: var(--space-sm);
 }
 
-/* Skills */
-.bp-card__skills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-}
+/* ── Filtros ─────────────────────────────────────────────────────────────── */
 
-.bp-skill {
-    font-size: 0.7rem;
-    font-weight: 500;
-    padding: 0.15rem 0.5rem;
-    border-radius: 20px;
-    background: var(--surface-hover);
-    color: var(--text-secondary);
-    white-space: nowrap;
-}
-
-.bp-skill--match {
-    background: var(--success-light);
-    color: var(--secondary-dark);
-    font-weight: 600;
-}
-
-/* Footer */
-.bp-card__footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--border-light);
-    margin-top: auto;
-}
-
-.bp-card__valor {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--primary);
-}
-
-.bp-card__projetos {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-}
-
-/* ── States ───────────────────────────────────────────────────────────────── */
-
-.bp-loading {
-    text-align: center;
-    padding: 4rem 1rem;
-    color: var(--text-muted);
-}
-
-.bp-loading p {
-    margin-top: 1rem;
-    font-size: 0.9rem;
-}
-
-.bp-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--border);
-    border-top-color: var(--secondary);
-    border-radius: 50%;
-    margin: 0 auto;
-    animation: bp-spin 0.7s linear infinite;
-}
-
-@keyframes bp-spin {
-    to { transform: rotate(360deg); }
-}
-
-.bp-empty {
-    text-align: center;
-    padding: 4rem 1.5rem;
-    color: var(--text-secondary);
-}
-
-.bp-empty svg {
-    margin-bottom: 1rem;
-}
-
-.bp-empty h3 {
-    font-size: 1.05rem;
-    font-weight: 600;
-    margin-bottom: 0.3rem;
-    color: var(--text);
-}
-
-.bp-empty p {
-    font-size: 0.88rem;
-}
-
-.bp-empty--erro {
-    color: var(--error);
-}
-
-/* ── Pagination ───────────────────────────────────────────────────────────── */
-
-.bp-pag {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: 2rem;
-    padding-bottom: 3rem;
-}
-
-.bp-pag__btn {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.bp-pag__btn:hover:not(:disabled) {
-    border-color: var(--secondary);
-    color: var(--secondary-dark);
-}
-
-.bp-pag__btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.bp-pag__num {
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-/* ── Responsive tweaks ────────────────────────────────────────────────────── */
-
-@media (max-width: 767px) {
-    .bp-hero { padding: 2rem 1rem 1.75rem; }
-    .bp-search { flex-direction: column; border-radius: var(--radius-sm); }
-    .bp-search__input { padding: 0.85rem 0.85rem 0.85rem 2.75rem; }
-    .bp-search__btn { width: 100%; padding: 0.75rem; border-radius: 0; }
-    .bp-search__icon { left: 0.85rem; }
-    .bp-filters { position: static; }
-    .bp-grid { grid-template-columns: 1fr; }
-}
-
-/* ── Print ────────────────────────────────────────────────────────────────── */
-
-@media print {
-    .bp-hero, .bp-filters, .bp-pag { display: none; }
-    .bp-card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
-}
-
-/* ── Reduced motion ───────────────────────────────────────────────────────── */
-
-@media (prefers-reduced-motion: reduce) {
-    .bp-card { transition: none; }
-    .bp-spinner { animation-duration: 1.5s; }
+/* A partir de lg o offcanvas vira coluna estática e acompanha a rolagem */
+@media (min-width: 992px) {
+    #filtros-offcanvas {
+        position: sticky;
+        top: 88px;   /* altura da navbar sticky + respiro */
+    }
 }
