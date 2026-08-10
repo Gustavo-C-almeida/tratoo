@@ -55,10 +55,6 @@ export function loadComponent(id, url) {
         .catch(() => {});
 }
 
-// Formulário de cadastro (contratante/prestador) — injetado em #cadastro quando
-// presente. No-op nas demais páginas.
-loadComponent('cadastro', '/components/auth/cadastro.html');
-
 // ── onReady — contrato único de inicialização de página ──────────────────────
 // Cada page-script chama `onReady(initPage)` em vez de registrar seu próprio
 // listener de DOMContentLoaded. Executa imediatamente se o DOM já estiver pronto.

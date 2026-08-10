@@ -42,7 +42,7 @@ function renderizarFormLogin() {
                 </div>
             </div>
 
-            <div class="text-end mb-3">
+            <div class="text-center mb-3">
                 <a href="#" id="esqueceuSenha" class="small fw-semibold text-decoration-none">Esqueci minha senha</a>
             </div>
 

@@ -10,7 +10,19 @@
 </head>
 <body>
     <tratoo-header></tratoo-header>
-    <div id="cadastro" data-tipo="contratante"></div>
+
+    <main class="auth-shell">
+        <div class="card auth-card">
+            <!-- #cadastro é o alvo de innerHTML do page-script (auth/cadastro.js). -->
+            <div class="card-body p-4 p-sm-5" id="cadastro" data-tipo="contratante"></div>
+        </div>
+
+        <p class="auth-shell__trust">
+            <i class="fa-solid fa-lock" aria-hidden="true"></i>
+            Conexão segura e protegida
+        </p>
+    </main>
+
     <tratoo-footer></tratoo-footer>
 
     <script type="module" src="/assets/js/core/app.js"></script>
