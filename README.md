@@ -200,7 +200,7 @@ Solução em camadas (Clean Architecture + Feature Folders) com persistência po
 │ │ TratooContext         │ │      │ │ R2 (blob) │  │ escrow)        │  │
 │ └───────────────────────┘ │      │ └──────────┘  └────────────────┘  │
 │ ┌───────────────────────┐ │      │ ┌──────────┐  ┌────────────────┐  │
-│ │ PostgreSQL + pgvector │ │      │ │ OpenAI    │  │ SMTP (e-mail)  │  │
+│ │ PostgreSQL + pgvector │ │      │ │ OpenAI    │  │ Resend (e-mail)│  │
 │ │ VectorContext (HNSW)  │ │      │ │ Embeddings│  │                │  │
 │ └───────────────────────┘ │      │ └──────────┘  └────────────────┘  │
 └───────────────────────────┘      └───────────────────────────────────┘
@@ -268,7 +268,7 @@ HTML/CSS/JavaScript vanilla (sem framework), servido como arquivos estáticos pe
 | Cloudflare R2 (bucket privado) | PDFs e anexos — URL pré-assinada (`R2PrivateStorageService`) |
 | Asaas | Cobrança PIX, escrow, transferências, estornos e webhooks |
 | OpenAI Embeddings (`text-embedding-3-small`, 1536 dims) | Vetores para busca semântica |
-| SMTP | OTP, assinatura, MFA + notificações |
+| Resend (API HTTPS) | OTP, assinatura, MFA + notificações |
 
 ---
 
@@ -296,7 +296,7 @@ Tratoo/
 │   │   ├── Auth/  Projetos/  Propostas/  Contratos/  Pagamentos/
 │   │   ├── Avaliacoes/  Perfis/  Mensagens/  IA/  Storage/  Infrastructure/
 │   │   │     └── cada uma com DTOs/ · Repositories/ · Services/
-│   ├── Config/                     # EmailSettings (bind de configuração, sem segredos)
+│   ├── Config/                     # ResendSettings (bind de configuração, sem segredos)
 │   ├── Data/                       # TratooContext (SQL Server) e VectorContext (pgvector)
 │   └── Migrations/                 # Migrations EF Core
 │
@@ -421,9 +421,13 @@ Prestadores e projetos são convertidos em embeddings (`text-embedding-3-small`,
 
 Quando a IA está indisponível, há *fallback* para busca textual. A reindexação roda periodicamente (background service).
 
-### SMTP (e-mail) — `EmailService`
+### E-mail transacional — `ResendEmailService`
 
-Envia OTPs (confirmação de cadastro, assinatura de contrato, MFA), redefinição de senha e notificações (ex.: lembrete de avaliação pendente). As credenciais vêm da seção `Email` (bind em `EmailSettings`).
+Envia OTPs (confirmação de cadastro, assinatura de contrato, MFA), redefinição de senha e notificações (ex.: lembrete de avaliação pendente).
+
+Usa a **API HTTPS do Resend** (`POST https://api.resend.com/emails`) em vez de SMTP: o plano Trial do Railway bloqueia SMTP outbound (25/465/587), enquanto HTTPS/443 funciona normalmente. Registrado como `HttpClient` tipado (`AddHttpClient<IEmailService, ResendEmailService>`), com timeout configurável e erros da API tratados sem expor a credencial.
+
+A API key vem da variável de ambiente `RESEND_API_KEY` — nunca do `appsettings`, que carrega apenas remetente/URL/timeout (bind em `ResendSettings`).
 
 ---
 
@@ -525,7 +529,7 @@ Asaas:ApiKey / Asaas:BaseUrl / Asaas:WebhookToken / ...
 OpenAI:ApiKey / OpenAI:BaseUrl
 CloudflareR2:*          # bucket público
 CloudflareR2Private:*   # bucket privado
-Email:Remetente / Email:Senha / Email:ServidorSmtp / Email:PortaSmtp
+RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_FROM_NAME   # e-mail transacional (Resend)
 Seed:SenhaUsuario       # senha dos usuários de seed (somente desenvolvimento)
 ```
 
