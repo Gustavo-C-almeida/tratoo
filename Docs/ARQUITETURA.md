@@ -66,7 +66,7 @@ graph TD
         OPENAI["OpenAI Embeddings"]
         BRASIL["BrasilAPI (CNPJ)"]
         VIACEP["ViaCEP (endereço)"]
-        SMTP["SMTP (e-mail)"]
+        RESEND["Resend (e-mail via API HTTPS)"]
     end
 
     UI -->|"fetch (cookie httpOnly)"| Static
@@ -82,7 +82,7 @@ graph TD
     SVC --> OPENAI
     SVC --> BRASIL
     SVC --> VIACEP
-    SVC --> SMTP
+    SVC --> RESEND
 ```
 
 ### 1.2 Fluxo de dados (requisição → resposta)

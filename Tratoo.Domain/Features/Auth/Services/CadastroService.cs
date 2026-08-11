@@ -1,5 +1,4 @@
-﻿using System.Net.Mail;
-using Tratoo.Domain.Enums;
+﻿using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Exceptions;
 
@@ -74,11 +73,6 @@ namespace Tratoo.Domain.Features.Auth
             try
             {
                 await _emailService.EnviarCodigoVerificacaoAsync(dto.Email, codigo);
-            }
-            catch (SmtpException)
-            {
-                _cacheTemp.Remover(ChaveCadastro(dto.Email));
-                throw new NegocioException("Não foi possível enviar o e-mail de verificação. Tente novamente.");
             }
             catch (TimeoutException)
             {

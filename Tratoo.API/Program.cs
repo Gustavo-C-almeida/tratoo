@@ -88,8 +88,20 @@ builder.Services.AddScoped<ICadastroService, CadastroService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<IIdentidadeService, IdentidadeService>();
 builder.Services.AddScoped<IExclusaoContaService, ExclusaoContaService>();
-builder.Services.Configure<Tratoo.Domain.Config.EmailSettings>(builder.Configuration.GetSection("Email"));
-builder.Services.AddScoped<IEmailService, EmailService>();
+// ─── E-mail transacional — Resend (HTTPS) ────────────────────────────────────
+// SMTP não é opção no Railway Trial (portas 25/465/587 bloqueadas); a API do
+// Resend usa HTTPS/443. A seção "Resend" do appsettings carrega apenas valores
+// não sensíveis; as variáveis de ambiente planas — nomes que o Railway injeta —
+// têm precedência e são a origem da API key em produção.
+builder.Services.Configure<Tratoo.Domain.Config.ResendSettings>(opcoes =>
+{
+    builder.Configuration.GetSection("Resend").Bind(opcoes);
+
+    opcoes.ApiKey    = builder.Configuration["RESEND_API_KEY"]    ?? opcoes.ApiKey;
+    opcoes.FromEmail = builder.Configuration["RESEND_FROM_EMAIL"] ?? opcoes.FromEmail;
+    opcoes.FromName  = builder.Configuration["RESEND_FROM_NAME"]  ?? opcoes.FromName;
+});
+builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<IVerificacaoMFAService, VerificacaoMFAService>();
 builder.Services.AddScoped<ICacheTempService, CacheTempService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
