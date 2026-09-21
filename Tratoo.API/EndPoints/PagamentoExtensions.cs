@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 
+using Tratoo.API.Infrastructure;
+
 namespace Tratoo.API.EndPoints
 {
     public static class PagamentoExtensions
@@ -73,7 +75,7 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var ip = http.Connection.RemoteIpAddress?.ToString();
+                var ip = ClientRequestInfo.ObterIpOuNulo(http);
                 var userAgent = http.Request.Headers.UserAgent.ToString();
 
                 var resultado = await service.LiberarPagamentoAsync(id, userId.Value, dto.ObservacaoContratante, ip, userAgent);
