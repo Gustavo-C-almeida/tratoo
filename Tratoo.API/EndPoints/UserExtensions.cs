@@ -6,6 +6,8 @@ using Tratoo.Domain.Models.Prestador;
 using Tratoo.API.Requests;
 using Tratoo.Domain.Exceptions;
 
+using Tratoo.API.Infrastructure;
+
 namespace Tratoo.API.EndPoints
 {
     public static class UserExtencions
@@ -32,7 +34,7 @@ namespace Tratoo.API.EndPoints
                 ILoginService loginService,
                 IJwtService jwtService) =>
             {
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
 
                 var resultado = await loginService.AutenticarAsync(new LoginDTO
                 {
@@ -67,7 +69,7 @@ namespace Tratoo.API.EndPoints
                 ILoginService loginService,
                 IJwtService jwtService) =>
             {
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
 
                 var resultado = await loginService.ValidarMFAAsync(new ValidarLoginMFAUserDTO
                 {
@@ -131,7 +133,7 @@ namespace Tratoo.API.EndPoints
                 if (!int.TryParse(userIdStr, out var userId))
                     return Results.Unauthorized();
 
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
 
                 await service.ExcluirAsync(new ExcluirContaDTO { UserId = userId, Ip = ip });
 
@@ -150,7 +152,7 @@ namespace Tratoo.API.EndPoints
                 HttpContext http,
                 ICadastroService service) =>
             {
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
 
                 await service.CadastrarAsync(new CadastroUserDTO
                 {
@@ -202,7 +204,7 @@ namespace Tratoo.API.EndPoints
                 HttpContext http,
                 ILoginService loginService) =>
             {
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
                 await loginService.SolicitarResetSenhaAsync(request.Email, ip);
                 // Resposta idêntica independentemente de o e-mail existir (anti-enumeração)
                 return Results.Ok(new
@@ -219,7 +221,7 @@ namespace Tratoo.API.EndPoints
                 HttpContext http,
                 ILoginService loginService) =>
             {
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
                 await loginService.ResetarSenhaAsync(new ResetarSenhaDTO
                 {
                     Email = request.Email,
@@ -292,7 +294,7 @@ namespace Tratoo.API.EndPoints
 
                 await usuarioRepo.AtualizarAsync(usuario);
 
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
 
                 // Valida e persiste CPF/CNPJ (e representante legal para PJ)
                 // Também chama VerificarPerfilMinimo() e salva o usuário

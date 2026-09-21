@@ -1,5 +1,7 @@
 using Tratoo.Domain.Features.Perfis;
 
+using Tratoo.API.Infrastructure;
+
 namespace Tratoo.API.EndPoints
 {
     /// <summary>
@@ -36,7 +38,7 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
                 await service.SolicitarAlteracaoAsync(userId.Value, ip);
 
                 return Results.Ok(new
@@ -56,7 +58,7 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
                 await service.ConfirmarTokenAsync(userId.Value, dto.Token, ip);
 
                 return Results.Ok(new
@@ -76,7 +78,7 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip = ClientRequestInfo.ObterIp(http);
                 var dados = await service.AtualizarAsync(userId.Value, dto, ip);
 
                 return Results.Ok(dados);

@@ -2,6 +2,8 @@
 using System.Text.Json;
 using Tratoo.API.Requests;
 
+using Tratoo.API.Infrastructure;
+
 namespace Tratoo.API.EndPoints
 {
     public static class ContratoExtensions
@@ -56,7 +58,7 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var ip        = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip        = ClientRequestInfo.ObterIp(http);
                 var userAgent = http.Request.Headers.UserAgent.ToString();
 
                 await service.SolicitarOtpAssinaturaAsync(id, userId.Value, ip, userAgent);
@@ -82,7 +84,7 @@ namespace Tratoo.API.EndPoints
                 if (string.IsNullOrWhiteSpace(request.Otp))
                     return Results.BadRequest(new { mensagem = "Informe o código enviado ao seu e-mail." });
 
-                var ip        = http.Connection.RemoteIpAddress?.ToString() ?? "desconhecido";
+                var ip        = ClientRequestInfo.ObterIp(http);
                 var userAgent = http.Request.Headers.UserAgent.ToString();
 
                 await service.AssinarAsync(id, userId.Value, ip, userAgent, request.Otp);
@@ -217,7 +219,7 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var ip = http.Connection.RemoteIpAddress?.ToString();
+                var ip = ClientRequestInfo.ObterIpOuNulo(http);
                 var userAgent = http.Request.Headers.UserAgent.ToString();
 
                 var resultado = await service.AprovarEntregaAsync(id, userId.Value, ip, userAgent);

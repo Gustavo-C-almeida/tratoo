@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
+using Resend;
 using Serilog;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -11,6 +12,7 @@ using Tratoo.Domain.Data;
 using Tratoo.Domain.Exceptions;
 using Tratoo.API.BackgroundServices;
 using Tratoo.API.EndPoints;
+using Tratoo.API.Infrastructure;
 using Microsoft.Extensions.FileProviders;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -19,6 +21,13 @@ using System;
 QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ─── Reverse proxy (Railway / Nginx / Cloudflare) ────────────────────────────
+// Sem isto, Connection.RemoteIpAddress é o IP do proxy — não o do cliente — e
+// Request.Scheme/IsHttps respondem "http" mesmo em acessos HTTPS. Afeta a prova
+// documental da assinatura de contratos, AuditLog, ConsentLog, rate limiting e HSTS.
+// Configurável pela seção "ForwardedHeaders" (ver ForwardedHeadersSetup).
+builder.Services.AddTratooForwardedHeaders(builder.Configuration, builder.Environment);
 
 // ─── Configurar Serilog para logs em arquivo e console ──────────────────────
 builder.Host.UseSerilog((ctx, config) =>
@@ -88,20 +97,30 @@ builder.Services.AddScoped<ICadastroService, CadastroService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<IIdentidadeService, IdentidadeService>();
 builder.Services.AddScoped<IExclusaoContaService, ExclusaoContaService>();
-// ─── E-mail transacional — Resend (HTTPS) ────────────────────────────────────
+// ─── E-mail transacional — Resend (SDK oficial, HTTPS) ───────────────────────
 // SMTP não é opção no Railway Trial (portas 25/465/587 bloqueadas); a API do
-// Resend usa HTTPS/443. A seção "Resend" do appsettings carrega apenas valores
-// não sensíveis; as variáveis de ambiente planas — nomes que o Railway injeta —
-// têm precedência e são a origem da API key em produção.
-builder.Services.Configure<Tratoo.Domain.Config.ResendSettings>(opcoes =>
-{
-    builder.Configuration.GetSection("Resend").Bind(opcoes);
+// Resend usa HTTPS/443. Lê a config uma única vez (seção "Resend" do appsettings;
+// variáveis de ambiente planas — nomes que o Railway injeta — têm precedência e
+// são a origem da API key em produção) e alimenta tanto o SDK (AddResend) quanto
+// o ResendSettings usado por ResendEmailService para montar o remetente.
+var resendSettings = new Tratoo.Domain.Config.ResendSettings();
+builder.Configuration.GetSection("Resend").Bind(resendSettings);
+resendSettings.ApiKey    = builder.Configuration["RESEND_API_KEY"]    ?? resendSettings.ApiKey;
+resendSettings.FromEmail = builder.Configuration["RESEND_FROM_EMAIL"] ?? resendSettings.FromEmail;
+resendSettings.FromName  = builder.Configuration["RESEND_FROM_NAME"]  ?? resendSettings.FromName;
 
-    opcoes.ApiKey    = builder.Configuration["RESEND_API_KEY"]    ?? opcoes.ApiKey;
-    opcoes.FromEmail = builder.Configuration["RESEND_FROM_EMAIL"] ?? opcoes.FromEmail;
-    opcoes.FromName  = builder.Configuration["RESEND_FROM_NAME"]  ?? opcoes.FromName;
-});
-builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
+builder.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(resendSettings));
+
+// AddResend já registra IResend como HttpClient tipado via IHttpClientFactory
+// (AddHttpClient<IResend, ResendClient>() internamente) — nada de HttpClient manual.
+builder.Services.AddResend(o =>
+{
+    o.ApiToken = resendSettings.ApiKey;
+    o.ApiUrl = resendSettings.BaseUrl;
+})
+.ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(resendSettings.TimeoutSegundos));
+
+builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<IVerificacaoMFAService, VerificacaoMFAService>();
 builder.Services.AddScoped<ICacheTempService, CacheTempService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -191,62 +210,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
 });
 
-builder.Services.AddRateLimiter(options =>
-{
-    // Máximo 5 tentativas por minuto por IP nos endpoints de cadastro
-    options.AddFixedWindowLimiter("cadastro", cfg =>
-    {
-        cfg.Window = TimeSpan.FromMinutes(1);
-        cfg.PermitLimit = 5;
-        cfg.QueueLimit = 0;
-        cfg.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-    });
-
-    // Máximo 10 tentativas por minuto por IP no login (brute-force protection)
-    options.AddFixedWindowLimiter("login", cfg =>
-    {
-        cfg.Window = TimeSpan.FromMinutes(1);
-        cfg.PermitLimit = 10;
-        cfg.QueueLimit = 0;
-        cfg.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-    });
-
-    // Máximo 3 solicitações por minuto por IP na redefinição de senha
-    options.AddFixedWindowLimiter("senha", cfg =>
-    {
-        cfg.Window = TimeSpan.FromMinutes(1);
-        cfg.PermitLimit = 3;
-        cfg.QueueLimit = 0;
-        cfg.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-    });
-
-    // Máximo 5 requisições por minuto por IP no fluxo de dados bancários (token/confirmar/salvar)
-    options.AddFixedWindowLimiter("dados-bancarios", cfg =>
-    {
-        cfg.Window = TimeSpan.FromMinutes(1);
-        cfg.PermitLimit = 5;
-        cfg.QueueLimit = 0;
-        cfg.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-    });
-
-    // Máximo 3 solicitações de OTP por minuto (protege contra spam de e-mail)
-    options.AddFixedWindowLimiter("otp-assinatura", cfg =>
-    {
-        cfg.Window = TimeSpan.FromMinutes(1);
-        cfg.PermitLimit = 3;
-        cfg.QueueLimit = 0;
-        cfg.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-    });
-
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.OnRejected = async (context, cancellationToken) =>
-    {
-        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        await context.HttpContext.Response.WriteAsJsonAsync(
-            new { mensagem = "Muitas tentativas. Aguarde antes de tentar novamente." },
-            cancellationToken);
-    };
-});
+// ─── Rate limiting por IP do cliente ─────────────────────────────────────────
+// Políticas e limites em RateLimiterSetup. O IP usado como chave de partição vem
+// de ClientRequestInfo — ou seja, do RemoteIpAddress já corrigido pelos
+// forwarded headers.
+builder.Services.AddTratooRateLimiter();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -285,6 +253,13 @@ using (var scope = app.Services.CreateScope())
     var vectorInit = scope.ServiceProvider.GetRequiredService<VectorDbInitializer>();
     await vectorInit.InitializeAsync();
 }
+
+// ─── PRIMEIRO middleware do pipeline ─────────────────────────────────────────
+// Promove X-Forwarded-For para Connection.RemoteIpAddress e X-Forwarded-Proto
+// para Request.Scheme/IsHttps. Precisa vir antes de tudo que dependa desses
+// valores: UseHsts (que só emite o header quando IsHttps), rate limiter
+// (particionado por IP) e todos os endpoints que gravam IP em auditoria.
+app.UseForwardedHeaders();
 
 // Cabeçalhos de segurança aplicados a todas as respostas (estáticas e de API).
 // CSP permite 'unsafe-inline' porque o frontend usa estilos e handlers inline;
@@ -447,6 +422,7 @@ app.AddEndPointsChatConvite();
 app.AddEndPointsBusca();
 app.AddEndPointsAdminDisputa();
 app.AddEndPointsDevSeed();
+app.AddEndPointsDiagnosticoRede();
 
 if (app.Environment.IsDevelopment())
 {

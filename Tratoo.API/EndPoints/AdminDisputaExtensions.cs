@@ -1,6 +1,8 @@
 using Tratoo.Domain.Features.Pagamentos;
 using Tratoo.Domain.Models.Financeiro;
 
+using Tratoo.API.Infrastructure;
+
 namespace Tratoo.API.EndPoints
 {
     /// <summary>
@@ -64,7 +66,7 @@ namespace Tratoo.API.EndPoints
                 if (!int.TryParse(userIdStr, out var adminId))
                     return Results.Unauthorized();
 
-                var ip = http.Connection.RemoteIpAddress?.ToString() ?? "admin";
+                var ip = ClientRequestInfo.ObterIp(http, "admin");
 
                 await service.ResolverAsync(disputaId, adminId, request, ip);
                 return Results.Ok(new { mensagem = "Disputa resolvida com sucesso." });
