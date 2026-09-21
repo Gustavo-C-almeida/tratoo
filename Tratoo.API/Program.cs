@@ -423,6 +423,7 @@ app.AddEndPointsBusca();
 app.AddEndPointsAdminDisputa();
 app.AddEndPointsDevSeed();
 app.AddEndPointsDiagnosticoRede();
+app.AddEndPointsDebugProxyIp();
 
 if (app.Environment.IsDevelopment())
 {
