@@ -1,62 +1,47 @@
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Resend;
 using Tratoo.Domain.Config;
 using Tratoo.Domain.Exceptions;
 
 namespace Tratoo.Domain.Features.Infrastructure
 {
     /// <summary>
-    /// Implementação de <see cref="IEmailService"/> sobre a API HTTPS do Resend
-    /// (POST /emails). Substitui a antiga implementação SMTP/Gmail, que não
-    /// funciona no Railway Trial — o plano bloqueia SMTP outbound, mas HTTPS/443
-    /// segue liberado.
+    /// Implementação de <see cref="IEmailService"/> sobre o SDK oficial do Resend
+    /// (pacote NuGet "Resend"). Substitui a antiga implementação SMTP/Gmail, que
+    /// não funciona no Railway Trial — o plano bloqueia SMTP outbound, mas
+    /// HTTPS/443 (usado pela API do Resend) segue liberado.
     ///
     /// Todo o conteúdo das mensagens (assunto/corpo) foi preservado da
-    /// implementação anterior: só o transporte mudou. Para trocar de provedor,
-    /// basta criar outra implementação de IEmailService e reapontar o DI.
+    /// implementação SMTP anterior: só o transporte mudou. Para trocar de
+    /// provedor, basta criar outra implementação de IEmailService e reapontar
+    /// o DI (ver Program.cs).
     ///
-    /// Registrado como HttpClient tipado (AddHttpClient) — o handler é reciclado
-    /// pelo IHttpClientFactory, evitando socket exhaustion e DNS obsoleto.
+    /// O IResend injetado já é um HttpClient tipado gerenciado pelo
+    /// IHttpClientFactory — registrado via AddResend() em Program.cs, o SDK faz
+    /// isso internamente (AddHttpClient&lt;IResend, ResendClient&gt;). Nenhum
+    /// HttpClient é criado manualmente aqui.
     /// </summary>
     public class ResendEmailService : IEmailService
     {
-        private readonly HttpClient _http;
+        private readonly IResend _resend;
         private readonly ResendSettings _settings;
         private readonly ILogger<ResendEmailService> _logger;
 
-        private static readonly JsonSerializerOptions _jsonOpts = new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
-
         public ResendEmailService(
-            HttpClient http,
+            IResend resend,
             IOptions<ResendSettings> options,
             ILogger<ResendEmailService> logger)
         {
-            _http = http;
+            _resend = resend;
             _settings = options.Value;
             _logger = logger;
 
             // Falha explícita de configuração — a mensagem cita o NOME da variável,
             // nunca o valor, para não vazar a credencial em log/stack trace.
-            if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-                throw new InvalidOperationException(
-                    "Resend não configurado: defina a variável de ambiente RESEND_API_KEY (ou Resend:ApiKey no appsettings).");
-
             if (string.IsNullOrWhiteSpace(_settings.FromEmail))
                 throw new InvalidOperationException(
                     "Resend não configurado: defina a variável de ambiente RESEND_FROM_EMAIL (ou Resend:FromEmail no appsettings).");
-
-            _http.BaseAddress = new Uri(_settings.BaseUrl.TrimEnd('/') + "/");
-            _http.Timeout = TimeSpan.FromSeconds(_settings.TimeoutSegundos);
-            _http.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
-            _http.DefaultRequestHeaders.Accept
-                .Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
         public Task EnviarCodigoVerificacaoAsync(string emailDestino, string codigo) =>
@@ -418,86 +403,46 @@ Equipe Tratoo");
         // ── Transporte ───────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Único ponto de saída para a API do Resend. Corpo em texto puro (text),
+        /// Único ponto de saída para o SDK do Resend. Corpo em texto puro (TextBody),
         /// equivalente ao IsBodyHtml = false do SMTP anterior.
         /// </summary>
         private async Task EnviarAsync(string destino, string assunto, string corpo)
         {
-            var payload = new
+            var mensagem = new EmailMessage
             {
-                from = $"{_settings.FromName} <{_settings.FromEmail}>",
-                to = new[] { destino },
-                subject = assunto,
-                text = corpo
+                From = new EmailAddress { Email = _settings.FromEmail, DisplayName = _settings.FromName },
+                To = destino,
+                Subject = assunto,
+                TextBody = corpo
             };
 
-            using var content = new StringContent(
-                JsonSerializer.Serialize(payload, _jsonOpts), Encoding.UTF8, "application/json");
-
-            HttpResponseMessage resposta;
             try
             {
-                resposta = await _http.PostAsync("emails", content);
+                var resposta = await _resend.EmailSendAsync(mensagem);
+
+                _logger.LogInformation(
+                    "E-mail enviado via Resend. Destino: {Destino}, Assunto: {Assunto}, Id: {Id}",
+                    MascararEmail(destino), assunto, resposta.Content);
+            }
+            catch (ResendException ex)
+            {
+                // ex.Message vem do corpo de erro do Resend (name/message/statusCode)
+                // e nunca ecoa a API key — ela só é usada no header Authorization.
+                _logger.LogError(ex,
+                    "Resend rejeitou o envio. Status: {StatusCode}, ErroTipo: {ErrorType}, Transitório: {Transiente}, Destino: {Destino}, Assunto: {Assunto}",
+                    ex.StatusCode, ex.ErrorType, ex.IsTransient, MascararEmail(destino), assunto);
+
+                throw new NegocioException($"Não foi possível enviar o e-mail. Detalhe: {ex.Message}");
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
-                // Timeout ou falha de rede. Não expõe detalhe de infraestrutura ao usuário.
+                // Timeout ou falha de rede antes mesmo de obter resposta do Resend.
                 _logger.LogError(ex,
                     "Falha de rede/timeout ao enviar e-mail via Resend. Destino: {Destino}, Assunto: {Assunto}",
                     MascararEmail(destino), assunto);
 
                 throw new NegocioException(
                     "Não foi possível enviar o e-mail no momento. Tente novamente em instantes.");
-            }
-
-            var body = await resposta.Content.ReadAsStringAsync();
-
-            if (!resposta.IsSuccessStatusCode)
-            {
-                // O body do Resend traz { "name", "message", "statusCode" } e nunca ecoa a API key.
-                _logger.LogError(
-                    "Resend rejeitou o envio. Status: {StatusCode}, Destino: {Destino}, Assunto: {Assunto}, Resposta: {Body}",
-                    (int)resposta.StatusCode, MascararEmail(destino), assunto, body);
-
-                throw new NegocioException(
-                    $"Não foi possível enviar o e-mail. Detalhe: {ExtrairMensagemErro(body, resposta.StatusCode)}");
-            }
-
-            _logger.LogInformation(
-                "E-mail enviado via Resend. Destino: {Destino}, Assunto: {Assunto}, Id: {Id}",
-                MascararEmail(destino), assunto, ExtrairId(body));
-        }
-
-        /// <summary>Extrai o campo "message" do erro do Resend, com fallback no status HTTP.</summary>
-        private static string ExtrairMensagemErro(string body, System.Net.HttpStatusCode status)
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(body);
-                if (doc.RootElement.TryGetProperty("message", out var msg))
-                    return msg.GetString() ?? $"HTTP {(int)status}";
-            }
-            catch (JsonException)
-            {
-                // corpo não-JSON (ex.: HTML de proxy) — cai no fallback
-            }
-
-            return $"HTTP {(int)status}";
-        }
-
-        /// <summary>Id da mensagem no Resend, útil para rastrear entregas no painel.</summary>
-        private static string ExtrairId(string body)
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(body);
-                return doc.RootElement.TryGetProperty("id", out var id)
-                    ? id.GetString() ?? "?"
-                    : "?";
-            }
-            catch (JsonException)
-            {
-                return "?";
             }
         }
 
