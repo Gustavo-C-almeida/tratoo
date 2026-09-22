@@ -254,7 +254,26 @@ using (var scope = app.Services.CreateScope())
     await vectorInit.InitializeAsync();
 }
 
-// ─── PRIMEIRO middleware do pipeline ─────────────────────────────────────────
+// ─── TEMPORÁRIO — diagnóstico do proxy da Railway em produção ────────────────
+// Loga os headers CRUS, antes de qualquer processamento — por isso vem ANTES
+// de app.UseForwardedHeaders(). É o único jeito de saber se o proxy da Railway
+// ANEXA (proxy_add_x_forwarded_for) ou SUBSTITUI o X-Forwarded-For do cliente,
+// e se ele envia X-Forwarded-Host. Depois de UseForwardedHeaders() os headers
+// já teriam sido consumidos/reescritos (movidos para X-Original-For/-Proto).
+//
+// REMOVER assim que a resposta da Railway estiver confirmada — ver seção
+// "Pontos que ainda dependem de infraestrutura" em Docs/REVERSE-PROXY-IP-CLIENTE.md.
+app.Use(async (context, next) =>
+{
+    Console.WriteLine($"[DIAG-PROXY] RemoteIp: {context.Connection.RemoteIpAddress}");
+    Console.WriteLine($"[DIAG-PROXY] X-Forwarded-For: {context.Request.Headers["X-Forwarded-For"]}");
+    Console.WriteLine($"[DIAG-PROXY] X-Forwarded-Proto: {context.Request.Headers["X-Forwarded-Proto"]}");
+    Console.WriteLine($"[DIAG-PROXY] X-Forwarded-Host: {context.Request.Headers["X-Forwarded-Host"]}");
+
+    await next();
+});
+
+// ─── PRIMEIRO middleware "de verdade" do pipeline ────────────────────────────
 // Promove X-Forwarded-For para Connection.RemoteIpAddress e X-Forwarded-Proto
 // para Request.Scheme/IsHttps. Precisa vir antes de tudo que dependa desses
 // valores: UseHsts (que só emite o header quando IsHttps), rate limiter
