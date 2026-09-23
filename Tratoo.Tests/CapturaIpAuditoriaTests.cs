@@ -7,7 +7,7 @@ using Xunit;
 namespace Tratoo.Tests
 {
     /// <summary>
-    /// Cenários 7 e 8: o valor efetivamente entregue às camadas que persistem IP.
+    /// O valor efetivamente entregue às camadas que persistem IP.
     ///
     /// Os endpoints reais (assinatura de contrato, OTP, dados bancários, login,
     /// cadastro, reset de senha, liberação de pagamento, disputa) capturam o IP
@@ -22,8 +22,8 @@ namespace Tratoo.Tests
     /// </summary>
     public class CapturaIpAuditoriaTests
     {
-        private const string IpProxy   = "198.51.100.7";
-        private const string IpCliente = "203.0.113.45";
+        private const string IpCliente = "203.0.113.45";   // TEST-NET-3
+        private const string IpBorda   = "198.51.100.200"; // pool de borda (salto 2)
 
         /// <summary>Espelha a captura feita por ContratoExtensions/UserExtensions/etc.</summary>
         private static void MapearRotasQueRegistramIp(WebApplication app)
@@ -41,18 +41,19 @@ namespace Tratoo.Tests
                 Results.Ok(new { ip = ClientRequestInfo.ObterIp(http, "admin") }));
         }
 
-        private static async Task<string?> PostarAsync(HttpClient client, string rota, bool comProxy)
+        private static async Task<string?> PostarAsync(
+            WebApplication app, string rota, string peer, string? forwardedFor)
         {
             var requisicao = new HttpRequestMessage(HttpMethod.Post, rota);
-            requisicao.Headers.Add(TestHostFactory.HeaderPeer, comProxy ? IpProxy : IpCliente);
+            requisicao.Headers.Add(TestHostFactory.HeaderPeer, peer);
 
-            if (comProxy)
+            if (forwardedFor is not null)
             {
-                requisicao.Headers.Add("X-Forwarded-For", IpCliente);
+                requisicao.Headers.Add("X-Forwarded-For", forwardedFor);
                 requisicao.Headers.Add("X-Forwarded-Proto", "https");
             }
 
-            var resposta = await client.SendAsync(requisicao);
+            var resposta = await app.GetTestClient().SendAsync(requisicao);
             resposta.EnsureSuccessStatusCode();
 
             using var documento = System.Text.Json.JsonDocument.Parse(
@@ -68,14 +69,13 @@ namespace Tratoo.Tests
         [InlineData("/assinatura")]
         [InlineData("/pagamento/liberar")]
         [InlineData("/admin/disputa")]
-        public async Task AtrasDeProxy_RegistraIpDoClienteENaoDoProxy(string rota)
+        public async Task AtrasDoProxy_RegistraIpDoClienteENaoDaBorda(string rota)
         {
-            await using var app = TestHostFactory.Criar(
-                new ForwardedHeadersSettings { ConfiarNoProxyImediato = true },
-                mapearRotas: MapearRotasQueRegistramIp);
+            await using var app = TestHostFactory.Criar(mapearRotas: MapearRotasQueRegistramIp);
             await app.StartAsync();
 
-            var registrado = await PostarAsync(app.GetTestClient(), rota, comProxy: true);
+            var registrado = await PostarAsync(
+                app, rota, TestHostFactory.PeerConfiavel, $"{IpCliente}, {IpBorda}");
 
             Assert.Equal(IpCliente, registrado);
         }
@@ -86,33 +86,53 @@ namespace Tratoo.Tests
         [InlineData("/admin/disputa")]
         public async Task SemProxy_RegistraIpDaConexaoDireta(string rota)
         {
-            await using var app = TestHostFactory.Criar(
-                new ForwardedHeadersSettings { ConfiarNoProxyImediato = true },
-                mapearRotas: MapearRotasQueRegistramIp);
+            await using var app = TestHostFactory.Criar(mapearRotas: MapearRotasQueRegistramIp);
             await app.StartAsync();
 
-            var registrado = await PostarAsync(app.GetTestClient(), rota, comProxy: false);
+            var registrado = await PostarAsync(
+                app, rota, TestHostFactory.PeerConfiavel, forwardedFor: null);
 
-            Assert.Equal(IpCliente, registrado);
+            Assert.Equal(TestHostFactory.PeerConfiavel, registrado);
         }
 
         /// <summary>
-        /// Antes da correção, TODO registro de auditoria da plataforma gravava o
-        /// mesmo IP interno do proxy — tornando a "prova documental" da assinatura
-        /// e os logs do Marco Civil inúteis para identificar o autor.
+        /// Antes da correção, TODO registro de auditoria da plataforma gravava o mesmo
+        /// IP interno do proxy — tornando a "prova documental" da assinatura e os logs
+        /// do Marco Civil inúteis para identificar o autor.
         /// </summary>
         [Fact]
-        public async Task SemForwardedHeaders_TodosOsRegistrosRecebemOIpDoProxy()
+        public async Task SemForwardedHeaders_TodosOsRegistrosRecebemOIpDoPeer()
         {
             await using var app = TestHostFactory.Criar(
-                new ForwardedHeadersSettings { Habilitado = false },
+                TestHostFactory.Config(habilitado: false),
                 mapearRotas: MapearRotasQueRegistramIp);
             await app.StartAsync();
-            var client = app.GetTestClient();
 
-            Assert.Equal(IpProxy, await PostarAsync(client, "/assinatura", comProxy: true));
-            Assert.Equal(IpProxy, await PostarAsync(client, "/pagamento/liberar", comProxy: true));
-            Assert.Equal(IpProxy, await PostarAsync(client, "/admin/disputa", comProxy: true));
+            var peer = TestHostFactory.PeerConfiavel;
+            var cadeia = $"{IpCliente}, {IpBorda}";
+
+            Assert.Equal(peer, await PostarAsync(app, "/assinatura", peer, cadeia));
+            Assert.Equal(peer, await PostarAsync(app, "/pagamento/liberar", peer, cadeia));
+            Assert.Equal(peer, await PostarAsync(app, "/admin/disputa", peer, cadeia));
+        }
+
+        /// <summary>
+        /// Auditoria não pode ser envenenada por quem fala direto com o Kestrel: o IP
+        /// gravado é o real da conexão, não o que o atacante alegou no header.
+        /// </summary>
+        [Theory]
+        [InlineData("/assinatura")]
+        [InlineData("/pagamento/liberar")]
+        [InlineData("/admin/disputa")]
+        public async Task PeerNaoConfiavel_NaoEnvenenaOIpDeAuditoria(string rota)
+        {
+            await using var app = TestHostFactory.Criar(mapearRotas: MapearRotasQueRegistramIp);
+            await app.StartAsync();
+
+            var registrado = await PostarAsync(
+                app, rota, TestHostFactory.PeerNaoConfiavel, $"{IpCliente}, {IpBorda}");
+
+            Assert.Equal(TestHostFactory.PeerNaoConfiavel, registrado);
         }
     }
 }

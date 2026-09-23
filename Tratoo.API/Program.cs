@@ -27,7 +27,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Request.Scheme/IsHttps respondem "http" mesmo em acessos HTTPS. Afeta a prova
 // documental da assinatura de contratos, AuditLog, ConsentLog, rate limiting e HSTS.
 // Configurável pela seção "ForwardedHeaders" (ver ForwardedHeadersSetup).
-builder.Services.AddTratooForwardedHeaders(builder.Configuration, builder.Environment);
+builder.Services.AddTratooForwardedHeaders(builder.Configuration);
 
 // ─── Configurar Serilog para logs em arquivo e console ──────────────────────
 builder.Host.UseSerilog((ctx, config) =>
@@ -254,30 +254,16 @@ using (var scope = app.Services.CreateScope())
     await vectorInit.InitializeAsync();
 }
 
-// ─── TEMPORÁRIO — diagnóstico do proxy da Railway em produção ────────────────
-// Loga os headers CRUS, antes de qualquer processamento — por isso vem ANTES
-// de app.UseForwardedHeaders(). É o único jeito de saber se o proxy da Railway
-// ANEXA (proxy_add_x_forwarded_for) ou SUBSTITUI o X-Forwarded-For do cliente,
-// e se ele envia X-Forwarded-Host. Depois de UseForwardedHeaders() os headers
-// já teriam sido consumidos/reescritos (movidos para X-Original-For/-Proto).
+// ─── PRIMEIROS middlewares do pipeline ────────────────────────────────────────
+// 1) Gate: descarta X-Forwarded-* de peers fora das faixas confiáveis. É o trust
+//    boundary — tem de rodar antes do middleware que consome esses headers.
+// 2) Forwarded headers: promove X-Forwarded-For para Connection.RemoteIpAddress e
+//    X-Forwarded-Proto para Request.Scheme/IsHttps.
 //
-// REMOVER assim que a resposta da Railway estiver confirmada — ver seção
-// "Pontos que ainda dependem de infraestrutura" em Docs/REVERSE-PROXY-IP-CLIENTE.md.
-app.Use(async (context, next) =>
-{
-    Console.WriteLine($"[DIAG-PROXY] RemoteIp: {context.Connection.RemoteIpAddress}");
-    Console.WriteLine($"[DIAG-PROXY] X-Forwarded-For: {context.Request.Headers["X-Forwarded-For"]}");
-    Console.WriteLine($"[DIAG-PROXY] X-Forwarded-Proto: {context.Request.Headers["X-Forwarded-Proto"]}");
-    Console.WriteLine($"[DIAG-PROXY] X-Forwarded-Host: {context.Request.Headers["X-Forwarded-Host"]}");
-
-    await next();
-});
-
-// ─── PRIMEIRO middleware "de verdade" do pipeline ────────────────────────────
-// Promove X-Forwarded-For para Connection.RemoteIpAddress e X-Forwarded-Proto
-// para Request.Scheme/IsHttps. Precisa vir antes de tudo que dependa desses
-// valores: UseHsts (que só emite o header quando IsHttps), rate limiter
-// (particionado por IP) e todos os endpoints que gravam IP em auditoria.
+// Ambos precisam vir antes de tudo que dependa desses valores: UseHsts (que só
+// emite o header quando IsHttps), rate limiter (particionado por IP) e todos os
+// endpoints que gravam IP em auditoria.
+app.UseGateDePeerConfiavel();
 app.UseForwardedHeaders();
 
 // Cabeçalhos de segurança aplicados a todas as respostas (estáticas e de API).
