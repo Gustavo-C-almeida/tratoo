@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
 
@@ -5,7 +6,10 @@ namespace Tratoo.API.Infrastructure
 {
     /// <summary>
     /// Configuração da seção "ForwardedHeaders" do appsettings / variáveis de ambiente.
-    /// No Railway use o formato plano: <c>ForwardedHeaders__ConfiarNoProxyImediato=true</c>.
+    /// Em produção (Railway) NÃO existe appsettings.json dentro da imagem — ele está no
+    /// .dockerignore — então toda config vem de variáveis planas no formato
+    /// <c>ForwardedHeaders__ForwardLimit</c>, <c>ForwardedHeaders__PeersConfiaveis__0</c>.
+    /// Sem nenhuma variável definida, valem os padrões desta classe.
     /// </summary>
     public class ForwardedHeadersSettings
     {
@@ -13,31 +17,74 @@ namespace Tratoo.API.Infrastructure
         public bool Habilitado { get; set; } = true;
 
         /// <summary>
-        /// Quantos saltos de proxy confiar, contados da direita para a esquerda em
-        /// <c>X-Forwarded-For</c>. Padrão 1 = apenas o proxy de borda.
-        /// Só aumente se houver mais de um proxy controlado por você em cadeia
-        /// (ex.: Cloudflare → Nginx → app = 2).
+        /// Quantos saltos percorrer em <c>X-Forwarded-For</c>, da direita para a esquerda.
+        ///
+        /// Padrão 2 — topologia observada em produção no Railway (2026-09-22): o header
+        /// chega ao Kestrel como "&lt;cliente&gt;, &lt;ip-do-pool-de-borda&gt;", e o primeiro
+        /// valor bate com o campo <c>srcIp</c> autoritativo do `railway logs --http`.
+        /// Com 1, a aplicação gravaria o IP do pool de borda como se fosse o do cliente.
+        ///
+        /// Só mude se a topologia mudar (ex.: Nginx/Cloudflare próprios à frente do
+        /// Railway somam +1 salto cada).
         /// </summary>
-        public int ForwardLimit { get; set; } = 1;
+        public int ForwardLimit { get; set; } = 2;
 
         /// <summary>
-        /// Quando true, limpa KnownProxies/KnownNetworks — o peer TCP imediato é
-        /// aceito como proxy confiável, qualquer que seja seu IP.
+        /// Faixas CIDR de onde a conexão TCP pode legitimamente chegar ao Kestrel.
+        /// É ESTE o trust boundary: requisição cujo peer não estiver aqui tem os headers
+        /// <c>X-Forwarded-*</c> descartados antes de qualquer processamento
+        /// (ver <see cref="PeerConfiavelMiddleware"/>).
         ///
-        /// Necessário em PaaS onde o IP interno do proxy é dinâmico e não documentado
-        /// (Railway). Só é seguro porque o Kestrel não é alcançável diretamente da
-        /// internet: todo tráfego entra pelo proxy da plataforma.
+        /// Padrões — cada faixa é observada ou não-roteável por definição, nenhuma inventada:
+        ///  • 100.64.0.0/10  — RFC 6598 (CGNAT). É o que o Kestrel enxerga como peer no
+        ///    Railway (100.64.0.1/.2/.3/.12/.13/.14 observados). Não é roteável na internet.
+        ///  • fc00::/7       — RFC 4193 (ULA). Os network flow logs do Railway mostram o
+        ///    ingresso na porta 8080 vindo de fd12:0:8::/48 (21 endereços distintos em 2h).
+        ///    Coberto de forma ampla porque o Railway não documenta o prefixo exato.
+        ///  • 127.0.0.0/8 e ::1/128 — loopback, para desenvolvimento local e health checks.
         ///
-        /// Quando null, assume <c>true</c> fora do ambiente Development.
-        /// Prefira <c>false</c> + <see cref="KnownProxies"/>/<see cref="KnownNetworks"/>
-        /// assim que o endereço do proxy for conhecido e estável (ex.: Nginx próprio).
+        /// Lista vazia desliga o gate (qualquer peer passa). É opt-out explícito e gera
+        /// aviso na subida — use só se a aplicação não estiver atrás de proxy nenhum.
+        ///
+        /// IMPORTANTE — fica <c>null</c> por padrão de propósito, e o padrão real vem de
+        /// <see cref="PeersConfiaveisPadrao"/> via <see cref="ResolverPeersConfiaveis"/>.
+        /// O binder de configuração do .NET ANEXA a arrays que já têm valor inicial em
+        /// vez de substituí-los: se o padrão estivesse aqui, configurar a seção só
+        /// conseguiria AMPLIAR o trust boundary, nunca restringi-lo — e as faixas padrão
+        /// continuariam confiáveis silenciosamente.
         /// </summary>
-        public bool? ConfiarNoProxyImediato { get; set; }
+        public string[]? PeersConfiaveis { get; set; }
 
-        /// <summary>IPs de proxies confiáveis (ex.: "10.0.0.7").</summary>
+        /// <summary>Faixas usadas quando a configuração não define <see cref="PeersConfiaveis"/>.</summary>
+        public static readonly string[] PeersConfiaveisPadrao =
+        {
+            "100.64.0.0/10",
+            "fc00::/7",
+            "127.0.0.0/8",
+            "::1/128"
+        };
+
+        /// <summary>
+        /// Faixas efetivas: o que veio da configuração (mesmo vazio, que desliga o gate)
+        /// ou, se nada foi configurado, <see cref="PeersConfiaveisPadrao"/>.
+        /// </summary>
+        public string[] ResolverPeersConfiaveis() => PeersConfiaveis ?? PeersConfiaveisPadrao;
+
+        /// <summary>
+        /// IPs de proxies confiáveis repassados ao middleware do ASP.NET Core para
+        /// validar CADA SALTO da cadeia (não só o peer).
+        ///
+        /// Padrão vazio, deliberadamente. ATENÇÃO à armadilha, comprovada por teste
+        /// (<c>PinarSoAFaixaDoPeer_QuebraAIdentificacaoDoCliente</c>): preencher isto
+        /// cobrindo apenas a faixa do peer faz o middleware parar no primeiro salto e
+        /// adotar o IP do pool de borda do Railway como "cliente". Para usar esta lista
+        /// é preciso cobrir TODOS os saltos — e a faixa do pool de borda do Railway não
+        /// é documentada (a lista de CIDRs deles responde 404). Enquanto isso, o trust
+        /// boundary é o <see cref="PeersConfiaveis"/>.
+        /// </summary>
         public string[] KnownProxies { get; set; } = Array.Empty<string>();
 
-        /// <summary>Redes de proxies confiáveis em CIDR (ex.: "10.0.0.0/8").</summary>
+        /// <summary>Redes de proxies confiáveis em CIDR. Mesma ressalva de <see cref="KnownProxies"/>.</summary>
         public string[] KnownNetworks { get; set; } = Array.Empty<string>();
     }
 
@@ -46,26 +93,23 @@ namespace Tratoo.API.Infrastructure
         public const string SecaoConfiguracao = "ForwardedHeaders";
 
         /// <summary>
-        /// Registra o middleware oficial de Forwarded Headers para que
-        /// <c>Connection.RemoteIpAddress</c>, <c>Request.Scheme</c> e
-        /// <c>Request.IsHttps</c> reflitam o cliente original, e não o proxy.
+        /// Registra o middleware oficial de Forwarded Headers e o gate de peer confiável.
         ///
-        /// <c>X-Forwarded-Host</c> NÃO é processado de propósito: nada no projeto
-        /// gera URL absoluta a partir de <c>Request.Host</c>, e confiar no host
-        /// encaminhado com <c>AllowedHosts: "*"</c> abriria host-header injection.
-        /// Se um dia o backend passar a montar links absolutos, adicione
-        /// <c>XForwardedHost</c> aqui E restrinja <c>AllowedHosts</c> ao domínio real.
+        /// Apenas <c>XForwardedFor</c> e <c>XForwardedProto</c> são processados.
+        /// <c>X-Forwarded-Host</c> fica de fora de propósito: nada no projeto gera URL
+        /// absoluta a partir de <c>Request.Host</c>, e confiar no host encaminhado com
+        /// <c>AllowedHosts: "*"</c> abriria host-header injection sem nenhum ganho.
         /// </summary>
         public static IServiceCollection AddTratooForwardedHeaders(
             this IServiceCollection services,
-            IConfiguration configuration,
-            IWebHostEnvironment environment)
+            IConfiguration configuration)
         {
             var settings = new ForwardedHeadersSettings();
             configuration.GetSection(SecaoConfiguracao).Bind(settings);
 
-            services.Configure<ForwardedHeadersOptions>(options =>
-                Aplicar(options, settings, environment.IsDevelopment()));
+            services.AddSingleton(settings);
+            services.AddSingleton(new RedeConfiavel(settings.ResolverPeersConfiaveis()));
+            services.Configure<ForwardedHeadersOptions>(options => Aplicar(options, settings));
 
             return services;
         }
@@ -74,10 +118,7 @@ namespace Tratoo.API.Infrastructure
         /// Traduz <see cref="ForwardedHeadersSettings"/> em <see cref="ForwardedHeadersOptions"/>.
         /// Exposto para permitir cobertura por testes sem subir a aplicação inteira.
         /// </summary>
-        public static void Aplicar(
-            ForwardedHeadersOptions options,
-            ForwardedHeadersSettings settings,
-            bool isDevelopment)
+        public static void Aplicar(ForwardedHeadersOptions options, ForwardedHeadersSettings settings)
         {
             if (!settings.Habilitado)
             {
@@ -88,21 +129,12 @@ namespace Tratoo.API.Infrastructure
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
             options.ForwardLimit = settings.ForwardLimit;
 
-            // Os defaults do framework confiam apenas em loopback (::1 e 127.0.0.1/8).
-            // Atrás do Railway o peer é o IP interno do proxy — sem limpar/substituir
-            // essas listas o middleware silenciosamente não faz nada.
+            // Os defaults do framework confiam só em loopback; atrás do Railway o peer
+            // nunca é loopback, então sem limpar isto o middleware não faria nada.
+            // Quem restringe a origem aqui é o PeerConfiavelMiddleware, não estas listas
+            // (ver comentário em ForwardedHeadersSettings.KnownProxies).
             options.KnownProxies.Clear();
             options.KnownNetworks.Clear();
-
-            var confiarNoProxyImediato = settings.ConfiarNoProxyImediato ?? !isDevelopment;
-
-            if (confiarNoProxyImediato)
-            {
-                // Ambas as listas vazias => o middleware não valida o peer e aplica
-                // os headers. Combinado com ForwardLimit=1, o IP adotado é a ÚLTIMA
-                // entrada de X-Forwarded-For — a que o proxy de borda escreveu.
-                return;
-            }
 
             foreach (var proxy in settings.KnownProxies)
             {
@@ -112,43 +144,9 @@ namespace Tratoo.API.Infrastructure
 
             foreach (var rede in settings.KnownNetworks)
             {
-                if (TentarConverterCidr(rede, out var network))
-                    options.KnownNetworks.Add(network!);
+                if (RedeConfiavel.TentarConverter(rede, out var prefixo, out var bits))
+                    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefixo!, bits));
             }
-
-            // Sem nenhum proxy configurado, restaura o default do framework (loopback).
-            // Listas vazias significariam "confiar em qualquer peer" — o oposto do
-            // que ConfiarNoProxyImediato=false pediu.
-            if (options.KnownProxies.Count == 0 && options.KnownNetworks.Count == 0)
-            {
-                options.KnownProxies.Add(IPAddress.IPv6Loopback);
-                options.KnownNetworks.Add(
-                    new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("::ffff:127.0.0.1"), 104));
-            }
-        }
-
-        private static bool TentarConverterCidr(
-            string cidr,
-            out Microsoft.AspNetCore.HttpOverrides.IPNetwork? network)
-        {
-            network = null;
-
-            var partes = cidr.Trim().Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (partes.Length != 2)
-                return false;
-
-            if (!IPAddress.TryParse(partes[0], out var prefixo))
-                return false;
-
-            if (!int.TryParse(partes[1], out var tamanhoPrefixo))
-                return false;
-
-            var maximo = prefixo.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? 128 : 32;
-            if (tamanhoPrefixo < 0 || tamanhoPrefixo > maximo)
-                return false;
-
-            network = new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefixo, tamanhoPrefixo);
-            return true;
         }
     }
 }

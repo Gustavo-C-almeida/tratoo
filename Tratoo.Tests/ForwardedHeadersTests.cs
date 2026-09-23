@@ -1,28 +1,29 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using System.Net.Http.Json;
-using Tratoo.API.Infrastructure;
 using Xunit;
 
 namespace Tratoo.Tests
 {
     /// <summary>
-    /// Cenários 1 a 6 e 10 do plano de validação: o que a aplicação enxerga como
-    /// IP e protocolo do cliente atrás (e fora) de um reverse proxy.
+    /// Comportamento de X-Forwarded-For / X-Forwarded-Proto: quem é aceito, quantos
+    /// saltos são percorridos e o que acontece com header forjado.
+    ///
+    /// Todos os endereços abaixo são de faixas reservadas para documentação
+    /// (RFC 5737) ou não-roteáveis (RFC 6598), nunca de tráfego real de produção.
     /// </summary>
     public class ForwardedHeadersTests
     {
-        // IPs de documentação (RFC 5737) — nenhum endereço real de infraestrutura.
-        private const string IpCliente = "203.0.113.45";
-        private const string IpProxy   = "198.51.100.7";
-        private const string IpOutro   = "203.0.113.200";
-
-        private static ForwardedHeadersSettings ConfiandoNoProxyImediato() =>
-            new() { Habilitado = true, ForwardLimit = 1, ConfiarNoProxyImediato = true };
+        private const string IpCliente = "203.0.113.45";   // TEST-NET-3 — cliente final
+        private const string IpBorda   = "198.51.100.200"; // TEST-NET-2 — pool de borda (salto 2)
+        private const string IpBorda2  = "198.51.100.201"; // outro nó do mesmo pool
 
         private static async Task<EcoResposta> EcoAsync(
-            HttpClient client, string peer, string? forwardedFor = null, string? forwardedProto = null)
+            WebApplication app, string peer, string? forwardedFor = null,
+            string? forwardedProto = null, string host = "localhost")
         {
-            var resposta = await client.SendAsync(Montar(peer, forwardedFor, forwardedProto));
+            var resposta = await app.GetTestClient()
+                .SendAsync(Montar(peer, forwardedFor, forwardedProto, host));
             resposta.EnsureSuccessStatusCode();
 
             return (await resposta.Content.ReadFromJsonAsync<EcoResposta>())!;
@@ -44,199 +45,283 @@ namespace Tratoo.Tests
             return requisicao;
         }
 
-        // ── 1. Requisição sem forwarded headers ──────────────────────────────
+        // ── Comportamento básico ─────────────────────────────────────────────
+
         [Fact]
         public async Task SemForwardedHeaders_UsaIpDaConexao()
         {
-            await using var app = TestHostFactory.Criar(ConfiandoNoProxyImediato());
+            await using var app = TestHostFactory.Criar();
             await app.StartAsync();
 
-            var eco = await EcoAsync(app.GetTestClient(), peer: IpCliente);
+            var eco = await EcoAsync(app, peer: TestHostFactory.PeerConfiavel);
 
-            Assert.Equal(IpCliente, eco.Ip);
+            Assert.Equal(TestHostFactory.PeerConfiavel, eco.Ip);
             Assert.Equal("http", eco.Scheme);
             Assert.False(eco.IsHttps);
         }
 
-        // ── 2. Requisição com X-Forwarded-For ────────────────────────────────
-        // ── 4. RemoteIpAddress depois do middleware ──────────────────────────
         [Fact]
-        public async Task ComXForwardedFor_AdotaIpDoClienteEmVezDoProxy()
+        public async Task PeerConfiavel_ComXForwardedProto_CorrigeSchemeEIsHttps()
         {
-            await using var app = TestHostFactory.Criar(ConfiandoNoProxyImediato());
-            await app.StartAsync();
-
-            var eco = await EcoAsync(app.GetTestClient(), peer: IpProxy, forwardedFor: IpCliente);
-
-            Assert.Equal(IpCliente, eco.Ip);
-            Assert.NotEqual(IpProxy, eco.Ip);
-        }
-
-        // ── 3. X-Forwarded-Proto: https ──────────────────────────────────────
-        // ── 5. Request.IsHttps ── 6. Request.Scheme ──────────────────────────
-        [Fact]
-        public async Task ComXForwardedProto_CorrigeSchemeEIsHttps()
-        {
-            await using var app = TestHostFactory.Criar(ConfiandoNoProxyImediato());
+            await using var app = TestHostFactory.Criar();
             await app.StartAsync();
 
             var eco = await EcoAsync(
-                app.GetTestClient(), peer: IpProxy, forwardedFor: IpCliente, forwardedProto: "https");
+                app, TestHostFactory.PeerConfiavel,
+                forwardedFor: $"{IpCliente}, {IpBorda}", forwardedProto: "https");
 
             Assert.Equal("https", eco.Scheme);
             Assert.True(eco.IsHttps);
         }
 
-        /// <summary>
-        /// Regressão do bug: sem o middleware a aplicação registra o IP do proxy e
-        /// trata a requisição como http. É exatamente o estado anterior à correção.
-        /// </summary>
         [Fact]
-        public async Task ComMiddlewareDesabilitado_VoltaAEnxergarOProxy()
+        public async Task Desabilitado_IgnoraForwardedHeaders()
         {
-            await using var app = TestHostFactory.Criar(
-                new ForwardedHeadersSettings { Habilitado = false });
+            await using var app = TestHostFactory.Criar(TestHostFactory.Config(habilitado: false));
             await app.StartAsync();
 
             var eco = await EcoAsync(
-                app.GetTestClient(), peer: IpProxy, forwardedFor: IpCliente, forwardedProto: "https");
+                app, TestHostFactory.PeerConfiavel,
+                forwardedFor: $"{IpCliente}, {IpBorda}", forwardedProto: "https");
 
-            Assert.Equal(IpProxy, eco.Ip);
+            Assert.Equal(TestHostFactory.PeerConfiavel, eco.Ip);
             Assert.Equal("http", eco.Scheme);
+        }
+
+        // ── Trust boundary: o gate de peer confiável ─────────────────────────
+
+        /// <summary>
+        /// Núcleo da proteção anti-spoofing: quem fala direto com o Kestrel de fora das
+        /// faixas confiáveis tem X-Forwarded-For E X-Forwarded-Proto descartados.
+        /// </summary>
+        [Fact]
+        public async Task PeerNaoConfiavel_TemHeadersForjadosDescartados()
+        {
+            await using var app = TestHostFactory.Criar();
+            await app.StartAsync();
+
+            var eco = await EcoAsync(
+                app, TestHostFactory.PeerNaoConfiavel,
+                forwardedFor: $"{IpCliente}, {IpBorda}", forwardedProto: "https");
+
+            Assert.Equal(TestHostFactory.PeerNaoConfiavel, eco.Ip); // IP real de quem conectou
+            Assert.Equal("http", eco.Scheme);                       // proto forjado descartado
             Assert.False(eco.IsHttps);
         }
 
-        // ── 10. Proteção contra spoofing ─────────────────────────────────────
-
         /// <summary>
-        /// Cliente não confiável falando direto com o Kestrel: o X-Forwarded-For que
-        /// ele mesmo enviou tem de ser IGNORADO quando há lista de proxies confiáveis.
+        /// Nem forjar uma cadeia longa ajuda: o gate corta antes de o middleware olhar.
         /// </summary>
         [Fact]
-        public async Task ClienteNaoConfiavel_NaoConsegueForjarXForwardedFor()
+        public async Task PeerNaoConfiavel_NaoEscapaComCadeiaLonga()
         {
-            var settings = new ForwardedHeadersSettings
-            {
-                ConfiarNoProxyImediato = false,
-                KnownProxies = new[] { IpProxy }
-            };
-
-            await using var app = TestHostFactory.Criar(settings);
+            await using var app = TestHostFactory.Criar();
             await app.StartAsync();
 
             var eco = await EcoAsync(
-                app.GetTestClient(), peer: IpOutro, forwardedFor: "8.8.8.8", forwardedProto: "https");
+                app, TestHostFactory.PeerNaoConfiavel,
+                forwardedFor: $"8.8.8.8, 1.1.1.1, {IpCliente}, {IpBorda}");
 
-            Assert.Equal(IpOutro, eco.Ip);    // continua sendo o IP real da conexão
-            Assert.Equal("http", eco.Scheme); // e o proto forjado também é descartado
+            Assert.Equal(TestHostFactory.PeerNaoConfiavel, eco.Ip);
         }
 
-        [Fact]
-        public async Task ProxyConhecido_TemSeuXForwardedForAceito()
+        [Theory]
+        [InlineData("100.64.0.1")]      // CGNAT — o que o Kestrel vê no Railway
+        [InlineData("100.127.255.254")] // outra ponta da faixa 100.64.0.0/10
+        [InlineData("::ffff:100.64.0.7")] // IPv4 mapeado em IPv6 (socket dual-stack)
+        [InlineData("fd12:0:8:0:2000:9f:8000:1")] // ULA — ingresso observado nos flow logs
+        [InlineData("127.0.0.1")]       // loopback (dev local)
+        public async Task PeersDentroDasFaixasPadrao_SaoAceitos(string peer)
         {
-            var settings = new ForwardedHeadersSettings
-            {
-                ConfiarNoProxyImediato = false,
-                KnownProxies = new[] { IpProxy }
-            };
-
-            await using var app = TestHostFactory.Criar(settings);
+            await using var app = TestHostFactory.Criar();
             await app.StartAsync();
 
-            var eco = await EcoAsync(app.GetTestClient(), peer: IpProxy, forwardedFor: IpCliente);
+            var eco = await EcoAsync(app, peer, forwardedFor: $"{IpCliente}, {IpBorda}");
 
             Assert.Equal(IpCliente, eco.Ip);
         }
 
-        [Fact]
-        public async Task RedeConhecidaEmCidr_ReconheceProxyDaFaixa()
+        [Theory]
+        [InlineData("192.0.2.66")]    // internet pública
+        [InlineData("100.63.255.255")] // logo ABAIXO de 100.64.0.0/10
+        [InlineData("100.128.0.0")]    // logo ACIMA de 100.64.0.0/10
+        [InlineData("8.8.8.8")]
+        public async Task PeersForaDasFaixasPadrao_SaoRejeitados(string peer)
         {
-            var settings = new ForwardedHeadersSettings
-            {
-                ConfiarNoProxyImediato = false,
-                KnownNetworks = new[] { "198.51.100.0/24" }
-            };
-
-            await using var app = TestHostFactory.Criar(settings);
+            await using var app = TestHostFactory.Criar();
             await app.StartAsync();
 
-            var eco = await EcoAsync(app.GetTestClient(), peer: IpProxy, forwardedFor: IpCliente);
+            var eco = await EcoAsync(app, peer, forwardedFor: $"{IpCliente}, {IpBorda}");
 
-            Assert.Equal(IpCliente, eco.Ip);
+            Assert.Equal(peer, eco.Ip);
         }
 
-        /// <summary>
-        /// ConfiarNoProxyImediato=false sem nenhum proxy configurado NÃO pode virar
-        /// "confia em todo mundo" — listas vazias desligam a checagem no framework.
-        /// O setup restaura o default de loopback nesse caso.
-        /// </summary>
         [Fact]
-        public async Task SemProxyConfigurado_ENaoConfiandoNoPeer_IgnoraHeader()
+        public async Task PeersConfiaveisCustomizado_SubstituiOPadrao()
         {
-            var settings = new ForwardedHeadersSettings { ConfiarNoProxyImediato = false };
-
-            await using var app = TestHostFactory.Criar(settings);
+            await using var app = TestHostFactory.Criar(
+                TestHostFactory.Config(peersConfiaveis: new[] { "192.0.2.0/24" }));
             await app.StartAsync();
 
-            var eco = await EcoAsync(app.GetTestClient(), peer: IpProxy, forwardedFor: IpCliente);
+            // Agora 192.0.2.66 é confiável...
+            var aceito = await EcoAsync(app, "192.0.2.66", forwardedFor: $"{IpCliente}, {IpBorda}");
+            Assert.Equal(IpCliente, aceito.Ip);
 
-            Assert.Equal(IpProxy, eco.Ip);
+            // ...e a faixa CGNAT, que era padrão, deixou de ser.
+            var rejeitado = await EcoAsync(app, "100.64.0.1", forwardedFor: $"{IpCliente}, {IpBorda}");
+            Assert.Equal("100.64.0.1", rejeitado.Ip);
         }
 
-        /// <summary>
-        /// A defesa central contra spoofing quando ConfiarNoProxyImediato=true:
-        /// ForwardLimit=1 faz o middleware ler a ÚLTIMA entrada da lista — a que o
-        /// proxy de borda anexou. O valor que o cliente tentou injetar fica à
-        /// esquerda e é descartado.
-        /// </summary>
+        /// <summary>Lista vazia = opt-out explícito: volta a aceitar de qualquer peer.</summary>
         [Fact]
-        public async Task ComForwardLimit1_UsaUltimaEntradaDaCadeia()
+        public async Task PeersConfiaveisVazio_DesligaOGate()
         {
-            await using var app = TestHostFactory.Criar(ConfiandoNoProxyImediato());
+            await using var app = TestHostFactory.Criar(
+                TestHostFactory.Config(peersConfiaveis: Array.Empty<string>()));
             await app.StartAsync();
 
             var eco = await EcoAsync(
-                app.GetTestClient(),
-                peer: IpProxy,
-                forwardedFor: "8.8.8.8, 1.1.1.1, " + IpCliente);
+                app, TestHostFactory.PeerNaoConfiavel, forwardedFor: $"{IpCliente}, {IpBorda}");
+
+            Assert.Equal(IpCliente, eco.Ip);
+        }
+
+        // ── ForwardLimit=2: topologia observada no Railway ───────────────────
+
+        /// <summary>
+        /// Topologia real: "&lt;cliente&gt;, &lt;pool de borda&gt;". O pool roda entre vários
+        /// IPs, por isso o teste cobre mais de um.
+        /// </summary>
+        [Theory]
+        [InlineData(IpBorda)]
+        [InlineData(IpBorda2)]
+        public async Task DoisSaltos_ResolveParaOClienteReal(string ipDoPool)
+        {
+            await using var app = TestHostFactory.Criar();
+            await app.StartAsync();
+
+            var eco = await EcoAsync(
+                app, TestHostFactory.PeerConfiavel, forwardedFor: $"{IpCliente}, {ipDoPool}");
 
             Assert.Equal(IpCliente, eco.Ip);
         }
 
         /// <summary>
-        /// HSTS: o HstsMiddleware só emite o header quando Request.IsHttps é true.
-        /// Antes da correção, atrás do proxy o scheme era sempre http — logo o
-        /// app.UseHsts() de produção nunca emitia nada.
-        ///
-        /// O host precisa ser diferente de localhost/127.0.0.1/[::1]: esses estão
-        /// em HstsOptions.ExcludedHosts por padrão e nunca recebem o header.
+        /// Defesa em profundidade: se algum dia um proxy ANEXAR em vez de regenerar o
+        /// header, as entradas que o cliente injetou ficam à esquerda da janela de
+        /// ForwardLimit=2 e são descartadas.
+        /// </summary>
+        [Fact]
+        public async Task ComMaisEntradasQueForwardLimit_DescartaOExcedenteDaEsquerda()
+        {
+            await using var app = TestHostFactory.Criar();
+            await app.StartAsync();
+
+            var eco = await EcoAsync(
+                app, TestHostFactory.PeerConfiavel,
+                forwardedFor: $"8.8.8.8, 1.1.1.1, {IpCliente}, {IpBorda}");
+
+            Assert.Equal(IpCliente, eco.Ip);
+            Assert.NotEqual("8.8.8.8", eco.Ip);
+        }
+
+        /// <summary>Regressão: ForwardLimit=1 resolveria para o pool de borda, não o cliente.</summary>
+        [Fact]
+        public async Task ForwardLimit1_ResolveriaErroneamenteParaOPoolDeBorda()
+        {
+            await using var app = TestHostFactory.Criar(TestHostFactory.Config(forwardLimit: 1));
+            await app.StartAsync();
+
+            var eco = await EcoAsync(
+                app, TestHostFactory.PeerConfiavel, forwardedFor: $"{IpCliente}, {IpBorda}");
+
+            Assert.Equal(IpBorda, eco.Ip);
+        }
+
+        /// <summary>Sem nenhuma configuração, o padrão do projeto resolve a topologia real.</summary>
+        [Fact]
+        public async Task ConfiguracaoPadrao_ResolveATopologiaDeDoisSaltos()
+        {
+            await using var app = TestHostFactory.Criar();
+            await app.StartAsync();
+
+            var eco = await EcoAsync(
+                app, TestHostFactory.PeerConfiavel, forwardedFor: $"{IpCliente}, {IpBorda}");
+
+            Assert.Equal(IpCliente, eco.Ip);
+        }
+
+        // ── Armadilha do KnownNetworks (documenta o porquê do gate) ──────────
+
+        /// <summary>
+        /// Por que o trust boundary NÃO usa KnownNetworks: essas listas validam cada
+        /// salto. Cobrindo só a faixa do peer, o middleware para no primeiro salto e
+        /// adota o IP do pool de borda como cliente — o mesmo bug do ForwardLimit=1.
+        /// Este teste existe para que ninguém "melhore" a config caindo nessa.
+        /// </summary>
+        [Fact]
+        public async Task PinarSoAFaixaDoPeer_QuebraAIdentificacaoDoCliente()
+        {
+            await using var app = TestHostFactory.Criar(
+                TestHostFactory.Config(knownNetworks: new[] { "100.64.0.0/10" }));
+            await app.StartAsync();
+
+            var eco = await EcoAsync(
+                app, TestHostFactory.PeerConfiavel, forwardedFor: $"{IpCliente}, {IpBorda}");
+
+            Assert.Equal(IpBorda, eco.Ip);
+            Assert.NotEqual(IpCliente, eco.Ip);
+        }
+
+        /// <summary>Cobrindo TODOS os saltos, aí sim KnownNetworks funciona.</summary>
+        [Fact]
+        public async Task PinarTodosOsSaltos_IdentificaOClienteCorretamente()
+        {
+            await using var app = TestHostFactory.Criar(
+                TestHostFactory.Config(
+                    knownNetworks: new[] { "100.64.0.0/10", "198.51.100.0/24" }));
+            await app.StartAsync();
+
+            var eco = await EcoAsync(
+                app, TestHostFactory.PeerConfiavel, forwardedFor: $"{IpCliente}, {IpBorda}");
+
+            Assert.Equal(IpCliente, eco.Ip);
+        }
+
+        // ── HSTS e normalização ──────────────────────────────────────────────
+
+        /// <summary>
+        /// HstsMiddleware só emite o header quando Request.IsHttps é true — por isso
+        /// UseForwardedHeaders precisa vir antes dele. O host não pode ser localhost:
+        /// está em HstsOptions.ExcludedHosts por padrão.
         /// </summary>
         [Fact]
         public async Task Hsts_SoEEmitidoQuandoOProtoEncaminhadoEHttps()
         {
             const string HostPublico = "tratoo.example";
 
-            await using var app = TestHostFactory.Criar(ConfiandoNoProxyImediato(), comHsts: true);
+            await using var app = TestHostFactory.Criar(comHsts: true);
             await app.StartAsync();
             var client = app.GetTestClient();
 
-            var semProto = await client.SendAsync(Montar(IpProxy, IpCliente, host: HostPublico));
-            var comProto = await client.SendAsync(Montar(IpProxy, IpCliente, "https", HostPublico));
+            var semProto = await client.SendAsync(
+                Montar(TestHostFactory.PeerConfiavel, IpCliente, host: HostPublico));
+            var comProto = await client.SendAsync(
+                Montar(TestHostFactory.PeerConfiavel, IpCliente, "https", HostPublico));
 
             Assert.False(semProto.Headers.Contains("Strict-Transport-Security"));
             Assert.True(comProto.Headers.Contains("Strict-Transport-Security"));
         }
 
-        /// <summary>IPv4 mapeado em IPv6 é normalizado antes de ser gravado/particionado.</summary>
         [Fact]
         public async Task IpV4MapeadoEmIpV6_ENormalizado()
         {
-            await using var app = TestHostFactory.Criar(ConfiandoNoProxyImediato());
+            await using var app = TestHostFactory.Criar();
             await app.StartAsync();
 
-            var eco = await EcoAsync(app.GetTestClient(), peer: "::ffff:" + IpCliente);
+            var eco = await EcoAsync(app, peer: "::ffff:100.64.0.9");
 
-            Assert.Equal(IpCliente, eco.Ip);
+            Assert.Equal("100.64.0.9", eco.Ip);
         }
     }
 }
