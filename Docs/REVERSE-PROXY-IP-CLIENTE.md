@@ -1,7 +1,13 @@
 # IP real do cliente atrás de reverse proxy
 
 Correção do tratamento de `X-Forwarded-For` / `X-Forwarded-Proto` no Tratoo.API.
-Data: 2026-09-20.
+
+**2026-09-20** — implementação inicial (`ForwardLimit=1`, hipótese não confirmada em produção).
+**2026-09-22 (manhã)** — validado em produção via `railway logs`; topologia real do
+Railway tem 2 saltos, não 1. `ForwardLimit` corrigido para `2`. Ver seção 6.1.
+**2026-09-22 (tarde)** — trust boundary explícito: gate de peer confiável
+(`PeerConfiavelMiddleware`) substitui o antigo `ConfiarNoProxyImediato`, que confiava em
+qualquer peer. Ver seção 4.
 
 ---
 
@@ -68,7 +74,8 @@ entrava na conta.
 
 ### Como `X-Forwarded-For` e `X-Forwarded-Proto` entram no fluxo
 
-O `ForwardedHeadersMiddleware` (agora o primeiro do pipeline):
+O `ForwardedHeadersMiddleware` (logo após o gate de peer confiável, que é o primeiro do
+pipeline — ver seção 4):
 
 1. confere se o peer da conexão é um proxy confiável (`KnownProxies`/`KnownNetworks`);
 2. consome a **última** entrada de `X-Forwarded-For` e a grava em `Connection.RemoteIpAddress`;
@@ -76,7 +83,8 @@ O `ForwardedHeadersMiddleware` (agora o primeiro do pipeline):
    (o que faz `Request.IsHttps` passar a responder corretamente);
 4. move o que sobrou para `X-Original-For` / `X-Original-Proto`.
 
-Repete o passo 1–3 no máximo `ForwardLimit` vezes (configurado como 1 = só o proxy de borda).
+Repete o passo 1–3 no máximo `ForwardLimit` vezes (configurado como 2 — confirmado em
+produção, ver seção 6: a borda do Railway encadeia dois saltos antes do Kestrel).
 
 ---
 
@@ -117,6 +125,8 @@ Repete o passo 1–3 no máximo `ForwardLimit` vezes (configurado como 1 = só o
 | Arquivo | Conteúdo |
 |---|---|
 | `Tratoo.API/Infrastructure/ForwardedHeadersSetup.cs` | `ForwardedHeadersSettings` + `AddTratooForwardedHeaders()` + `Aplicar()` (tradução settings → `ForwardedHeadersOptions`, exposta para teste). |
+| `Tratoo.API/Infrastructure/PeerConfiavelMiddleware.cs` | Gate do trust boundary: descarta `X-Forwarded-*` de peers fora das faixas confiáveis, com log de aviso. |
+| `Tratoo.API/Infrastructure/RedeConfiavel.cs` | Conjunto de faixas CIDR pré-parseado; casa IPv4 mapeado em IPv6 e aceita IP solto como /32 ou /128. |
 | `Tratoo.API/Infrastructure/ClientRequestInfo.cs` | Fonte única do IP: `ObterIp()`, `ObterIpOuNulo()`, `Normalizar()`. |
 | `Tratoo.API/Infrastructure/RateLimiterSetup.cs` | As cinco políticas, agora particionadas por IP, com os limites originais preservados. |
 | `Tratoo.API/EndPoints/DiagnosticoRedeExtensions.cs` | `GET /api/diagnostico/rede` — anônimo em Development, role `Admin` fora dela. |
@@ -126,7 +136,7 @@ Repete o passo 1–3 no máximo `ForwardLimit` vezes (configurado como 1 = só o
 
 | Arquivo | Alteração |
 |---|---|
-| `Tratoo.API/Program.cs` | `AddTratooForwardedHeaders(...)` no builder; `app.UseForwardedHeaders()` como **primeiro** middleware (antes de `UseHsts`, security headers, static files, auth e rate limiter); bloco inline de 57 linhas do rate limiter trocado por `AddTratooRateLimiter()`; registro do endpoint de diagnóstico. |
+| `Tratoo.API/Program.cs` | `AddTratooForwardedHeaders(builder.Configuration)` no builder; `app.UseGateDePeerConfiavel()` + `app.UseForwardedHeaders()` como os **dois primeiros** middlewares (antes de `UseHsts`, security headers, static files, auth e rate limiter); bloco inline de 57 linhas do rate limiter trocado por `AddTratooRateLimiter()`; registro do endpoint de diagnóstico. |
 | `Tratoo.API/EndPoints/UserExtensions.cs` | 7 chamadas migradas para `ClientRequestInfo`. |
 | `Tratoo.API/EndPoints/ContratoExtensions.cs` | 3 chamadas. |
 | `Tratoo.API/EndPoints/DadosBancariosExtensions.cs` | 3 chamadas. |
@@ -170,108 +180,171 @@ estilo:
 
 ### Como o IP real é obtido
 
-Exclusivamente via `Connection.RemoteIpAddress` **depois** do `UseForwardedHeaders()`.
-Nenhum ponto do código lê `X-Forwarded-For` diretamente — leitura manual ignoraria a
-checagem de proxy confiável e aceitaria qualquer valor enviado pelo cliente.
+Exclusivamente via `Connection.RemoteIpAddress` **depois** do gate e do
+`UseForwardedHeaders()`. Nenhum ponto do código lê `X-Forwarded-For` diretamente —
+leitura manual puraria a validação de origem e aceitaria qualquer valor do cliente.
 
-### Quais proxies são confiáveis
+### O trust boundary
 
-Configurável pela seção `ForwardedHeaders`:
+```
+Cliente ──HTTPS──► borda Railway ──► roteamento interno ──► Kestrel :8080
+                   escreve XFF[0]     acrescenta XFF[1]      peer = 100.64.0.x
+                   = IP do cliente    = IP do pool de borda
+                                                              │
+                        ┌─────────────────────────────────────┘
+                        ▼
+   1. PeerConfiavelMiddleware  → o peer está numa faixa confiável?
+        não ──► descarta X-Forwarded-*  (audita o IP real de quem conectou)
+        sim ──► segue
+   2. UseForwardedHeaders (ForwardLimit=2) → percorre 2 saltos → XFF[0] = cliente
+```
+
+**A decisão de confiança é tomada sobre o peer TCP, não sobre a cadeia.** Isso é
+deliberado e a razão está na seção 6.1: as listas `KnownProxies`/`KnownNetworks` do
+ASP.NET Core validam **cada salto**, e cobrir só a faixa do peer faz o middleware parar
+no primeiro salto e gravar o IP do pool de borda como se fosse o cliente — o mesmo bug
+que o `ForwardLimit=2` corrigiu. Cobrir os dois saltos exigiria a faixa do pool de borda
+do Railway, que **não é documentada** (a lista de CIDRs deles responde 404). Separar as
+responsabilidades resolve: o gate decide *quem pode apresentar* headers, o middleware
+oficial decide *quantos saltos percorrer*.
+
+Comprovado pelos testes `PinarSoAFaixaDoPeer_QuebraAIdentificacaoDoCliente` e
+`PinarTodosOsSaltos_IdentificaOClienteCorretamente`.
+
+### Faixas confiáveis padrão — e a evidência de cada uma
+
+| Faixa | Por que está aqui |
+|---|---|
+| `100.64.0.0/10` | RFC 6598 (CGNAT). É o que o Kestrel enxerga como peer no Railway — `100.64.0.1/.2/.3/.12/.13/.14` observados entre o middleware de diagnóstico e os network flow logs. Não é roteável na internet pública. |
+| `fc00::/7` | RFC 4193 (ULA). Os network flow logs do Railway mostram o ingresso na porta 8080 vindo de `fd12:0:8::/48` — 21 endereços distintos em 2 h. Faixa ampla porque o Railway não documenta o prefixo exato. |
+| `127.0.0.0/8`, `::1/128` | Loopback: desenvolvimento local e health checks. |
+
+Nenhuma faixa foi inventada: cada uma foi observada em produção ou é não-roteável por
+definição de RFC. A faixa do **segundo** salto (o pool de borda) continua desconhecida e
+por isso **não** é usada como critério de confiança.
+
+Configuração (seção `ForwardedHeaders`; no Railway, variáveis planas
+`ForwardedHeaders__ForwardLimit`, `ForwardedHeaders__PeersConfiaveis__0`, …):
 
 ```jsonc
 "ForwardedHeaders": {
   "Habilitado": true,
-  "ForwardLimit": 1,
-  "ConfiarNoProxyImediato": null,  // null => true fora de Development
-  "KnownProxies": [],
+  "ForwardLimit": 2,
+  "PeersConfiaveis": [ "100.64.0.0/10", "fc00::/7", "127.0.0.0/8", "::1/128" ],
+  "KnownProxies": [],   // ver armadilha acima
   "KnownNetworks": []
 }
 ```
 
-Variáveis de ambiente planas no Railway:
-`ForwardedHeaders__ConfiarNoProxyImediato`, `ForwardedHeaders__ForwardLimit`,
-`ForwardedHeaders__KnownProxies__0`, `ForwardedHeaders__KnownNetworks__0`.
-
-**Padrão adotado: `ConfiarNoProxyImediato = true` fora de Development.** O IP interno do
-proxy da Railway é dinâmico e não documentado; travar em uma lista exigiria inventar
-endereços, o que não foi feito. Com as listas vazias, o middleware aceita o peer imediato
-como proxy — seguro **desde que o Kestrel não seja alcançável diretamente da internet**
-(ver seção 6).
-
-Cuidado registrado no código: se `ConfiarNoProxyImediato = false` for definido **sem**
-preencher `KnownProxies`/`KnownNetworks`, listas vazias significariam "confiar em
-qualquer peer" — exatamente o oposto do pedido. Nesse caso o setup restaura o default do
-framework (apenas loopback). Coberto pelo teste
-`SemProxyConfigurado_ENaoConfiandoNoPeer_IgnoraHeader`.
+Definir `PeersConfiaveis` **substitui** a lista padrão inteira — a chave ausente é que
+aciona o padrão. Isso exigiu deixar a propriedade como `null` no C#: o binder de
+configuração do .NET *anexa* a arrays já inicializados em vez de substituí-los, o que
+tornaria impossível **restringir** o trust boundary por configuração (só ampliar). O
+defeito foi encontrado justamente pelos testes de binding e está coberto por
+`PeersConfiaveisVindoDeConfiguracao_SubstituiOPadrao`.
 
 ### Como o spoofing de `X-Forwarded-For` é evitado
 
-Duas camadas:
+Três camadas, da mais forte para a mais fraca:
 
-1. **`ForwardLimit = 1`.** O middleware lê a entrada **mais à direita** de
-   `X-Forwarded-For`. Um proxy que *anexa* o IP observado empurra qualquer valor forjado
-   pelo cliente para a esquerda, onde ele é descartado:
+1. **Gate de peer confiável** (nosso). Quem fala direto com o Kestrel de fora das faixas
+   tem `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port` e
+   `X-Real-IP` removidos da requisição, e é auditado/limitado pelo IP real da conexão.
+   Falha de forma segura e **visível**: emite `LogWarning`, então uma faixa mal
+   configurada aparece no log em vez de corromper a auditoria em silêncio.
+   Coberto por `PeerNaoConfiavel_TemHeadersForjadosDescartados`,
+   `PeerNaoConfiavel_NaoEscapaComCadeiaLonga` e
+   `PeerNaoConfiavel_NaoEscapaDoLimiteForjandoIp`.
 
-   ```
-   Cliente envia:  X-Forwarded-For: 8.8.8.8
-   Proxy anexa:    X-Forwarded-For: 8.8.8.8, 203.0.113.45   ← IP real, é este que vale
-   ```
+2. **`ForwardLimit = 2`.** Mesmo vindo de um peer confiável, só os dois saltos mais à
+   direita são percorridos. Se algum proxy um dia *anexar* em vez de regenerar, o que o
+   cliente injetou fica à esquerda da janela e é descartado. Coberto por
+   `ComMaisEntradasQueForwardLimit_DescartaOExcedenteDaEsquerda`.
 
-   Coberto por `ComForwardLimit1_UsaUltimaEntradaDaCadeia`.
-
-2. **Lista de proxies confiáveis**, quando informada. Um cliente que fale direto com o
-   Kestrel tem seus headers `X-Forwarded-*` integralmente ignorados. Coberto por
-   `ClienteNaoConfiavel_NaoConsegueForjarXForwardedFor`.
-
-O limite da camada 1 é honesto: ela depende de o proxy **anexar** (ou substituir) o
-header em vez de repassá-lo intacto. É o comportamento padrão de Nginx com
-`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`, da Cloudflare e, pelo que
-se espera, do proxy da Railway — mas isso **precisa ser confirmado em produção**
-(seção 6).
+3. **Comportamento da borda do Railway.** Confirmado por teste ao vivo (seção 6.1) e
+   pela própria equipe deles em fórum: *"We do strip X-Forwarded-For at our edge and
+   ensure clients cannot overwrite it."* É a camada sobre a qual temos menos controle —
+   por isso ela é a última, não a primeira.
 
 ### Comportamento com outros proxies no futuro
 
 | Cenário | Configuração |
 |---|---|
-| **Railway hoje** | Nada a fazer — o padrão já vale. |
-| **Nginx próprio, IP fixo** | `ConfiarNoProxyImediato: false` + `KnownProxies: ["<ip do nginx>"]` (ou `KnownNetworks` em CIDR). Nginx precisa de `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` e `X-Forwarded-Proto $scheme;`. |
-| **Cloudflare → Nginx → app** | `ForwardLimit: 2` e confiar no Nginx. Alternativa mais robusta: configurar o Nginx para usar `CF-Connecting-IP` e reescrever o `X-Forwarded-For`, mantendo `ForwardLimit: 1`. |
-| **Sem proxy (rodando exposto)** | `Habilitado: false`. |
+| **Railway hoje** | Nada a fazer — os padrões já valem. |
+| **Nginx próprio, IP fixo, à frente do Railway** | Soma +1 em `ForwardLimit` (fica 3). O peer continua sendo o Railway, então `PeersConfiaveis` não muda. Nginx precisa de `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` e `X-Forwarded-Proto $scheme;`. |
+| **Nginx próprio como único proxy (sem Railway)** | `ForwardLimit: 1` e `PeersConfiaveis: ["<ip ou faixa do nginx>"]`. |
+| **Cloudflare → Nginx → Railway → app** | `ForwardLimit: 4`. Alternativa mais robusta: o Nginx reescrever `X-Forwarded-For` a partir de `CF-Connecting-IP`. |
+| **Sem proxy (exposto direto)** | `Habilitado: false`. |
 
 `X-Forwarded-Host` **não** é processado, de propósito: nada no projeto gera URL absoluta
 a partir de `Request.Host` e `AllowedHosts` está em `"*"`, então confiar no host
 encaminhado abriria host-header injection sem nenhum benefício. Se o backend passar a
 montar links absolutos, adicione `XForwardedHost` **e** restrinja `AllowedHosts` ao
-domínio real, na mesma alteração.
+domínio real, na mesma alteração. (O gate já remove esse header de peers não confiáveis,
+para que ele nunca chegue "sujo" caso passe a ser lido.)
 
 ---
 
 ## 5. Validação
 
-`dotnet test Tratoo.Tests` — **30 testes, 30 aprovados**, ~0,6 s.
-Solution compila sem erros (mesmos 29 avisos `CS8618` pré-existentes).
+`dotnet test Tratoo.Tests` — **57 testes, 57 aprovados**, ~0,7 s.
+Solution compila sem erros.
 
-| # | Cenário | Teste | Resultado |
-|---|---|---|---|
-| 1 | Requisição sem forwarded headers | `SemForwardedHeaders_UsaIpDaConexao` | IP = conexão; `http`; `IsHttps=false` |
-| 2 | Com `X-Forwarded-For` | `ComXForwardedFor_AdotaIpDoClienteEmVezDoProxy` | IP do cliente, não do proxy |
-| 3 | Com `X-Forwarded-Proto: https` | `ComXForwardedProto_CorrigeSchemeEIsHttps` | `Scheme=https` |
-| 4 | `RemoteIpAddress` após o middleware | idem #2 (via `ClientRequestInfo`) | correto |
-| 5 | `Request.IsHttps` | idem #3 | `true` |
-| 6 | `Request.Scheme` | idem #3 | `https` |
-| 7 | IP na captura da assinatura | `CapturaIpAuditoriaTests` (`/assinatura`) | IP do cliente |
-| 8 | IP na captura dos logs de auditoria | `CapturaIpAuditoriaTests` (`/pagamento/liberar`, `/admin/disputa`) | IP do cliente; fallbacks `null` e `"admin"` preservados |
-| 9 | Rate limiting por IP | `Login_ContaPorIpDoCliente_NaoPorProxy` | 10 ok, 11ª = 429, outro IP passa |
-| 9b | Políticas não compartilham balde | `PoliticasDiferentes_NaoCompartilhamBalde` | `senha` esgotada não afeta `login` |
-| 10 | Cliente não confiável não forja XFF | `ClienteNaoConfiavel_NaoConsegueForjarXForwardedFor` | header ignorado (IP e proto) |
-| 10b | Proxy conhecido é aceito | `ProxyConhecido_TemSeuXForwardedForAceito` | IP do cliente |
-| 10c | Rede confiável em CIDR | `RedeConhecidaEmCidr_ReconheceProxyDaFaixa` | IP do cliente |
-| 10d | `false` sem proxy configurado não vira "confia em todos" | `SemProxyConfigurado_ENaoConfiandoNoPeer_IgnoraHeader` | header ignorado |
-| 10e | `ForwardLimit=1` usa a última entrada | `ComForwardLimit1_UsaUltimaEntradaDaCadeia` | descarta o valor forjado |
-| — | HSTS só com proto https | `Hsts_SoEEmitidoQuandoOProtoEncaminhadoEHttps` | header ausente sem proto, presente com |
-| — | Normalização de IP | `ClientRequestInfoTests` (6 casos) | IPv4-mapped, scope id, tamanho, fallbacks |
-| — | **Regressão do Defeito A** | `ComMiddlewareDesabilitado_VoltaAEnxergarOProxy` e `SemForwardedHeaders_TodosOsRegistrosRecebemOIpDoProxy` | reproduz o bug antigo |
-| — | **Regressão do Defeito B** | `AddFixedWindowLimiter_DoFramework_UsaUmUnicoBaldeGlobal` e `SemForwardedHeaders_ClientesDistintosCompartilhamOLimite` | reproduz o bug antigo |
+Diferença importante em relação à versão anterior desta suíte: os testes de pipeline
+agora sobem pelo **caminho real** — `AddTratooForwardedHeaders(IConfiguration)` com
+binding de verdade — em vez de chamar `ForwardedHeadersSetup.Aplicar()` diretamente.
+Foi essa mudança que expôs o defeito do binder descrito na seção 4 (arrays com valor
+inicial são *anexados*, não substituídos).
+
+### Trust boundary / anti-spoofing
+
+| Cenário | Teste | Resultado |
+|---|---|---|
+| Peer não confiável forja `X-Forwarded-For` e `-Proto` | `PeerNaoConfiavel_TemHeadersForjadosDescartados` | IP = conexão real; `scheme=http` |
+| Peer não confiável forja cadeia longa | `PeerNaoConfiavel_NaoEscapaComCadeiaLonga` | header descartado |
+| Peer não confiável tenta escapar do rate limit | `PeerNaoConfiavel_NaoEscapaDoLimiteForjandoIp` | 4ª requisição = 429 pelo IP real |
+| Peer não confiável tenta envenenar auditoria | `PeerNaoConfiavel_NaoEnvenenaOIpDeAuditoria` (3 rotas) | grava o IP real |
+| Faixas padrão aceitam CGNAT, ULA, IPv4-mapped, loopback | `PeersDentroDasFaixasPadrao_SaoAceitos` (5 casos) | IP do cliente |
+| Fronteiras da faixa rejeitam `100.63.255.255` / `100.128.0.0` | `PeersForaDasFaixasPadrao_SaoRejeitados` (4 casos) | IP da conexão |
+| Config substitui (não soma) as faixas padrão | `PeersConfiaveisCustomizado_SubstituiOPadrao` | CGNAT deixa de ser confiável |
+| Lista vazia = opt-out explícito | `PeersConfiaveisVazio_DesligaOGate` | aceita qualquer peer |
+
+### ForwardLimit e topologia
+
+| Cenário | Teste | Resultado |
+|---|---|---|
+| Cadeia de 2 saltos resolve o cliente (2 nós de borda) | `DoisSaltos_ResolveParaOClienteReal` | IP do cliente |
+| Mais entradas que `ForwardLimit` | `ComMaisEntradasQueForwardLimit_DescartaOExcedenteDaEsquerda` | descarta o excedente da esquerda |
+| `ForwardLimit=1` (valor antigo) | `ForwardLimit1_ResolveriaErroneamenteParaOPoolDeBorda` | reproduz o bug corrigido |
+| Padrão do projeto sem config | `ConfiguracaoPadrao_ResolveATopologiaDeDoisSaltos` | IP do cliente |
+| **Armadilha**: pinar só a faixa do peer em `KnownNetworks` | `PinarSoAFaixaDoPeer_QuebraAIdentificacaoDoCliente` | resolve o IP da borda — documenta por que o gate existe |
+| Pinar todos os saltos funciona | `PinarTodosOsSaltos_IdentificaOClienteCorretamente` | IP do cliente |
+
+### Binding real de configuração
+
+| Cenário | Teste |
+|---|---|
+| Sem config → padrões (`ForwardLimit=2`, gate ativo, só For+Proto) | `SemConfiguracaoNenhuma_UsaOsPadroesDoProjeto` |
+| `ForwardLimit` vindo de config | `ForwardLimitVindoDeConfiguracao_SobrescreveOPadrao` |
+| `Habilitado=false` | `HabilitadoFalse_DesligaOProcessamento` |
+| `PeersConfiaveis` substitui o padrão | `PeersConfiaveisVindoDeConfiguracao_SubstituiOPadrao` |
+| `KnownProxies`/`KnownNetworks` chegam ao middleware | `KnownNetworksVindoDeConfiguracao_ChegaAoMiddleware` |
+| CIDR inválido é ignorado e reportado, sem derrubar a app | `CidrInvalido_EIgnoradoEReportado` |
+| Entrada em branco zera o gate | `PeersConfiaveisEmBranco_DeixaOGateVazio` |
+| **Variável de ambiente `ForwardedHeaders__…`** (formato do Railway) | `VariavelDeAmbienteComDuploUnderscore_EhLidaCorretamente` |
+
+### Captura de IP, rate limiting e HSTS
+
+| Cenário | Teste |
+|---|---|
+| IP na captura da assinatura / auditoria / disputa | `CapturaIpAuditoriaTests` (fallbacks `desconhecido`, `null`, `admin` preservados) |
+| Rate limiting conta por cliente, não por borda | `Login_ContaPorIpDoCliente_NaoPorBorda` |
+| Políticas não compartilham balde | `PoliticasDiferentes_NaoCompartilhamBalde` |
+| Dois clientes no mesmo nó de borda | `DoisClientesNoMesmoNoDeBorda_NaoCompartilhamCota` |
+| HSTS só com proto https | `Hsts_SoEEmitidoQuandoOProtoEncaminhadoEHttps` |
+| Normalização de IP | `ClientRequestInfoTests` (6 casos) |
+| **Regressão do Defeito A** | `SemForwardedHeaders_TodosOsRegistrosRecebemOIpDoPeer` |
+| **Regressão do Defeito B** | `AddFixedWindowLimiter_DoFramework_UsaUmUnicoBaldeGlobal`, `SemForwardedHeaders_ClientesDistintosCompartilhamOLimite` |
 
 ### O que os testes **não** cobrem
 
@@ -282,54 +355,131 @@ por teste, porque exercitar esses caminhos exigiria banco, cache de OTP, serviç
 e-mail, geração de PDF e R2. Os testes cobrem a **captura**, que é exatamente onde o
 defeito estava.
 
+Todos os endereços usados nos testes são de faixas reservadas para documentação
+(RFC 5737) ou não-roteáveis (RFC 6598/4193) — nenhum IP de tráfego real de produção
+ficou versionado.
+
 ---
 
 ## 6. Pontos que dependem de infraestrutura
 
-Nada abaixo pode ser determinado a partir do código. Não foram assumidos valores.
+### 6.1 Confirmado em produção em 2026-09-22
 
-1. **O proxy da Railway anexa ou repassa `X-Forwarded-For`?**
-   É a premissa da defesa anti-spoofing da camada 1. Se ele repassar intacto o header
-   enviado pelo cliente, um atacante consegue forjar o IP registrado em auditoria.
-   **Como verificar:** chamar `GET /api/diagnostico/rede` em produção (autenticado como
-   `Admin`) **enviando** `X-Forwarded-For: 8.8.8.8`. Se `ipDoCliente` voltar `8.8.8.8`,
-   o proxy repassa e a configuração precisa ser endurecida.
+Os itens 1 e 4 da versão anterior desta seção foram validados diretamente em produção,
+via um middleware de diagnóstico temporário (`Console.WriteLine` logo antes de
+`app.UseForwardedHeaders()`, para capturar os headers **crus**) cruzado com
+`railway logs --http --json`, que expõe um campo `srcIp` autoritativo — calculado pela
+própria borda do Railway, não algo que passa pelo `X-Forwarded-For`.
 
-2. **O Kestrel é alcançável diretamente, sem passar pelo proxy?**
-   `ConfiarNoProxyImediato = true` só é seguro se não for. Confirmar que a porta 8080 do
-   container não tem rota pública fora do edge da Railway.
+**Metodologia:** uma requisição de navegador comum foi capturada nos logs; em seguida,
+uma segunda requisição com `X-Forwarded-For: 8.8.8.8, 9.9.9.9` forjado foi enviada de
+propósito à mesma URL pública para testar resistência a spoofing.
 
-3. **Qual o IP/faixa interna do proxy da Railway?**
-   Se for estável e obtível, trocar para `ConfiarNoProxyImediato: false` +
-   `KnownProxies`/`KnownNetworks`. É mais restritivo que o padrão atual.
+**Achado 1 — a borda do Railway encadeia DOIS saltos antes do Kestrel, não um.**
+Toda requisição chegou ao middleware com dois valores em `X-Forwarded-For`, por exemplo:
 
-4. **Quantos saltos de proxy existem de fato?**
-   `ForwardLimit` está em 1. Se houver CDN antes da Railway, ajustar — e conferir no
-   diagnóstico se `xOriginalFor` mostra entradas sobrando.
+```
+X-Forwarded-For: 201.81.0.58, 46.151.194.129
+RemoteIp (peer cru, pré-middleware): ::ffff:100.64.0.1   ← CGNAT interno do Railway
+```
 
-5. **HSTS agora passa a ser emitido de verdade.**
-   Antes não era (Defeito A). Confirmar que todo o tráfego do domínio é HTTPS antes de
-   deixar rodando — `max-age` é sticky no navegador.
+O primeiro valor bate exatamente com o `srcIp` que o próprio `railway logs --http`
+registra para a mesma requisição — ou seja, é o Railway quem diz que esse é o cliente
+real, de forma independente do header. O segundo valor variou entre pelo menos dois
+IPs (`46.151.194.129` e `46.151.194.130`) em requisições consecutivas — consistente com
+um **pool** de nós de borda do Railway, não com um proxy externo de IP fixo.
+
+**Consequência prática:** com `ForwardLimit=1` (o valor original desta correção), a
+aplicação estava gravando o IP do *pool de edge do Railway* — não o do cliente — em toda
+a auditoria, e usando esse mesmo IP como chave de rate limiting. Como o pool é
+compartilhado, **dois usuários reais diferentes que caíssem no mesmo nó de borda
+colidiam na mesma partição** — uma reencarnação mais sutil do exato bug (Defeito B) que
+esta correção existia para resolver. **`ForwardLimit` foi corrigido para `2`** e o
+comportamento agora bate com o `srcIp` autoritativo do Railway — coberto por
+`TopologiaRealDoRailway_DoisSaltos_ResolveParaOClienteReal` e
+`DoisClientesReaisNoMesmoNoDeEdge_NaoCompartilhamCota` em `Tratoo.Tests`.
+
+**Achado 2 — o Railway REGENERA `X-Forwarded-For` do zero a cada requisição.**
+O valor forjado (`8.8.8.8, 9.9.9.9`) não apareceu em nenhuma linha de log — em nenhuma
+posição, nenhuma vez. Toda requisição, forjada ou não, chegou ao Kestrel com o par real
+(`201.81.0.58, 46.151.194.1{29,30}`). Isso indica que a borda do Railway não repassa nem
+anexa ao que o cliente envia — ela descarta e escreve o header do zero. Não há caminho
+de spoofing por `X-Forwarded-For` contra esta aplicação, independente do `ForwardLimit`
+configurado (contanto que ele não exceda o número real de saltos — ver 6.2).
+
+Também foi confirmado no mesmo teste:
+- `RemoteIp` (peer cru) sempre na faixa `100.64.0.0/10` (RFC 6598, CGNAT) → o Kestrel
+  não é alcançável fora da rede interna do Railway. Item 2 da versão anterior: resolvido.
+- `X-Forwarded-Proto: https` e `X-Forwarded-Host` corretos em toda requisição.
+
+**Achado 3 — o container não é alcançável direto da internet (evidência de plataforma).**
+`railway logs --network` (network flow logs da própria plataforma) sobre 2 h e 396 flows:
+
+| O que foi medido | Resultado |
+|---|---|
+| Ingresso na porta 8080 com `peerKind=internet` | **zero ocorrências** |
+| Ingresso na porta 8080 com `peerKind=service` | 100% dos flows, de 21 endereços `fd12:0:8::/48` distintos |
+| Peer visto pelo Kestrel (middleware de diagnóstico) | `::ffff:100.64.0.x` — `.1 .2 .3 .12 .13 .14` |
+
+É essa medição que sustenta o trust boundary da seção 4: a premissa "só a borda do
+Railway alcança o Kestrel" deixou de ser suposição e passou a ter evidência de
+plataforma. Também é o motivo de `fc00::/7` estar nas faixas padrão — dependendo da
+camada, o peer aparece como CGNAT IPv4 ou como ULA IPv6.
+
+**O que continua sem evidência: a faixa do segundo salto.** O valor que aparece em
+`X-Forwarded-For[1]` (pool de borda) foi observado em apenas 2 endereços, o Railway não
+publica CIDRs (a lista de utilidades deles responde 404) e a documentação oficial não
+menciona faixas nem contagem de saltos. Por isso `KnownProxies`/`KnownNetworks`
+permanecem **vazios** — preenchê-los só com a faixa do peer quebraria a identificação do
+cliente (seção 4).
+
+### 6.2 Ainda em aberto
+
+1. **A faixa do pool de borda do Railway.** Sem ela, o trust boundary fica no peer TCP e
+   não na cadeia inteira. Se o Railway publicar CIDRs algum dia, dá para migrar para
+   `KnownNetworks` cobrindo **os dois saltos** e remover o gate próprio.
+
+2. **O número de saltos (2) é constante para toda rota e tipo de conexão?**
+   A amostra cobriu requisições HTTP/1.1 e HTTP/2 comuns. Não foi testado com WebSocket
+   nem por um período longo o suficiente para pegar uma mudança de topologia sem aviso.
+   Sintoma de desalinhamento: IPs de auditoria concentrados numa faixa pequena e
+   repetida. O endpoint `/api/diagnostico/rede` mostra o estado atual a qualquer momento.
+
+3. **`X-Real-IP`.** Um funcionário do Railway afirma em fórum que a plataforma envia
+   esse header como "single source of truth". Se confirmado em produção, seria mais
+   robusto que percorrer a cadeia — mas hoje é declaração de fórum sem documentação, e
+   este projeto processa apenas `XForwardedFor`/`XForwardedProto`. O gate já remove
+   `X-Real-IP` de peers não confiáveis, então adotá-lo no futuro não exige repensar o
+   trust boundary.
+
+4. **HSTS agora é emitido de verdade.** Antes não era (Defeito A). Confirmar que todo o
+   tráfego do domínio é HTTPS antes de deixar rodando por muito tempo — `max-age` é
+   sticky no navegador.
 
 ### Checklist de validação pós-deploy
 
 ```
 GET /api/diagnostico/rede            (Admin)
-  → ipDoCliente   deve ser o SEU IP público, não 10.x/172.x
-  → scheme        deve ser "https"
-  → isHttps       deve ser true
-  → confiaEmQualquerPeer  true no padrão Railway
+  → ipDoCliente              deve ser o SEU IP público, não 100.64.x / 198.51.x
+  → scheme / isHttps         "https" / true
+  → trustBoundary.gateAtivo  true
+  → trustBoundary.faixasInvalidas   deve estar vazio
+  → configuracaoAtiva.forwardLimit  2
 
-GET /api/diagnostico/rede  com header X-Forwarded-For: 8.8.8.8
-  → ipDoCliente   deve continuar sendo o SEU IP.
-                  Se voltar 8.8.8.8 → o proxy repassa o header → ver item 1.
+Comparar com railway logs --http --json (campo srcIp) na mesma requisição:
+  → ipDoCliente do endpoint deve ser IGUAL ao srcIp do Railway.
+    Diferente = ForwardLimit desalinhado com o número real de saltos (6.2, item 2).
+
+railway logs --filter "X-Forwarded-* descartados"
+  → deve estar VAZIO. Qualquer ocorrência para tráfego legítimo significa que
+    PeersConfiaveis não cobre a faixa real do peer — o gate está derrubando
+    headers válidos e a auditoria está gravando o IP da borda.
 
 Resposta de qualquer rota → deve conter Strict-Transport-Security
 
-Auditoria: fazer um login e conferir a última linha de AuditLog.Ip
+Auditoria: fazer um login e conferir a última linha de AuditLog.Ip — deve bater com
+o IP público real de quem logou, não com um IP repetido entre usuários diferentes.
 ```
-
----
 
 ## 7. Observação lateral (fora do escopo, não alterada)
 
