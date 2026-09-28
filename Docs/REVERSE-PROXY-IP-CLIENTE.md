@@ -157,9 +157,21 @@ Limites **inalterados** (5/10/3/5/3 por minuto). Mudou só a chave de partição
 RateLimitPartition.GetFixedWindowLimiter($"{nomePolitica}|{ip}", ...)
 ```
 
-O nome da política entra na chave porque o `RateLimitingMiddleware` mantém **um único**
-`PartitionedRateLimiter` compartilhado entre todas as políticas — chaves iguais em
-políticas diferentes cairiam no mesmo balde.
+Cada política registrada por `AddPolicy` tem seu **próprio espaço de partições** — duas
+políticas distintas não compartilham balde nem quando devolvem a mesma chave. Verificado
+por teste (`PoliticasComChaveCruaIdentica_AindaAssimNaoCompartilhamBalde`). O nome
+da política entra na
+chave apenas para tornar a partição legível em diagnóstico, não por necessidade de
+isolamento.
+
+> Correção: uma versão anterior deste documento afirmava que o `RateLimitingMiddleware`
+> mantinha um único `PartitionedRateLimiter` compartilhado entre todas as políticas e
+> que chaves iguais colidiriam entre elas. Isso está **errado** — o teste empírico
+> mostra baldes independentes por política.
+
+Respostas 429 incluem `Retry-After: 60` (igual à janela). É um limite superior seguro:
+numa janela fixa o reset ocorre em no máximo 60 s, então o cliente nunca é orientado a
+voltar cedo demais. Sem o header, clientes tendem a re-tentar em loop imediato.
 
 ### Sobre a centralização
 
