@@ -13,13 +13,16 @@ namespace Tratoo.API.Infrastructure
     /// 5 cadastros por minuto — e um visitante qualquer conseguia bloquear o
     /// login de todo mundo com 10 requisições.
     ///
-    /// Aqui a partição é explícita: "{política}|{ip}". O nome da política entra na
-    /// chave porque o middleware mantém um único <c>PartitionedRateLimiter</c>
-    /// compartilhado entre todas as políticas — chaves iguais em políticas
-    /// diferentes cairiam no mesmo balde.
+    /// Aqui a partição é explícita, via <c>AddPolicy</c> + <c>RateLimitPartition</c>,
+    /// usando o IP do cliente. O IP vem de <see cref="ClientRequestInfo"/>, portanto
+    /// já é o IP real devolvido pelo middleware de Forwarded Headers.
     ///
-    /// O IP vem de <see cref="ClientRequestInfo"/>, portanto já é o IP real do
-    /// cliente devolvido pelo middleware de Forwarded Headers.
+    /// Cada política registrada por <c>AddPolicy</c> tem seu próprio espaço de
+    /// partições — duas políticas distintas NÃO compartilham balde mesmo quando
+    /// devolvem a mesma chave. Verificado por teste
+    /// (<c>PoliticasComChaveCruaIdentica_AindaAssimNaoCompartilhamBalde</c>). O nome
+    /// da política ainda entra na chave para facilitar diagnóstico, não por
+    /// necessidade de isolamento.
     /// </summary>
     public static class RateLimiterSetup
     {
@@ -28,6 +31,15 @@ namespace Tratoo.API.Infrastructure
         public const string PoliticaSenha           = "senha";
         public const string PoliticaDadosBancarios  = "dados-bancarios";
         public const string PoliticaOtpAssinatura   = "otp-assinatura";
+
+        /// <summary>
+        /// Valor do header <c>Retry-After</c> nas respostas 429, em segundos.
+        /// Igual à janela das políticas (1 minuto).
+        /// </summary>
+        public const string SegundosParaNovaTentativa = "60";
+
+        /// <summary>Janela de todas as políticas.</summary>
+        private static readonly TimeSpan Janela = TimeSpan.FromMinutes(1);
 
         public static IServiceCollection AddTratooRateLimiter(this IServiceCollection services)
         {
@@ -52,7 +64,16 @@ namespace Tratoo.API.Infrastructure
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
                 options.OnRejected = async (context, cancellationToken) =>
                 {
+                    // Retry-After precisa ser escrito ANTES do corpo: WriteAsJsonAsync
+                    // inicia a resposta e a partir daí os headers ficam imutáveis.
+                    //
+                    // 60 = o tamanho da janela. É um limite superior seguro: numa janela
+                    // fixa o reset acontece em no máximo 60 s, então o cliente nunca é
+                    // orientado a voltar cedo demais. Sem este header, um cliente que
+                    // tome 429 tende a re-tentar em loop imediato.
+                    context.HttpContext.Response.Headers.RetryAfter = SegundosParaNovaTentativa;
                     context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+
                     await context.HttpContext.Response.WriteAsJsonAsync(
                         new { mensagem = "Muitas tentativas. Aguarde antes de tentar novamente." },
                         cancellationToken);
@@ -76,12 +97,15 @@ namespace Tratoo.API.Infrastructure
                 var ip = ClientRequestInfo.ObterIp(http);
 
                 return RateLimitPartition.GetFixedWindowLimiter(
+                    // O nome da política entra na chave só para tornar a partição
+                    // legível em diagnóstico — o isolamento entre políticas já é
+                    // garantido pelo próprio AddPolicy.
                     $"{nomePolitica}|{ip}",
                     // GetFixedWindowLimiter força AutoReplenishment=false e delega a
-                    // reposição ao timer único do PartitionedRateLimiter do middleware.
+                    // reposição ao timer do PartitionedRateLimiter da política.
                     _ => new FixedWindowRateLimiterOptions
                     {
-                        Window = TimeSpan.FromMinutes(1),
+                        Window = Janela,
                         PermitLimit = permitLimit,
                         QueueLimit = 0,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst
