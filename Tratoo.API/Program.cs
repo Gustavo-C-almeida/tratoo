@@ -18,6 +18,12 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using System;
 
+// ─── Modo sonda (HEALTHCHECK do Docker) ──────────────────────────────────────
+// `dotnet Tratoo.API.dll --healthcheck` só consulta /health/live e encerra com
+// 0/1. Precisa ser a PRIMEIRA coisa: nada de DI, DbContext ou host web.
+if (SondaHealthCheck.FoiSolicitada(args))
+    return await SondaHealthCheck.ExecutarAsync();
+
 QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -216,6 +222,11 @@ builder.Services.AddAuthorization(options =>
 // forwarded headers.
 builder.Services.AddTratooRateLimiter();
 
+// ─── Health checks ───────────────────────────────────────────────────────────
+// /health/live  → só o processo (usado pelo HEALTHCHECK do Docker)
+// /health/ready → PostgreSQL + pgvector (usado pela Railway no deploy)
+builder.Services.AddTratooHealthChecks();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -361,28 +372,8 @@ app.Use(async (context, next) =>
     if (context.User.Identity?.IsAuthenticated == true &&
         context.User.FindFirst("perfilCompleto")?.Value != "true")
     {
-        var path = context.Request.Path.Value ?? string.Empty;
-
-        var isIsenta =
-            // Endpoint de dados do usuário atual (consultado pelo guard do frontend)
-            path.Equals("/api/me", StringComparison.OrdinalIgnoreCase) ||
-            // Fluxo de onboarding
-            path.StartsWith("/usuarios/onboarding", StringComparison.OrdinalIgnoreCase) ||
-            // Logout (deve sempre funcionar)
-            path.StartsWith("/usuarios/logout", StringComparison.OrdinalIgnoreCase) ||
-            // Login e MFA — o cookie pode estar presente mas o usuário quer trocar de conta
-            // ou o token expirou e ele precisa se reautenticar
-            path.StartsWith("/usuarios/login", StringComparison.OrdinalIgnoreCase) ||
-            // Cadastro e confirmação de e-mail — fluxo público, cookie não deve bloquear
-            path.StartsWith("/usuarios/cadastro", StringComparison.OrdinalIgnoreCase) ||
-            // Redefinição de senha — fluxo público, usuário pode ter cookie expirado/inválido
-            path.StartsWith("/usuarios/senha/resetar", StringComparison.OrdinalIgnoreCase) ||
-            // Swagger (dev/teste)
-            path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||
-            // CEP — usado no próprio onboarding para buscar endereço
-            path.StartsWith("/api/cep/", StringComparison.OrdinalIgnoreCase);
-
-        if (!isIsenta)
+        // Lista em RotasIsentasOnboarding — inclui /health/* (sondas).
+        if (!RotasIsentasOnboarding.EhIsenta(context.Request.Path.Value))
         {
             context.Response.StatusCode = 403;
             await context.Response.WriteAsJsonAsync(new
@@ -428,6 +419,7 @@ app.AddEndPointsBusca();
 app.AddEndPointsAdminDisputa();
 app.AddEndPointsDevSeed();
 app.AddEndPointsDiagnosticoRede();
+app.MapTratooHealthChecks();
 
 if (app.Environment.IsDevelopment())
 {
@@ -436,3 +428,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+// Exit code do processo. Só é alcançado no shutdown; o modo sonda (--healthcheck)
+// retorna bem antes, lá no topo.
+return 0;
