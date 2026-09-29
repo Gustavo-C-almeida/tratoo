@@ -15,7 +15,14 @@ namespace Tratoo.Tests
     /// Vale lembrar que no Railway NÃO existe appsettings.json dentro da imagem
     /// (.dockerignore), então a fonte real é variável de ambiente no formato
     /// ForwardedHeaders__Chave — o que, no .NET, chega ao binder como ForwardedHeaders:Chave.
+    ///
+    /// Fica em <see cref="ColecaoVariaveisDeAmbiente"/> porque um dos testes altera
+    /// variáveis de ambiente do PROCESSO: rodando em paralelo, qualquer host criado por
+    /// outro teste nesse intervalo (WebApplication.CreateBuilder lê o ambiente) herdava
+    /// PeersConfiaveis=203.0.113.0/24 e passava a descartar o X-Forwarded-For — o que
+    /// fazia RateLimitingPorIpTests falhar de forma intermitente.
     /// </summary>
+    [Collection(ColecaoVariaveisDeAmbiente.Nome)]
     public class BindingConfiguracaoTests
     {
         private static (ForwardedHeadersOptions Opcoes, RedeConfiavel Rede, ForwardedHeadersSettings Settings)

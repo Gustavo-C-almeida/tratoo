@@ -28,6 +28,11 @@ QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ─── Porta ───────────────────────────────────────────────────────────────────
+// Escuta no PORT injetado pela plataforma (Railway); sem ele, 8080 via
+// ASPNETCORE_HTTP_PORTS do Dockerfile. Ver PortaHttpSetup para a precedência.
+builder.WebHost.UsarPortaDaPlataforma(builder.Configuration);
+
 // ─── Reverse proxy (Railway / Nginx / Cloudflare) ────────────────────────────
 // Sem isto, Connection.RemoteIpAddress é o IP do proxy — não o do cliente — e
 // Request.Scheme/IsHttps respondem "http" mesmo em acessos HTTPS. Afeta a prova
@@ -227,6 +232,10 @@ builder.Services.AddTratooRateLimiter();
 // /health/ready → PostgreSQL + pgvector (usado pela Railway no deploy)
 builder.Services.AddTratooHealthChecks();
 
+// ─── Encerramento gracioso ───────────────────────────────────────────────────
+// ShutdownTimeout abaixo do drainingSeconds do railway.toml (ver ShutdownSetup).
+builder.Services.AddTratooShutdown();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -257,6 +266,9 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+// Logo após o Build: um SIGTERM durante a inicialização do banco também fica registrado.
+app.UseLogDeEncerramento();
 
 // Inicializa PostgreSQL + índices HNSW na subida da aplicação
 using (var scope = app.Services.CreateScope())

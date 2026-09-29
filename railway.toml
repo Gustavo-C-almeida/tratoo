@@ -22,3 +22,14 @@ healthcheckPath = "/health/ready"
 # VectorDbInitializer (CREATE EXTENSION, tabelas, índices HNSW) antes de servir —
 # em cold start do Neon isso leva tempo. Reduzir a margem só criaria risco de
 # deploy falhar sem motivo.
+
+# Tempo entre o SIGTERM e o SIGKILL enviados à versão anterior, depois que a
+# nova já está ativa (ou seja, ela não recebe mais tráfego novo — só termina o
+# que está em andamento). O default da Railway é 0s: o processo era morto no
+# meio do encerramento. Número, conforme https://railway.com/railway.schema.json.
+#
+# 30s = ShutdownTimeout do host .NET (25s, ShutdownSetup.TimeoutEncerramento)
+# + 5s de margem para descartar conexões do Npgsql e fazer flush do Serilog
+# depois que o Kestrel e os hosted services param. Se mudar um, mude o outro —
+# ShutdownTests falha se o host deixar de caber dentro deste prazo.
+drainingSeconds = 30
