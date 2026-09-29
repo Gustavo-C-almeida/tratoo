@@ -27,9 +27,27 @@ namespace Tratoo.API.Infrastructure
         /// <summary>
         /// Retorna o exit code: 0 se <c>/health/live</c> respondeu 2xx, 1 caso contrário.
         /// </summary>
-        public static async Task<int> ExecutarAsync()
+        public static Task<int> ExecutarAsync() =>
+            ExecutarAsync(PortaHttpSetup.ConfiguracaoDoAmbiente());
+
+        /// <summary>
+        /// Descobre a porta pela MESMA resolução que o host web usa
+        /// (<see cref="PortaHttpSetup.ResolverUrlLocal"/>) — assim a sonda não fica presa
+        /// a um 8080 hard-coded quando a plataforma injeta outro PORT.
+        /// </summary>
+        public static async Task<int> ExecutarAsync(IConfiguration configuration)
         {
-            var url = $"{ResolverBaseUrl()}{HealthCheckSetup.RotaLive}";
+            string url;
+
+            try
+            {
+                url = $"{PortaHttpSetup.ResolverUrlLocal(configuration)}{HealthCheckSetup.RotaLive}";
+            }
+            catch (Exception ex)
+            {
+                await Console.Error.WriteLineAsync($"[healthcheck] configuração de porta inválida: {ex.Message}");
+                return 1;
+            }
 
             try
             {
@@ -48,30 +66,6 @@ namespace Tratoo.API.Infrastructure
                 await Console.Error.WriteLineAsync($"[healthcheck] {url} falhou: {ex.Message}");
                 return 1;
             }
-        }
-
-        /// <summary>
-        /// Descobre em que porta o processo está servindo, na mesma ordem de
-        /// precedência que o ASP.NET Core usa, para a sonda não ficar presa a um
-        /// 8080 hard-coded se a porta mudar (ex.: PORT injetado pela plataforma).
-        /// </summary>
-        private static string ResolverBaseUrl()
-        {
-            var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
-
-            if (!string.IsNullOrWhiteSpace(urls))
-            {
-                // Pode vir com várias URLs separadas por ';'. A primeira basta, e o
-                // curinga de bind (+ ou *) não é endereço discável — troca por localhost.
-                var primeira = urls.Split(';', StringSplitOptions.RemoveEmptyEntries)[0].Trim();
-                return primeira.Replace("://+", "://localhost").Replace("://*", "://localhost")
-                               .TrimEnd('/');
-            }
-
-            var port = Environment.GetEnvironmentVariable("PORT");
-            return string.IsNullOrWhiteSpace(port)
-                ? "http://localhost:8080"
-                : $"http://localhost:{port}";
         }
     }
 }
