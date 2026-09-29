@@ -1,0 +1,24 @@
+# Configuração de deploy da Railway versionada no repositório.
+#
+# Deliberadamente mínimo: só declara o que precisa mudar. Campos não
+# especificados aqui continuam valendo o que está no dashboard — não sobrescreve
+# builder, região, réplicas nem variáveis.
+#
+# O build já usava DOCKERFILE (confirmado via `railway status --json`), então
+# nada de [build] aqui.
+
+[deploy]
+# A Railway usa este caminho durante o deploy para decidir quando a nova versão
+# pode receber tráfego. Por isso é readiness (PostgreSQL + pgvector), não
+# liveness: promover uma instância que não fala com o banco só transfere o erro
+# para o usuário. Considera saudável em HTTP 2xx.
+#
+# Consequência aceita: indisponibilidade do Neon bloqueia deploys. É o
+# comportamento desejado — melhor não promover do que promover quebrado.
+healthcheckPath = "/health/ready"
+
+# healthcheckTimeout NÃO é declarado de propósito: o default da Railway (300s) é
+# mais folgado que qualquer valor que eu escolhesse aqui, e o Program.cs roda o
+# VectorDbInitializer (CREATE EXTENSION, tabelas, índices HNSW) antes de servir —
+# em cold start do Neon isso leva tempo. Reduzir a margem só criaria risco de
+# deploy falhar sem motivo.
