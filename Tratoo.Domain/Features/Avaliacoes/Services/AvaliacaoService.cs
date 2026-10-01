@@ -2,6 +2,7 @@
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Exceptions;
+using Tratoo.Domain.Features.Infrastructure;
 
 namespace Tratoo.Domain.Features.Avaliacoes
 {
@@ -15,7 +16,11 @@ namespace Tratoo.Domain.Features.Avaliacoes
         private readonly IContratanteRepository _contratanteRepo;
         private readonly PrestadorIndexadorService _prestadorIndexador;
         private readonly IEmailService _emailService;
+        private readonly IEstadoEfemero _estado;
         private readonly ILogger<AvaliacaoService> _logger;
+
+        // Marca "lembrete D+3 já enviado". Vive mais que a janela de 1 dia do lembrete.
+        private static readonly TimeSpan ValidadeMarcaLembrete = TimeSpan.FromDays(2);
 
         public AvaliacaoService(
             IAvaliacaoRepository repo,
@@ -24,6 +29,7 @@ namespace Tratoo.Domain.Features.Avaliacoes
             IContratanteRepository contratanteRepo,
             PrestadorIndexadorService prestadorIndexador,
             IEmailService emailService,
+            IEstadoEfemero estado,
             ILogger<AvaliacaoService> logger)
         {
             _repo = repo;
@@ -32,6 +38,7 @@ namespace Tratoo.Domain.Features.Avaliacoes
             _contratanteRepo = contratanteRepo;
             _prestadorIndexador = prestadorIndexador;
             _emailService = emailService;
+            _estado = estado;
             _logger = logger;
         }
 
@@ -265,48 +272,53 @@ namespace Tratoo.Domain.Features.Avaliacoes
         // ─────────────────────────────────────────────────────────────────────────
         // EXPIRAÇÃO AUTOMÁTICA (BackgroundService — roda 1×/dia)
         // ─────────────────────────────────────────────────────────────────────────
-        public async Task ExpirarPendentesAsync()
+        /// <summary>
+        /// Seguro com N réplicas: cada avaliação é finalizada por uma escrita condicional
+        /// (<see cref="IAvaliacaoRepository.FinalizarPendentePorExpiracaoAsync"/>). Só quem
+        /// de fato finalizou recalcula a reputação e reindexa o prestador — duas réplicas
+        /// não chamam a OpenAI em dobro. Devolve quantas avaliações ESTA execução finalizou.
+        /// </summary>
+        public async Task<int> ExpirarPendentesAsync()
         {
-            var limite = DateTime.UtcNow.AddDays(-DiasParaExpirar);
+            var agora = DateTime.UtcNow;
+            var limite = agora.AddDays(-DiasParaExpirar);
             var expirados = await _repo.GetPendentesExpiradosAsync(limite);
 
-            if (expirados.Count == 0) return;
+            if (expirados.Count == 0) return 0;
 
-            // Agrupa por contrato para processar pares
-            var porContrato = expirados.GroupBy(a => a.ContratoServicoId);
             var avaliadosParaRecalcular = new HashSet<int>();
+            var finalizadas = 0;
 
-            foreach (var grupo in porContrato)
+            foreach (var av in expirados)
             {
-                foreach (var av in grupo)
+                // Avaliação preenchida mas par ainda pendente → publica individualmente.
+                // Slot vazio → expira silenciosamente (não altera reputação).
+                var publicar = av.Nota != null;
+                if (!await _repo.FinalizarPendentePorExpiracaoAsync(av.Id, publicar, agora))
+                    continue; // outra réplica ou o usuário chegou antes
+
+                finalizadas++;
+                if (publicar)
                 {
-                    if (av.Nota != null)
-                    {
-                        // Avaliação preenchida mas par ainda estava pendente → publica individualmente
-                        PublicarAvaliacao(av);
-                        avaliadosParaRecalcular.Add(av.AvaliadoId);
-                        _logger.LogInformation(
-                            "Avaliação {Id} publicada por expiração (7 dias). Avaliado: {AvaliadoId}.",
-                            av.Id, av.AvaliadoId);
-                    }
-                    else
-                    {
-                        // Slot vazio — expira silenciosamente (não altera reputação)
-                        av.Status = StatusAvaliacao.Oculta;
-                        av.PublicadaEm = DateTime.UtcNow;
-                        _logger.LogInformation(
-                            "Slot de avaliação {Id} expirado silenciosamente (não preenchido).", av.Id);
-                    }
+                    avaliadosParaRecalcular.Add(av.AvaliadoId);
+                    _logger.LogInformation(
+                        "Avaliação {Id} publicada por expiração (7 dias). Avaliado: {AvaliadoId}.",
+                        av.Id, av.AvaliadoId);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Slot de avaliação {Id} expirado silenciosamente (não preenchido).", av.Id);
                 }
             }
-
-            await _repo.SaveChangesAsync();
 
             foreach (var avaliadoId in avaliadosParaRecalcular)
             {
                 await RecalcularReputacaoAsync(avaliadoId);
                 await ReindexarSePrestadorAsync(avaliadoId);
             }
+
+            return finalizadas;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -435,6 +447,13 @@ namespace Tratoo.Domain.Features.Avaliacoes
 
             foreach (var av in pendentes)
             {
+                // A janela de 1 dia sozinha não impede reenvio: cada processo conta as 24h a
+                // partir do próprio boot, então 2 réplicas (ou um redeploy) mandariam o mesmo
+                // lembrete de novo. Só quem marcar primeiro envia — atômico no Redis.
+                var marca = $"lembrete-avaliacao-d3:{av.Id}";
+                if (!await _estado.DefinirSeAusenteAsync(marca, true, ValidadeMarcaLembrete))
+                    continue;
+
                 try
                 {
                     var avaliador = av.Avaliador;
@@ -453,6 +472,8 @@ namespace Tratoo.Domain.Features.Avaliacoes
                 }
                 catch (Exception ex)
                 {
+                    // Libera a marca para a próxima rodada tentar de novo.
+                    await _estado.RemoverAsync(marca);
                     _logger.LogWarning(ex,
                         "Falha ao enviar lembrete D+3 para avaliação {Id}.", av.Id);
                 }

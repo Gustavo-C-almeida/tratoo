@@ -45,8 +45,9 @@ namespace Tratoo.API.BackgroundServices
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<IContratoServicoService>();
-            await service.ExpirarContratosAsync();
-            _logger.LogInformation("Varredura de expiração de contratos concluída em {Hora}.", DateTime.UtcNow);
+            // Seguro com N réplicas: cada cancelamento é condicional (ver ContratoServicoService).
+            var cancelados = await service.ExpirarContratosAsync();
+            _logger.LogInformation("Varredura de expiração de contratos concluída em {Hora}: {Total} cancelado(s) por esta réplica.", DateTime.UtcNow, cancelados);
         }
     }
 }

@@ -59,13 +59,22 @@ namespace Tratoo.Domain.Features.Propostas
                 .OrderByDescending(p => p.AtualizadoEm)
                 .ToListAsync();
 
-        public async Task<List<PropostaProjeto>> GetExpiradas(DateTime agora)
+        /// <summary>
+        /// Expira, num único UPDATE condicional, as propostas ainda em aberto com validade
+        /// vencida. O WHERE é reavaliado pelo Postgres no momento da escrita: se outra
+        /// réplica (ou o próprio usuário) mudou o status antes, a linha não é tocada.
+        /// Antes era ler → alterar em memória → SaveChanges, o que sobrescrevia mudanças
+        /// feitas entre a leitura e a escrita.
+        /// </summary>
+        public async Task<int> ExpirarVencidasAsync(DateTime agora)
             => await _ctx.PropostasProjeto
                 .Where(p =>
                     (p.Status == StatusPropostaProjeto.Submitted ||
                      p.Status == StatusPropostaProjeto.EmNegociacao) &&
                     p.ValidoAte < agora)
-                .ToListAsync();
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.Status, StatusPropostaProjeto.Expirada)
+                    .SetProperty(p => p.AtualizadoEm, agora));
 
         public async Task AddAsync(PropostaProjeto proposta)
             => await _ctx.PropostasProjeto.AddAsync(proposta);

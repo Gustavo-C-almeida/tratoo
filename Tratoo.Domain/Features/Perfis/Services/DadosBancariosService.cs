@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using Tratoo.Domain.Enums;
@@ -22,7 +21,7 @@ namespace Tratoo.Domain.Features.Perfis
         private readonly IPrestadorRepository _prestadorRepo;
         private readonly IEmailService _emailService;
         private readonly IAuditLogRepository _auditRepo;
-        private readonly IMemoryCache _cache;
+        private readonly IEstadoEfemero _estado;
         private readonly ILogger<DadosBancariosService> _logger;
 
         private static readonly TimeSpan TokenTtl = TimeSpan.FromMinutes(10);
@@ -34,14 +33,14 @@ namespace Tratoo.Domain.Features.Perfis
             IPrestadorRepository prestadorRepo,
             IEmailService emailService,
             IAuditLogRepository auditRepo,
-            IMemoryCache cache,
+            IEstadoEfemero estado,
             ILogger<DadosBancariosService> logger)
         {
             _contaRepo = contaRepo;
             _prestadorRepo = prestadorRepo;
             _emailService = emailService;
             _auditRepo = auditRepo;
-            _cache = cache;
+            _estado = estado;
             _logger = logger;
         }
 
@@ -66,9 +65,9 @@ namespace Tratoo.Domain.Features.Perfis
                 ?? throw new NegocioException("Prestador não encontrado.");
 
             var token = GerarToken();
-            _cache.Set(TokenKey(prestadorId), SecureHasher.Hash(token), TokenTtl);
-            _cache.Remove(TentativasKey(prestadorId));
-            _cache.Remove(EdicaoKey(prestadorId)); // invalida qualquer autorização anterior
+            await _estado.DefinirAsync(TokenKey(prestadorId), SecureHasher.Hash(token), TokenTtl);
+            // invalida tentativas e qualquer autorização anterior
+            await _estado.RemoverAsync(TentativasKey(prestadorId), EdicaoKey(prestadorId));
 
             try
             {
@@ -76,7 +75,7 @@ namespace Tratoo.Domain.Features.Perfis
             }
             catch (Exception ex)
             {
-                _cache.Remove(TokenKey(prestadorId));
+                await _estado.RemoverAsync(TokenKey(prestadorId));
                 _logger.LogError(ex, "Falha ao enviar token de dados bancários ao prestador {PrestadorId}.", prestadorId);
                 throw new NegocioException("Não foi possível enviar o código de confirmação. Tente novamente.");
             }
@@ -93,34 +92,29 @@ namespace Tratoo.Domain.Features.Perfis
             if (string.IsNullOrWhiteSpace(token))
                 throw new NegocioException("Informe o código de confirmação.");
 
-            if (!_cache.TryGetValue(TokenKey(prestadorId), out string? hash) || hash == null)
+            var hash = await _estado.ObterAsync<string>(TokenKey(prestadorId));
+            if (hash == null)
                 throw new NegocioException("Código expirado ou inexistente. Solicite um novo.");
 
             if (!SecureHasher.Verify(token.Trim(), hash))
             {
-                var tentativas = _cache.GetOrCreate(TentativasKey(prestadorId), e =>
-                {
-                    e.AbsoluteExpirationRelativeToNow = TokenTtl;
-                    return 0;
-                }) + 1;
+                // Atômico entre réplicas: dois erros simultâneos contam dois.
+                var tentativas = await _estado.IncrementarAsync(TentativasKey(prestadorId), TokenTtl);
 
                 if (tentativas >= MaxTentativas)
                 {
-                    _cache.Remove(TokenKey(prestadorId));
-                    _cache.Remove(TentativasKey(prestadorId));
+                    await _estado.RemoverAsync(TokenKey(prestadorId), TentativasKey(prestadorId));
                     await _auditRepo.RegistrarAsync(prestadorId, "dados_bancarios_token_bloqueado", ip);
                     _logger.LogWarning("Token de dados bancários bloqueado por brute force. Prestador {PrestadorId}.", prestadorId);
                     throw new NegocioException("Muitas tentativas inválidas. Solicite um novo código.");
                 }
 
-                _cache.Set(TentativasKey(prestadorId), tentativas, TokenTtl);
                 throw new NegocioException("Código inválido.");
             }
 
             // Sucesso: invalida o token (uso único) e libera a janela de edição.
-            _cache.Remove(TokenKey(prestadorId));
-            _cache.Remove(TentativasKey(prestadorId));
-            _cache.Set(EdicaoKey(prestadorId), true, EdicaoTtl);
+            await _estado.RemoverAsync(TokenKey(prestadorId), TentativasKey(prestadorId));
+            await _estado.DefinirAsync(EdicaoKey(prestadorId), true, EdicaoTtl);
 
             await _auditRepo.RegistrarAsync(prestadorId, "dados_bancarios_confirmado", ip);
             _logger.LogInformation("Token de dados bancários confirmado pelo prestador {PrestadorId}.", prestadorId);
@@ -132,7 +126,7 @@ namespace Tratoo.Domain.Features.Perfis
         public async Task<DadosBancariosViewDTO> AtualizarAsync(int prestadorId, AtualizarDadosBancariosDTO dto, string ip)
         {
             // Bloqueio funcional: só salva após confirmar o token (revalidação de identidade).
-            if (!_cache.TryGetValue(EdicaoKey(prestadorId), out bool autorizado) || !autorizado)
+            if (await _estado.ObterAsync<bool?>(EdicaoKey(prestadorId)) != true)
                 throw new NegocioException("Confirme o código enviado por e-mail antes de salvar os dados bancários.");
 
             if (string.IsNullOrWhiteSpace(dto.Banco))
@@ -170,7 +164,7 @@ namespace Tratoo.Domain.Features.Perfis
             await _contaRepo.SaveChangesAsync();
 
             // Consome a autorização: cada confirmação permite uma única gravação.
-            _cache.Remove(EdicaoKey(prestadorId));
+            await _estado.RemoverAsync(EdicaoKey(prestadorId));
 
             await _auditRepo.RegistrarAsync(prestadorId,
                 nova ? "dados_bancarios_criado" : "dados_bancarios_atualizado", ip);

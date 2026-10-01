@@ -1,11 +1,11 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Exceptions;
+using Tratoo.Domain.Features.Infrastructure;
 using Tratoo.Domain.Features.Shared;
 
 namespace Tratoo.Domain.Features.Contratos
@@ -23,7 +23,7 @@ namespace Tratoo.Domain.Features.Contratos
         private readonly IPropostaProjetoRepository _propostaRepo;
         private readonly IPagamentoService _pagamentoService;
         private readonly IPagamentoRepository _pagamentoRepo;
-        private readonly IMemoryCache _cache;
+        private readonly IEstadoEfemero _estado;
         private readonly ILogger<ContratoServicoService> _logger;
 
         private const string TemplateVersaoAtual = "v1.0-2026-05";
@@ -58,7 +58,7 @@ namespace Tratoo.Domain.Features.Contratos
             IPropostaProjetoRepository propostaRepo,
             IPagamentoService pagamentoService,
             IPagamentoRepository pagamentoRepo,
-            IMemoryCache cache,
+            IEstadoEfemero estado,
             ILogger<ContratoServicoService> logger)
         {
             _repo = repo;
@@ -72,7 +72,7 @@ namespace Tratoo.Domain.Features.Contratos
             _propostaRepo = propostaRepo;
             _pagamentoService = pagamentoService;
             _pagamentoRepo = pagamentoRepo;
-            _cache = cache;
+            _estado = estado;
             _logger = logger;
         }
 
@@ -189,8 +189,8 @@ namespace Tratoo.Domain.Features.Contratos
             var otp = RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
 
             // Limpa tentativas anteriores e armazena hash do novo OTP
-            _cache.Remove(OtpTentativasKey(contratoId, usuarioId));
-            _cache.Set(OtpHashKey(contratoId, usuarioId), SecureHasher.Hash(otp), OtpTtl);
+            await _estado.RemoverAsync(OtpTentativasKey(contratoId, usuarioId));
+            await _estado.DefinirAsync(OtpHashKey(contratoId, usuarioId), SecureHasher.Hash(otp), OtpTtl);
 
             var tituloProjeto = contrato.Projeto?.Titulo ?? "Projeto";
             try
@@ -199,7 +199,7 @@ namespace Tratoo.Domain.Features.Contratos
             }
             catch (Exception ex)
             {
-                _cache.Remove(OtpHashKey(contratoId, usuarioId));
+                await _estado.RemoverAsync(OtpHashKey(contratoId, usuarioId));
                 _logger.LogError(ex, "Falha ao enviar OTP de assinatura para contrato {ContratoId}, usuário {UsuarioId}.", contratoId, usuarioId);
                 throw new NegocioException("Não foi possível enviar o código de confirmação. Tente novamente.");
             }
@@ -260,23 +260,18 @@ namespace Tratoo.Domain.Features.Contratos
             if (string.IsNullOrWhiteSpace(otp))
                 throw new NegocioException("Informe o código de confirmação enviado ao seu e-mail.");
 
-            if (!_cache.TryGetValue(OtpHashKey(contratoId, usuarioId), out string? otpHash) || otpHash == null)
+            var otpHash = await _estado.ObterAsync<string>(OtpHashKey(contratoId, usuarioId));
+            if (otpHash == null)
                 throw new NegocioException("Código expirado ou inválido. Solicite um novo código.");
 
             if (!SecureHasher.Verify(otp.Trim(), otpHash))
             {
-                var tentativas = _cache.GetOrCreate(OtpTentativasKey(contratoId, usuarioId), e =>
-                {
-                    e.AbsoluteExpirationRelativeToNow = OtpTtl;
-                    return 0;
-                }) + 1;
-
-                _cache.Set(OtpTentativasKey(contratoId, usuarioId), tentativas, OtpTtl);
+                // Atômico entre réplicas: dois erros simultâneos contam dois.
+                var tentativas = await _estado.IncrementarAsync(OtpTentativasKey(contratoId, usuarioId), OtpTtl);
 
                 if (tentativas >= MaxTentativasOtp)
                 {
-                    _cache.Remove(OtpHashKey(contratoId, usuarioId));
-                    _cache.Remove(OtpTentativasKey(contratoId, usuarioId));
+                    await _estado.RemoverAsync(OtpHashKey(contratoId, usuarioId), OtpTentativasKey(contratoId, usuarioId));
                     await _repo.AddHistoricoAsync(new HistoricoAssinatura
                     {
                         ContratoId = contratoId, UsuarioId = usuarioId,
@@ -299,8 +294,7 @@ namespace Tratoo.Domain.Features.Contratos
             }
 
             // OTP correto — invalida para uso único
-            _cache.Remove(OtpHashKey(contratoId, usuarioId));
-            _cache.Remove(OtpTentativasKey(contratoId, usuarioId));
+            await _estado.RemoverAsync(OtpHashKey(contratoId, usuarioId), OtpTentativasKey(contratoId, usuarioId));
 
             await _repo.AddHistoricoAsync(new HistoricoAssinatura
             {
@@ -565,46 +559,39 @@ namespace Tratoo.Domain.Features.Contratos
         // ─────────────────────────────────────────────────────────────────────────
         // EXPIRAR (chamado pelo BackgroundService)
         // ─────────────────────────────────────────────────────────────────────────
-        public async Task ExpirarContratosAsync()
+        /// <summary>
+        /// Seguro com N réplicas: cada contrato é cancelado por uma escrita condicional
+        /// transacional (<see cref="IContratoServicoRepository.CancelarPorExpiracaoAsync"/>).
+        /// Se duas réplicas pegarem o mesmo contrato, só a primeira o cancela; se o usuário
+        /// assinar ou cancelar entre a leitura e a escrita, a mudança dele prevalece.
+        /// Devolve quantos contratos ESTA execução cancelou.
+        /// </summary>
+        public async Task<int> ExpirarContratosAsync()
         {
-            var expirados = await _repo.GetExpiradosAsync(DateTime.UtcNow);
-            if (expirados.Count == 0) return;
+            var agora = DateTime.UtcNow;
+            var expirados = await _repo.GetExpiradosAsync(agora);
+            if (expirados.Count == 0) return 0;
 
+            var cancelados = 0;
             foreach (var contrato in expirados)
             {
-                contrato.Status = ContratoServicoStatus.Cancelado;
-                contrato.MotivoCancelamento = "Contrato expirado — prazo de 7 dias para assinatura não foi cumprido.";
-                contrato.CanceladoEm = DateTime.UtcNow;
-
-                // Reverte proposta e reabre projeto (mesmo comportamento do cancelamento gratuito)
                 try
                 {
-                    var proposta = await _propostaRepo.GetByIdAsync(contrato.PropostaId);
-                    if (proposta != null)
-                    {
-                        proposta.Status = StatusPropostaProjeto.Recusada;
-                        proposta.MotivoCancelamento = "Contrato expirado sem assinatura.";
-                        proposta.CanceladoEm = DateTime.UtcNow;
-                        proposta.AtualizadoEm = DateTime.UtcNow;
-                    }
-
-                    var projeto = await _projetoRepo.GetByIdAsync(contrato.ProjetoId);
-                    if (projeto != null)
-                    {
-                        projeto.Status = StatusProjeto.Aberto;
-                        projeto.FreelancerSelecionadoId = null;
-                        projeto.AtualizadoEm = DateTime.UtcNow;
-                    }
+                    if (await _repo.CancelarPorExpiracaoAsync(
+                            contrato.Id, contrato.PropostaId, contrato.ProjetoId, agora,
+                            motivoContrato: "Contrato expirado — prazo de 7 dias para assinatura não foi cumprido.",
+                            motivoProposta: "Contrato expirado sem assinatura."))
+                        cancelados++;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Erro ao reverter proposta/projeto ao expirar contrato {ContratoId}.", contrato.Id);
+                    // Transação desfeita: o contrato continua pendente e volta na próxima rodada.
+                    _logger.LogError(ex, "Erro ao expirar o contrato {ContratoId}; nada foi alterado.", contrato.Id);
                 }
             }
 
-            await _repo.SaveChangesAsync();
-
-            _logger.LogInformation("{Total} contrato(s) expirado(s) e cancelado(s).", expirados.Count);
+            _logger.LogInformation("{Total} contrato(s) expirado(s) e cancelado(s).", cancelados);
+            return cancelados;
         }
 
         // ─────────────────────────────────────────────────────────────────────────

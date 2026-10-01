@@ -33,3 +33,22 @@ healthcheckPath = "/health/ready"
 # depois que o Kestrel e os hosted services param. Se mudar um, mude o outro —
 # ShutdownTests falha se o host deixar de caber dentro deste prazo.
 drainingSeconds = 30
+
+# ── Migrations no deploy (PREPARADO, NÃO ATIVO) ──────────────────────────────────
+# Roda em um container SEPARADO, com a mesma imagem e as variáveis do serviço, ANTES
+# de a nova versão receber tráfego. Se falhar, o deploy para e a versão atual segue no
+# ar. Uma execução por deploy (não por réplica). Ver Docs/TRILHA2-DECISOES.md, seção 5.
+#
+# O `--migrate-only` não sobe Kestrel nem BackgroundServices (ModoMigracao.cs) e usa
+# ConnectionStrings__MigrationConnection se existir — a conexão DIRETA do Neon.
+#
+# Ativar SÓ depois de:
+#   1. confirmar (consulta somente leitura) que "__EFMigrationsHistory" de produção
+#      contém 20260806232531_InitPostgres — senão o primeiro deploy tentaria recriar
+#      todas as tabelas e falharia (deploy bloqueado);
+#   2. criar na Railway ConnectionStrings__MigrationConnection = a DefaultConnection
+#      com o host SEM "-pooler".
+# Aí é descomentar a linha abaixo. Toda migration nova precisa ser retrocompatível:
+# a versão anterior continua servindo enquanto este comando roda.
+#
+# preDeployCommand = "dotnet Tratoo.API.dll --migrate-only"

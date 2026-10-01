@@ -24,9 +24,7 @@
     <ItemGroup>
       <TratooWebWwwrootFiles Include="..\Tratoo.Web\wwwroot\**\*" />
     </ItemGroup>
-    <Copy SourceFiles="@(TratooWebWwwrootFiles)"
-          DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(TratooWebWwwrootFiles)" DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>
@@ -40,6 +38,7 @@
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.0" />
     <PackageReference Include="QuestPDF" Version="2025.1.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
+    <PackageReference Include="StackExchange.Redis" Version="2.13.17" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="6.5.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="6.5.0" />

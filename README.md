@@ -537,6 +537,32 @@ Seed:SenhaUsuario       # senha dos usuários de seed (somente desenvolvimento)
 
 ## Rodando o Projeto
 
+### Com Docker (stack local completa)
+
+Pré-requisitos: Docker com Compose v2 e OpenSSL (vem com o Git Bash no Windows).
+
+```bash
+cp .env.example .env                 # preencha; o que faltar faz o `up` falhar com mensagem
+bash infra/nginx/gerar-certificado.sh
+docker compose up -d --build --wait
+```
+
+Acesse `https://localhost` (certificado autoassinado). Sobem Nginx (TLS, único serviço com
+porta publicada, só em `127.0.0.1`), **2 réplicas da API** balanceadas pelo Nginx,
+Postgres/pgvector com os bancos `tratoo` e `tratoo_vector` e Redis — banco e Redis só são
+alcançáveis pela rede interna. O Redis guarda o estado que as réplicas precisam
+compartilhar (códigos OTP, tentativas, cadastro pendente, rate limiting), cifrado com
+`REDIS_CHAVE_PROTECAO`; sem `Redis__ConnectionString` (produção hoje, 1 réplica) a API usa a
+memória do processo, como antes. Nada aponta
+para produção: Asaas fica fixo no sandbox. `docker compose down` preserva os dados;
+`down -v` os apaga. Decisões e limites em `Docs/TRILHA2-DECISOES.md`.
+
+As migrations rodam sozinhas: o serviço `migrate` (`dotnet Tratoo.API.dll --migrate-only`)
+aplica o schema e sai, e só então a API sobe. Se a migração falhar, a API não inicia. Para
+rodar de novo à mão: `docker compose run --rm migrate`.
+
+### Sem Docker
+
 Pré-requisitos: .NET 8 SDK, SQL Server e PostgreSQL com extensão pgvector.
 
 ```bash
