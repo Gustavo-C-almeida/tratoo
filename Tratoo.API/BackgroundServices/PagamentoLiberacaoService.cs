@@ -1,4 +1,6 @@
 
+using Tratoo.API.Infrastructure;
+
 namespace Tratoo.API.BackgroundServices
 {
     /// <summary>
@@ -9,6 +11,12 @@ namespace Tratoo.API.BackgroundServices
     /// o sistema libera automaticamente o valor ao prestador.
     ///
     /// Roda a cada 4 horas para minimizar delay sem sobrecarregar o gateway.
+    ///
+    /// Com N réplicas: (1) cada rodada roda sob <see cref="ExecucaoExclusiva"/> — só uma
+    /// réplica varre por vez, sem chamadas duplicadas ao Asaas nem auditoria em dobro;
+    /// (2) por baixo disso, cada pagamento continua protegido pela reivindicação atômica
+    /// no banco (Retido → TransferenciaEmProgresso), que é a garantia real contra PIX
+    /// duplicado mesmo se a trava cair.
     /// </summary>
     public class PagamentoLiberacaoService : BackgroundService
     {
@@ -35,7 +43,7 @@ namespace Tratoo.API.BackgroundServices
             {
                 try
                 {
-                    await LiberarPagamentosVencidosAsync(stoppingToken);
+                    await ExecutarRodadaAsync(stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -46,12 +54,27 @@ namespace Tratoo.API.BackgroundServices
             }
         }
 
-        private async Task LiberarPagamentosVencidosAsync(CancellationToken ct)
+        /// <summary>
+        /// Uma rodada de liberação. Devolve false se outra réplica já está rodando (nada
+        /// foi feito aqui). Público para os testes de concorrência.
+        /// </summary>
+        public async Task<bool> ExecutarRodadaAsync(CancellationToken ct)
         {
-            await using var scope = _scopeFactory.CreateAsyncScope();
+            var executou = await ExecucaoExclusiva.TentarExecutarAsync(
+                _scopeFactory, ExecucaoExclusiva.ChavePagamentoLiberacao,
+                (servicos, token) => LiberarPagamentosVencidosAsync(servicos, token),
+                _logger, ct);
 
-            var repo = scope.ServiceProvider.GetRequiredService<IPagamentoRepository>();
-            var service = scope.ServiceProvider.GetRequiredService<IPagamentoService>();
+            if (!executou)
+                _logger.LogInformation("Varredura de liberação automática já em andamento em outra réplica; rodada ignorada.");
+
+            return executou;
+        }
+
+        private async Task LiberarPagamentosVencidosAsync(IServiceProvider servicos, CancellationToken ct)
+        {
+            var repo = servicos.GetRequiredService<IPagamentoRepository>();
+            var service = servicos.GetRequiredService<IPagamentoService>();
 
             var pagamentosPendentes = await repo.GetPendentesLiberacaoAsync(DateTime.UtcNow);
 

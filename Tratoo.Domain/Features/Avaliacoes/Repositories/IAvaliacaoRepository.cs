@@ -21,6 +21,9 @@ namespace Tratoo.Domain.Features.Avaliacoes
         /// <summary>Avaliações Pendentes criadas antes de <paramref name="limite"/> (para expiração automática).</summary>
         Task<List<Avaliacao>> GetPendentesExpiradosAsync(DateTime limite);
 
+        /// <summary>Publica (com nota) ou oculta (sem nota) se ainda pendente; true = finalizada aqui.</summary>
+        Task<bool> FinalizarPendentePorExpiracaoAsync(Guid avaliacaoId, bool publicar, DateTime agora);
+
         /// <summary>Avaliações pendentes sem nota criadas entre limiteInicio e limiteFim (D+3 reminder).</summary>
         Task<List<Avaliacao>> GetPendentesParaLembreteAsync(DateTime limiteInicio, DateTime limiteFim);
 

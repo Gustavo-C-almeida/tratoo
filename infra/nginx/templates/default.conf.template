@@ -1,0 +1,91 @@
+# Proxy reverso LOCAL do docker-compose. Em produção não há Nginx: a borda da
+# Railway faz este papel (TLS, 301 http→https). Ver Docs/TRILHA2-DECISOES.md, seção 4.
+#
+# Arquivo processado pelo envsubst da imagem oficial na subida: só ${VARIÁVEIS} que
+# existem no ambiente do container são trocadas. As variáveis do Nginx ($host,
+# $remote_addr...) passam intactas porque não são variáveis de ambiente.
+
+# DNS embutido do Docker. Com o destino numa variável (proxy_pass $api), o Nginx
+# resolve "api" em tempo de requisição, respeitando o TTL — não fica preso ao IP da
+# subida. Sem isso, recriar o container da API (novo IP) deixaria o Nginx com 502
+# até ser reiniciado.
+#
+# Balanceamento: com 2+ réplicas, o DNS do Docker devolve um registro A por réplica e
+# o Nginx alterna entre eles (round-robin). Réplica que some sai da resposta em até
+# 5 s (valid=5s); nesse intervalo, o proxy_next_upstream abaixo cobre a falha.
+resolver 127.0.0.11 valid=5s ipv6=off;
+
+server {
+    listen 80;
+    server_name _;
+
+    # Sonda do healthcheck do próprio Nginx (não passa pela API).
+    location = /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    # Mesmo comportamento da borda da Railway: HTTP nunca chega à aplicação.
+    location / {
+        return 301 https://$host:${NGINX_HTTPS_PORT}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name _;
+
+    # Autoassinado, gerado por infra/nginx/gerar-certificado.sh (fora do git).
+    # Se não existir, o Nginx NÃO sobe — falha alto em vez de servir HTTP puro.
+    ssl_certificate     /etc/nginx/certs/localhost.crt;
+    ssl_certificate_key /etc/nginx/certs/localhost.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    # = MaxRequestBodySize padrão do Kestrel (30.000.000 bytes), que o Tratoo não
+    # altera. O padrão do Nginx (1 MB) quebraria upload de foto/portfólio com 413
+    # antes de a requisição chegar à API.
+    client_max_body_size 30m;
+
+    location / {
+        set $api http://api:8080;
+        proxy_pass $api;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        # Host original, com porta — a Railway também repassa o Host do cliente. A
+        # API NÃO processa X-Forwarded-Host, então o Host precisa chegar direto.
+        proxy_set_header Host $http_host;
+
+        # SOBRESCREVE (não anexa) o X-Forwarded-For com o peer real, como a Railway
+        # faz. Com $proxy_add_x_forwarded_for, um cliente mandando
+        # "X-Forwarded-For: 1.2.3.4" conseguiria forjar o próprio IP. Casado com
+        # ForwardedHeaders__ForwardLimit=1 no compose.
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # A API não lê X-Real-IP, mas o Nginx é peer confiável: sem sobrescrever, um
+        # valor forjado pelo cliente chegaria "confiável" a qualquer código futuro.
+        proxy_set_header X-Real-IP         $remote_addr;
+
+        # Coerentes com o encerramento gracioso da API: no SIGTERM o Kestrel ainda
+        # conclui requisições por até 25s (ShutdownSetup.TimeoutEncerramento) dentro
+        # dos 30s de stop_grace_period do compose. O Nginx não pode desistir antes
+        # disso.
+        #
+        # Conexão: 1s. Na rede bridge a conexão leva menos de 1 ms; o que estoura
+        # este prazo é réplica que já saiu e cujo IP ainda está no cache de DNS (o IP
+        # some — não há quem recuse, só silêncio). Com 5s, cada requisição que caía
+        # nesse IP esperava 5s antes de ir para a outra réplica (visto na validação).
+        proxy_connect_timeout 1s;
+        proxy_send_timeout    30s;
+        proxy_read_timeout    30s;
+
+        # Réplica encerrando (SIGTERM) para de aceitar conexão na hora; a conexão é
+        # recusada e o Nginx tenta a próxima réplica — o cliente não vê erro. Só reenvia
+        # se a requisição NÃO chegou à API (erro ao conectar): POST já entregue nunca é
+        # repetido (comportamento padrão do Nginx para métodos não idempotentes).
+        proxy_next_upstream       error timeout;
+        proxy_next_upstream_tries 2;
+    }
+}

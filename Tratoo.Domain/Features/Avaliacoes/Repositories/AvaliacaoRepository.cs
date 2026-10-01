@@ -90,6 +90,27 @@ namespace Tratoo.Domain.Features.Avaliacoes
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// Finaliza uma avaliação pendente por expiração, condicionalmente: publica se
+        /// tinha nota, oculta se não tinha — e só se ela ainda estiver Pendente E no mesmo
+        /// estado de nota que o job leu. Assim, uma réplica concorrente (ou o usuário
+        /// enviando a nota nesse instante) nunca é sobrescrita. true = esta chamada a
+        /// finalizou.
+        /// </summary>
+        public async Task<bool> FinalizarPendentePorExpiracaoAsync(Guid avaliacaoId, bool publicar, DateTime agora)
+        {
+            var consulta = _db.Avaliacoes.Where(a => a.Id == avaliacaoId && a.Status == StatusAvaliacao.Pendente);
+            consulta = publicar
+                ? consulta.Where(a => a.Nota != null)
+                : consulta.Where(a => a.Nota == null);
+
+            var linhas = await consulta.ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.Status, publicar ? StatusAvaliacao.Publicada : StatusAvaliacao.Oculta)
+                .SetProperty(a => a.PublicadaEm, agora));
+
+            return linhas == 1;
+        }
+
         public async Task<ReputacaoResumo?> GetReputacaoAsync(int userId)
         {
             return await _db.ReputacaoResumos

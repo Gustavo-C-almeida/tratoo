@@ -23,6 +23,6 @@ namespace Tratoo.Domain.Features.Contratos
         Task<List<ContratoResumoDto>> ListarDoPrestadorAsync(int prestadorId);
         Task<string> ObterUrlPdfAsync(Guid contratoId, int usuarioId);
         Task CancelarAsync(Guid contratoId, int usuarioId, string? motivo);
-        Task ExpirarContratosAsync();
+        Task<int> ExpirarContratosAsync();
     }
 }

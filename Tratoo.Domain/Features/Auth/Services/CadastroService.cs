@@ -1,6 +1,7 @@
 ﻿using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Exceptions;
+using Tratoo.Domain.Features.Infrastructure;
 
 namespace Tratoo.Domain.Features.Auth
 {
@@ -9,7 +10,7 @@ namespace Tratoo.Domain.Features.Auth
         private readonly IUsuarioRepository _repo;
         private readonly IEmailService _emailService;
         private readonly IVerificacaoMFAService _mfaService;
-        private readonly ICacheTempService _cacheTemp;
+        private readonly IEstadoEfemero _estado;
         private readonly IConsentLogRepository _consentRepo;
 
         // Regra: token de confirmação de e-mail válido por 24h
@@ -24,13 +25,13 @@ namespace Tratoo.Domain.Features.Auth
             IUsuarioRepository repo,
             IEmailService emailService,
             IVerificacaoMFAService mfaService,
-            ICacheTempService cacheTemp,
+            IEstadoEfemero estado,
             IConsentLogRepository consentRepo)
         {
             _repo = repo;
             _emailService = emailService;
             _mfaService = mfaService;
-            _cacheTemp = cacheTemp;
+            _estado = estado;
             _consentRepo = consentRepo;
         }
 
@@ -63,9 +64,9 @@ namespace Tratoo.Domain.Features.Auth
                 Ip: dto.Ip,
                 AceitouTermos: dto.AceitouTermos);
 
-            string codigo = _mfaService.GerarECriar(dto.Email, "cadastro");
+            string codigo = await _mfaService.GerarECriarAsync(dto.Email, "cadastro");
 
-            _cacheTemp.Salvar(
+            await _estado.DefinirAsync(
                 ChaveCadastro(dto.Email),
                 dadosPendentes,
                 ExpiracaoCadastro);
@@ -76,12 +77,12 @@ namespace Tratoo.Domain.Features.Auth
             }
             catch (TimeoutException)
             {
-                _cacheTemp.Remover(ChaveCadastro(dto.Email));
+                await _estado.RemoverAsync(ChaveCadastro(dto.Email));
                 throw new NegocioException("Tempo excedido ao enviar o e-mail de verificação. Tente novamente.");
             }
             catch
             {
-                _cacheTemp.Remover(ChaveCadastro(dto.Email));
+                await _estado.RemoverAsync(ChaveCadastro(dto.Email));
                 throw;
             }
         }
@@ -92,9 +93,9 @@ namespace Tratoo.Domain.Features.Auth
             var email = dto.Email.Trim().ToLowerInvariant();
 
             // Valida o código e já o remove do cache (uso único)
-            _mfaService.Validar(email, dto.Codigo, "cadastro");
+            await _mfaService.ValidarAsync(email, dto.Codigo, "cadastro");
 
-            var dados = _cacheTemp.Obter<DadosCadastroPendente>(ChaveCadastro(email));
+            var dados = await _estado.ObterAsync<DadosCadastroPendente>(ChaveCadastro(email));
 
             if (dados is null)
                 throw new NegocioException("Cadastro expirado. Inicie o processo novamente.");
@@ -111,7 +112,7 @@ namespace Tratoo.Domain.Features.Auth
                 new ConsentLog { UserId = usuario.Id, Tipo = TipoConsentimento.Privacidade, Versao = VersaoTermos, Ip = dados.Ip }
             });
 
-            _cacheTemp.Remover(ChaveCadastro(email));
+            await _estado.RemoverAsync(ChaveCadastro(email));
         }
 
         /// <summary>
@@ -124,18 +125,18 @@ namespace Tratoo.Domain.Features.Auth
 
             var chaveCooldown = ChaveCooldownReenvio(email);
 
-            if (_cacheTemp.Obter<bool?>(chaveCooldown) is not null)
+            if (await _estado.ObterAsync<bool?>(chaveCooldown) is not null)
                 throw new NegocioException("Aguarde 1 minuto antes de solicitar um novo código.");
 
-            var dados = _cacheTemp.Obter<DadosCadastroPendente>(ChaveCadastro(email));
+            var dados = await _estado.ObterAsync<DadosCadastroPendente>(ChaveCadastro(email));
 
             if (dados is null)
                 throw new NegocioException("Cadastro expirado ou não encontrado. Inicie o processo novamente.");
 
-            string codigo = _mfaService.GerarECriar(email, "cadastro");
+            string codigo = await _mfaService.GerarECriarAsync(email, "cadastro");
 
             // Registra o cooldown antes de enviar para evitar disparos duplos em caso de retry
-            _cacheTemp.Salvar(chaveCooldown, true, CooldownReenvio);
+            await _estado.DefinirAsync(chaveCooldown, true, CooldownReenvio);
 
             try
             {
@@ -143,7 +144,7 @@ namespace Tratoo.Domain.Features.Auth
             }
             catch
             {
-                _cacheTemp.Remover(chaveCooldown);
+                await _estado.RemoverAsync(chaveCooldown);
                 throw;
             }
         }
