@@ -14,6 +14,11 @@
     <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
+    <!-- Explícito para todos os consumidores resolverem a MESMA versão do core (9.0.10).
+         Sem isto, a 9.0.10 só chegava via pacotes de design-time (PrivateAssets=all), e o
+         Tratoo.Tests caía na 9.0.1 mínima do Npgsql — conflito MSB3277 e testes rodando
+         com um EF diferente do de produção. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

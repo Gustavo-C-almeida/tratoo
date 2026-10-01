@@ -1,0 +1,6 @@
+# Arquivos montados/executados dentro de containers Linux precisam de LF: com CRLF,
+# o bash quebra ("\r: command not found") e o Nginx/psql podem ler lixo no fim da linha.
+*.sh        text eol=lf
+infra/**    text eol=lf
+compose.yaml text eol=lf
+Dockerfile  text eol=lf

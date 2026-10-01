@@ -2,7 +2,7 @@
 {
     public interface IVerificacaoMFAService
     {
-        string GerarECriar(string email, string tipo);
-        void Validar(string email, string codigoDigitado, string tipo);
+        Task<string> GerarECriarAsync(string email, string tipo);
+        Task ValidarAsync(string email, string codigoDigitado, string tipo);
     }
 }

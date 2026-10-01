@@ -1,0 +1,218 @@
+# Stack LOCAL/CI do Tratoo: `docker compose up -d --build`.
+#
+# NÃO é a produção. Em produção (Railway) há um único container da API, o banco é o
+# Neon (remoto) e a borda da Railway faz o papel do Nginx. Este arquivo reproduz essa
+# topologia localmente: proxy com TLS na frente, API sem porta publicada, dois bancos
+# no mesmo servidor Postgres. Decisões em Docs/TRILHA2-DECISOES.md.
+#
+# Pré-requisitos (uma vez):
+#   1. cp .env.example .env        e preencha (o que faltar derruba o `up` com mensagem)
+#   2. bash infra/nginx/gerar-certificado.sh
+#
+# Ordem de subida: postgres/redis saudáveis → migrate termina com exit 0 → api → nginx.
+name: tratoo
+
+# ── Blocos reutilizados (extensões x-*, ignoradas pelo compose como serviço) ──────
+x-build-api: &build-api
+  context: .
+  dockerfile: Dockerfile
+
+# Os DOIS bancos, como no Neon. Usados pelo `migrate` e pela `api` — uma definição só,
+# para os dois nunca divergirem.
+x-conexoes-banco: &conexoes-banco
+  ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=tratoo;Username=${POSTGRES_USER:-tratoo};Password=${POSTGRES_PASSWORD}
+  ConnectionStrings__VectorConnection: Host=postgres;Port=5432;Database=tratoo_vector;Username=${POSTGRES_USER:-tratoo};Password=${POSTGRES_PASSWORD}
+
+services:
+  postgres:
+    # Extensão pgvector já compilada. Major 16 = o que o TratooContextFactory assume
+    # (SetPostgresVersion(16, 0)) para o Neon.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tratoo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (veja .env.example)}
+      # Primeiro banco; o segundo (tratoo_vector) vem do script em initdb/.
+      POSTGRES_DB: tratoo
+    volumes:
+      # Volume NOMEADO: sobrevive a `docker compose down` (só `down -v` apaga) e não
+      # depende de permissão de pasta do host.
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    networks: [interna]
+    # SEM `ports`: 5432 só é alcançável de dentro da rede `interna`.
+    healthcheck:
+      # Por TCP (-h 127.0.0.1) e no SEGUNDO banco, de propósito: durante a
+      # inicialização a imagem sobe um servidor temporário só no socket Unix e roda os
+      # scripts de initdb. Um pg_isready pelo socket daria "pronto" antes de o
+      # tratoo_vector existir, e a API quebraria no VectorDbInitializer.
+      test: ["CMD-SHELL", "psql -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d tratoo_vector -tAc 'select 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    # Estado compartilhado entre as réplicas da API: códigos OTP (hash), contadores de
+    # tentativa, cadastro pendente, marcas de "lembrete enviado" e o contador do rate
+    # limiting. Tudo com TTL; nada que seja fonte da verdade (isso é o Postgres).
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env (veja .env.example)}
+    # $$ = expandido pelo shell DO CONTAINER, não pelo compose: a senha não aparece
+    # na linha de comando gravada no `docker inspect`.
+    # Sem persistência (--save "", sem AOF), coerente com o que fica aqui: estado
+    # efêmero de minutos a 24 h. Perder no restart = o que já acontece hoje a cada
+    # redeploy com o estado em memória (o usuário pede outro código / refaz o cadastro).
+    # E o cadastro pendente leva o hash BCrypt da senha: sem persistência, ele nunca
+    # chega a um disco (no Redis ele já fica cifrado — ver ProtecaoEstadoEfemero).
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --save '' --appendonly no"]
+    networks: [interna]
+    # SEM `ports`: 6379 só é alcançável de dentro da rede `interna`.
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    # Mesma imagem da API. O ENTRYPOINT do Dockerfile é `dotnet Tratoo.API.dll`;
+    # `command` só acrescenta o argumento. Aplica as migrations do TratooContext + o
+    # schema vetorial e SAI (sem Kestrel, sem BackgroundServices — ver ModoMigracao).
+    # Serviço separado = roda UMA vez por `up`, não uma vez por réplica da API.
+    build: *build-api
+    image: tratoo-api:local
+    command: ["--migrate-only"]
+    environment:
+      <<: *conexoes-banco
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+    networks: [interna]
+    depends_on:
+      postgres: { condition: service_healthy }
+    # O HEALTHCHECK herdado da imagem sonda um HTTP que este processo nunca abre.
+    healthcheck:
+      disable: true
+    restart: "no"
+
+  api:
+    build: *build-api
+    image: tratoo-api:local
+    # 2 réplicas atrás do Nginx. Pré-requisitos já atendidos: estado efêmero e rate
+    # limit no Redis, jobs seguros com N réplicas (escritas condicionais + trava no
+    # Postgres), migrations num serviço separado. Sem container_name e sem IP fixo:
+    # o Nginx descobre as réplicas pelo DNS do Docker.
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+    environment:
+      <<: *conexoes-banco
+      # Production por padrão = paridade: cookie Secure, HSTS, rotas de dev/seed
+      # desligadas, diagnóstico de rede só para Admin. Development (Swagger, seed,
+      # /api/dev/seed-admin SEM autenticação) só por escolha explícita no .env.
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+
+      # ── Estado compartilhado entre réplicas (Redis) ───────────────────────────
+      # "redis" resolve pelo DNS embutido do Docker. Timeouts curtos: com o Redis fora
+      # do ar, OTP responde 503 e o rate limit degrada para memória em ~2 s, não em 5.
+      Redis__ConnectionString: redis:6379,password=${REDIS_PASSWORD},abortConnect=false,connectTimeout=2000,syncTimeout=2000,asyncTimeout=2000
+      # Cifra os valores e esconde e-mail/IP nos nomes das chaves. IGUAL em todas as
+      # réplicas; sem ela, a API não sobe (com Redis configurado).
+      Redis__ChaveProtecao: ${REDIS_CHAVE_PROTECAO:?defina REDIS_CHAVE_PROTECAO no .env (openssl rand -base64 32)}
+
+      # ── Proxy: 1 salto (Nginx), não 2 como na Railway ─────────────────────────
+      # Sem isto o gate descarta o X-Forwarded-For do peer 172.x, todos os usuários
+      # viram o IP do Nginx e o rate limiting colapsa numa partição só. Definir a
+      # lista SUBSTITUI o padrão de produção (100.64.0.0/10, fc00::/7) — aqui ele não
+      # se aplica. O padrão do código continua intacto para a Railway.
+      ForwardedHeaders__ForwardLimit: "1"
+      ForwardedHeaders__PeersConfiaveis__0: ${COMPOSE_SUBNET:-172.28.0.0/24}
+      ForwardedHeaders__PeersConfiaveis__1: 127.0.0.0/8
+      ForwardedHeaders__PeersConfiaveis__2: ::1/128
+
+      # stdout apenas (ver LogArquivoSetup): `docker compose logs api`.
+      LogArquivo__Habilitado: "false"
+
+      AllowedHosts: localhost;127.0.0.1
+
+      Jwt__SecretKey: ${JWT_SECRET_KEY:?defina JWT_SECRET_KEY no .env (32+ caracteres aleatórios)}
+      Jwt__Issuer: tratoo-local
+      Jwt__Audience: tratoo-local
+      Jwt__ExpirationHours: "8"
+
+      # E-mail é obrigatório: cadastro, MFA e reset de senha dependem dele.
+      Resend__ApiKey: ${RESEND_API_KEY:?defina RESEND_API_KEY no .env}
+      Resend__FromEmail: ${RESEND_FROM_EMAIL:?defina RESEND_FROM_EMAIL no .env (remetente verificado no Resend)}
+      Resend__FromName: ${RESEND_FROM_NAME:-Tratoo (local)}
+      Resend__BaseUrl: https://api.resend.com/
+
+      # Asaas: URL do SANDBOX fixa aqui, sem variável — o ambiente local nunca fala
+      # com o Asaas de produção, mesmo que alguém cole uma chave real no .env.
+      Asaas__BaseUrl: https://sandbox.asaas.com/api/v3
+      Asaas__ApiKey: ${ASAAS_SANDBOX_API_KEY:-}
+      # Obrigatório: com token vazio a API PULA a validação do webhook (aceita
+      # eventos forjados). Qualquer string aleatória serve localmente.
+      Asaas__WebhookToken: ${ASAAS_WEBHOOK_TOKEN:?defina ASAAS_WEBHOOK_TOKEN no .env (qualquer string aleatória)}
+      Asaas__ConfirmarTransferenciaImediatamente: ${ASAAS_CONFIRMAR_TRANSFERENCIA_IMEDIATAMENTE:-false}
+
+      # Opcionais: sem chave, a busca semântica cai para keyword e o upload falha
+      # só quando usado — a API sobe normalmente.
+      OpenAI__BaseUrl: https://api.openai.com/v1/
+      OpenAI__ApiKey: ${OPENAI_API_KEY:-}
+      CloudflareR2__AccountId: ${R2_ACCOUNT_ID:-}
+      CloudflareR2__AccessKey: ${R2_ACCESS_KEY:-}
+      CloudflareR2__BucketName: ${R2_BUCKET_NAME:-}
+      CloudflareR2__PublicUrl: ${R2_PUBLIC_URL:-}
+      CloudflareR2Private__AccountId: ${R2_PRIVATE_ACCOUNT_ID:-}
+      CloudflareR2Private__AccessKey: ${R2_PRIVATE_ACCESS_KEY:-}
+      CloudflareR2Private__BucketName: ${R2_PRIVATE_BUCKET_NAME:-}
+      CloudflareR2Private__ServiceURL: ${R2_PRIVATE_SERVICE_URL:-}
+    networks: [interna]
+    # SEM `ports`: a API só recebe tráfego pelo Nginx.
+    # Healthcheck: o HEALTHCHECK do Dockerfile (--healthcheck → /health/live), herdado.
+    depends_on:
+      # Só sobe se a migração terminou com exit 0. Migração quebrada = API parada,
+      # nunca API servindo com schema errado.
+      migrate: { condition: service_completed_successfully }
+      # service_healthy, não service_started: a API ainda roda o VectorDbInitializer na
+      # subida (idempotente) e morre se o Postgres não aceitar conexão.
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    # = drainingSeconds da Railway. O padrão do Docker (10s) mandaria SIGKILL antes
+    # de o host .NET esgotar seus 25s de encerramento gracioso.
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      # O ÚNICO serviço com porta publicada, e só em 127.0.0.1 (não expõe para a
+      # rede local). Portas trocáveis se 80/443 estiverem ocupadas no Windows.
+      - "127.0.0.1:${NGINX_HTTP_PORT:-80}:80"
+      - "127.0.0.1:${NGINX_HTTPS_PORT:-443}:443"
+    environment:
+      # Usado no redirect 80→443 (envsubst do template).
+      NGINX_HTTPS_PORT: ${NGINX_HTTPS_PORT:-443}
+    volumes:
+      - ./infra/nginx/templates:/etc/nginx/templates:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+    networks: [interna]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  interna:
+    driver: bridge
+    ipam:
+      config:
+        # Subnet fixa: é ela que vai em ForwardedHeaders__PeersConfiaveis__0. Troque
+        # COMPOSE_SUBNET no .env se colidir com outra rede da máquina.
+        - subnet: ${COMPOSE_SUBNET:-172.28.0.0/24}
+
+volumes:
+  pgdata:

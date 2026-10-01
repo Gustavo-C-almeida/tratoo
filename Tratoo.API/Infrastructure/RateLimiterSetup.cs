@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.RateLimiting;
+using StackExchange.Redis;
 using System.Threading.RateLimiting;
 
 namespace Tratoo.API.Infrastructure
@@ -92,24 +93,41 @@ namespace Tratoo.API.Infrastructure
         private static void AdicionarPoliticaPorIp(
             this RateLimiterOptions options, string nomePolitica, int permitLimit)
         {
+            var opcoes = new FixedWindowRateLimiterOptions
+            {
+                Window = Janela,
+                PermitLimit = permitLimit,
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            };
+
             options.AddPolicy(nomePolitica, http =>
             {
                 var ip = ClientRequestInfo.ObterIp(http);
 
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    // O nome da política entra na chave só para tornar a partição
-                    // legível em diagnóstico — o isolamento entre políticas já é
-                    // garantido pelo próprio AddPolicy.
-                    $"{nomePolitica}|{ip}",
-                    // GetFixedWindowLimiter força AutoReplenishment=false e delega a
-                    // reposição ao timer do PartitionedRateLimiter da política.
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        Window = Janela,
-                        PermitLimit = permitLimit,
-                        QueueLimit = 0,
-                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                    });
+                // O nome da política entra na chave só para tornar a partição
+                // legível em diagnóstico — o isolamento entre políticas já é
+                // garantido pelo próprio AddPolicy.
+                var particao = $"{nomePolitica}|{ip}";
+
+                // Com Redis (várias réplicas): contador único para a aplicação inteira,
+                // degradando para memória se o Redis cair (LimitadorJanelaFixaRedis).
+                var redis = http.RequestServices.GetService<IConnectionMultiplexer>();
+                if (redis is not null)
+                {
+                    var protecao = http.RequestServices.GetRequiredService<ProtecaoEstadoEfemero>();
+                    var logger = http.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger(typeof(LimitadorJanelaFixaRedis));
+
+                    // O IP é dado pessoal: no Redis a chave vai como HMAC (ProtecaoEstadoEfemero).
+                    return RateLimitPartition.Get(particao,
+                        _ => new LimitadorJanelaFixaRedis(redis, protecao.NomeDaChave($"rl:{particao}"), opcoes, logger));
+                }
+
+                // Sem Redis (1 réplica, produção hoje): exatamente o comportamento anterior.
+                // GetFixedWindowLimiter força AutoReplenishment=false e delega a
+                // reposição ao timer do PartitionedRateLimiter da política.
+                return RateLimitPartition.GetFixedWindowLimiter(particao, _ => opcoes);
             });
         }
     }
