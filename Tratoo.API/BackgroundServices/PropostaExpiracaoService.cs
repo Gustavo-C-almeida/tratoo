@@ -45,8 +45,9 @@ namespace Tratoo.API.BackgroundServices
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<PropostaProjetoService>();
-            await service.ExpirarPropostasAsync();
-            _logger.LogInformation("Varredura de expiração de propostas concluída em {Hora}.", DateTime.UtcNow);
+            // Seguro com N réplicas: a expiração é um UPDATE condicional único.
+            var expiradas = await service.ExpirarPropostasAsync();
+            _logger.LogInformation("Varredura de expiração de propostas concluída em {Hora}: {Total} expirada(s) por esta réplica.", DateTime.UtcNow, expiradas);
         }
     }
 }

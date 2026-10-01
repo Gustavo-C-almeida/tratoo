@@ -24,6 +24,12 @@ using System;
 if (SondaHealthCheck.FoiSolicitada(args))
     return await SondaHealthCheck.ExecutarAsync();
 
+// ─── Modo migração (compose `migrate` / preDeployCommand da Railway) ─────────
+// `dotnet Tratoo.API.dll --migrate-only`: aplica migrations + schema vetorial e
+// encerra. Antes de qualquer host: sem Kestrel e sem BackgroundServices.
+if (ModoMigracao.FoiSolicitado(args))
+    return await ModoMigracao.ExecutarAsync();
+
 QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,14 +48,20 @@ builder.Services.AddTratooForwardedHeaders(builder.Configuration);
 
 // ─── Configurar Serilog para logs em arquivo e console ──────────────────────
 builder.Host.UseSerilog((ctx, config) =>
+{
     config
         .MinimumLevel.Information()
-        .WriteTo.Console()
-        .WriteTo.File(
+        .WriteTo.Console();
+
+    // Arquivo é opcional: ligado por padrão (produção inalterada), desligado no
+    // docker-compose, onde o destino é o stdout. Ver LogArquivoSetup.
+    if (LogArquivoSetup.Habilitado(ctx.Configuration))
+        config.WriteTo.File(
             path: "logs/openai-.txt",
             rollingInterval: RollingInterval.Day,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level}] {Message:lj}{NewLine}{Exception}",
-            retainedFileCountLimit: 30));
+            retainedFileCountLimit: 30);
+});
 
 builder.Services.AddDbContext<TratooContext>(options =>
     options.UseNpgsql(
@@ -133,7 +145,18 @@ builder.Services.AddResend(o =>
 
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<IVerificacaoMFAService, VerificacaoMFAService>();
-builder.Services.AddScoped<ICacheTempService, CacheTempService>();
+// Estado efêmero de fluxo (OTP, tentativas, cadastro pendente) e contador do rate
+// limiting: memória do processo sem Redis (produção hoje, 1 réplica); Redis quando
+// Redis:ConnectionString existe (várias réplicas). Ver EstadoEfemeroSetup.
+builder.Services.AddTratooEstadoEfemero(builder.Configuration);
+
+// Data Protection NÃO é compartilhado entre réplicas, de propósito: nada no Tratoo o
+// consome. A autenticação é JWT (cookie "tratoo_auth" assinado com Jwt:SecretKey, igual
+// em todas as réplicas), não há antiforgery (rotas com formulário usam
+// DisableAntiforgery), sessão nem cookie auth do ASP.NET. Se algum desses entrar, as
+// chaves precisam ir para um armazenamento comum (ex.: PersistKeysToStackExchangeRedis),
+// senão um cookie emitido por uma réplica não abre na outra.
+// Ver Docs/TRILHA2-DECISOES.md, seção 1.4.
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<PerfilContratanteService>();
 builder.Services.AddScoped<ProjetoService>();
@@ -270,7 +293,11 @@ var app = builder.Build();
 // Logo após o Build: um SIGTERM durante a inicialização do banco também fica registrado.
 app.UseLogDeEncerramento();
 
-// Inicializa PostgreSQL + índices HNSW na subida da aplicação
+// Inicializa PostgreSQL + índices HNSW na subida da aplicação.
+// Também roda no --migrate-only, mas CONTINUA aqui de propósito: enquanto o
+// preDeployCommand não estiver ativo e provado na Railway, este é o único lugar em
+// que o schema vetorial de produção é garantido. É idempotente (IF NOT EXISTS), então
+// rodar nos dois lugares só custa alguns milissegundos no boot.
 using (var scope = app.Services.CreateScope())
 {
     var vectorInit = scope.ServiceProvider.GetRequiredService<VectorDbInitializer>();
@@ -324,27 +351,9 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
-{
-    var feature = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
-    var ex = feature?.Error;
-
-    ctx.Response.ContentType = "application/json";
-
-    if (ex is NegocioException negocio)
-    {
-        ctx.Response.StatusCode = 400;
-        await ctx.Response.WriteAsJsonAsync(new { mensagem = negocio.Message });
-    }
-    else
-    {
-        var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Erro não tratado em {Method} {Path}", ctx.Request.Method, ctx.Request.Path);
-
-        ctx.Response.StatusCode = 500;
-        await ctx.Response.WriteAsJsonAsync(new { mensagem = "Erro interno. Tente novamente mais tarde." });
-    }
-}));
+// Exceções → HTTP: 400 (regra de negócio), 503 + Retry-After (dependência fora do ar,
+// ex.: Redis dos OTPs), 500 (inesperado). Ver TratamentoErrosSetup.
+app.UseTratooTratamentoDeErros();
 
 // Em dev local e no container Docker, o wwwroot do Tratoo.Web fica como pasta
 // irmã (ver Dockerfile). Em publish nativo (ex.: Azure App Service Windows),

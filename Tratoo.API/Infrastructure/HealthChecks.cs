@@ -11,9 +11,9 @@ namespace Tratoo.API.Infrastructure
     /// método vive no pacote Microsoft.Extensions.Diagnostics.HealthChecks
     /// .EntityFrameworkCore, que NÃO faz parte do shared framework e seria uma
     /// dependência nova — e ele faz exatamente o que está aqui
-    /// (<c>CanConnectAsync</c>). O projeto já convive com um conflito de versões
-    /// da família EF Core (MSB3277), então evitar mais um pacote dessa família
-    /// tem valor concreto.
+    /// (<c>CanConnectAsync</c>). O projeto já teve conflito de versões da família EF
+    /// Core (MSB3277, resolvido declarando o Relational 9.0.10 no Tratoo.Domain), então
+    /// evitar mais um pacote dessa família tem valor concreto.
     /// </summary>
     public sealed class PostgresHealthCheck : IHealthCheck
     {

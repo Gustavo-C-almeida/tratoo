@@ -10,7 +10,8 @@ namespace Tratoo.Domain.Features.Propostas
         Task<PropostaProjeto?> GetAtivaByConviteIdAsync(Guid conviteId);
         Task<List<PropostaProjeto>> GetDoProjetoAsync(int projetoId);
         Task<List<PropostaProjeto>> GetDoPrestadorAsync(int prestadorId);
-        Task<List<PropostaProjeto>> GetExpiradas(DateTime agora);
+        /// <summary>Expira as propostas vencidas e devolve quantas foram alteradas.</summary>
+        Task<int> ExpirarVencidasAsync(DateTime agora);
         Task AddAsync(PropostaProjeto proposta);
         Task AddVersaoAsync(PropostaVersao versao);
         Task<PropostaVersao?> GetVersaoAsync(Guid propostaId, int numeroVersao);

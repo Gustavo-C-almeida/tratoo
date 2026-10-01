@@ -605,18 +605,13 @@ namespace Tratoo.Domain.Features.Propostas
         // ─────────────────────────────────────────────────────────────────────────
         // Expiração (chamado pelo BackgroundService)
         // ─────────────────────────────────────────────────────────────────────────
-        public async Task ExpirarPropostasAsync()
-        {
-            var expiradas = await _repo.GetExpiradas(DateTime.UtcNow);
-            foreach (var proposta in expiradas)
-            {
-                proposta.Status = StatusPropostaProjeto.Expirada;
-                proposta.AtualizadoEm = DateTime.UtcNow;
-            }
-
-            if (expiradas.Any())
-                await _repo.SaveChangesAsync();
-        }
+        /// <summary>
+        /// Idempotente e seguro com N réplicas: a expiração é um UPDATE condicional (ver
+        /// <see cref="IPropostaProjetoRepository.ExpirarVencidasAsync"/>). Duas réplicas
+        /// rodando juntas expiram cada proposta uma única vez.
+        /// </summary>
+        public async Task<int> ExpirarPropostasAsync()
+            => await _repo.ExpirarVencidasAsync(DateTime.UtcNow);
 
         // ─────────────────────────────────────────────────────────────────────────
         // Helpers privados

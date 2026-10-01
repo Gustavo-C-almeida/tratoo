@@ -45,6 +45,6 @@
         /// Publica avaliações preenchidas, descarta slots vazios silenciosamente.
         /// Chamado pelo background service diariamente.
         /// </summary>
-        Task ExpirarPendentesAsync();
+        Task<int> ExpirarPendentesAsync();
     }
 }

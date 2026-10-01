@@ -1,0 +1,12 @@
+-- Segundo banco, igual à produção no Neon: um servidor, dois bancos.
+--   tratoo        → TratooContext (criado pelo POSTGRES_DB do compose)
+--   tratoo_vector → VectorContext (embeddings; schema criado pelo VectorDbInitializer)
+--
+-- A extensão `vector` NÃO é criada aqui de propósito: quem a cria em produção é o
+-- VectorDbInitializer (`CREATE EXTENSION IF NOT EXISTS vector`) na subida da API.
+-- Criar aqui esconderia uma falha desse caminho. O /health/ready (check "pgvector")
+-- confirma que a extensão existe depois que a API sobe.
+--
+-- Roda uma única vez, com o volume `pgdata` vazio (regra da imagem oficial). Para
+-- reaplicar: `docker compose down -v` (apaga os dados locais).
+CREATE DATABASE tratoo_vector;

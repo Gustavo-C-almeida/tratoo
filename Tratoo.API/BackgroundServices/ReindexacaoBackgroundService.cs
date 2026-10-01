@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Tratoo.API.Infrastructure;
 using Tratoo.Domain.Data;
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
@@ -41,9 +42,15 @@ namespace Tratoo.API.BackgroundServices
 
                 try
                 {
-                    await using var scope = _scopeFactory.CreateAsyncScope();
-                    var batch = scope.ServiceProvider.GetRequiredService<IBatchReindexador>();
-                    await batch.ExecutarBatchAsync(stoppingToken);
+                    // Com N réplicas, todas acordam na mesma segunda 02:00 UTC. Só a que
+                    // obtiver a trava reindexa — as outras não pagam a OpenAI em dobro.
+                    var executou = await ExecucaoExclusiva.TentarExecutarAsync(
+                        _scopeFactory, ExecucaoExclusiva.ChaveReindexacao,
+                        (servicos, token) => servicos.GetRequiredService<IBatchReindexador>().ExecutarBatchAsync(token),
+                        _logger, stoppingToken);
+
+                    if (!executou)
+                        _logger.LogInformation("Reindexação batch já em andamento em outra réplica; rodada ignorada.");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

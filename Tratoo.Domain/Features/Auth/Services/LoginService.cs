@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Exceptions;
 using Tratoo.Domain.Models;
@@ -11,17 +12,20 @@ namespace Tratoo.Domain.Features.Auth
         private readonly IAuditLogRepository _auditRepo;
         private readonly IEmailService _emailService;
         private readonly IVerificacaoMFAService _mfaService;
+        private readonly ILogger<LoginService> _logger;
 
         public LoginService(
             IUsuarioRepository repo,
             IAuditLogRepository auditRepo,
             IEmailService emailService,
-            IVerificacaoMFAService mfaService)
+            IVerificacaoMFAService mfaService,
+            ILogger<LoginService> logger)
         {
             _repo = repo;
             _auditRepo = auditRepo;
             _emailService = emailService;
             _mfaService = mfaService;
+            _logger = logger;
         }
 
         public async Task<LoginResponseDTO> AutenticarAsync(LoginDTO dto)
@@ -53,7 +57,7 @@ namespace Tratoo.Domain.Features.Auth
 
             if (usuario.MFA)
             {
-                string codigo = _mfaService.GerarECriar(usuario.Email, "login");
+                string codigo = await _mfaService.GerarECriarAsync(usuario.Email, "login");
                 await _emailService.EnviarCodigoVerificacaoAsync(usuario.Email, codigo);
 
                 return new LoginResponseDTO
@@ -87,7 +91,7 @@ namespace Tratoo.Domain.Features.Auth
             if (!usuario.MFA)
                 throw new NegocioException("MFA não habilitado para este usuário");
 
-            _mfaService.Validar(dto.Email, dto.Codigo, "login");
+            await _mfaService.ValidarAsync(dto.Email, dto.Codigo, "login");
 
             await _auditRepo.RegistrarAsync(usuario.Id, "login_mfa", dto.Ip);
 
@@ -120,7 +124,20 @@ namespace Tratoo.Domain.Features.Auth
             // A resposta HTTP é idêntica nos dois casos (anti-enumeração).
             if (usuario is { Status: StatusUsuario.Active })
             {
-                string codigo = _mfaService.GerarECriar(usuario.Email, "reset_senha");
+                string codigo;
+                try
+                {
+                    codigo = await _mfaService.GerarECriarAsync(usuario.Email, "reset_senha");
+                }
+                catch (ServicoIndisponivelException ex)
+                {
+                    // Responder 503 só para contas existentes revelaria quais e-mails estão
+                    // cadastrados. Mantém a resposta idêntica: nenhum código é criado nem
+                    // enviado (o usuário tenta de novo), e a falha fica no log.
+                    _logger.LogError(ex, "Armazenamento de códigos indisponível; reset de senha não enviado.");
+                    return;
+                }
+
                 await _emailService.EnviarCodigoResetSenhaAsync(usuario.Email, codigo);
                 await _auditRepo.RegistrarAsync(usuario.Id, "reset_senha_solicitado", ip);
             }
@@ -145,7 +162,7 @@ namespace Tratoo.Domain.Features.Auth
                 throw new NegocioException(erroPadrao);
 
             // Valida o OTP e remove do cache (uso único garantido)
-            _mfaService.Validar(usuario.Email, dto.Codigo, "reset_senha");
+            await _mfaService.ValidarAsync(usuario.Email, dto.Codigo, "reset_senha");
 
             usuario.SenhaHash = PasswordHasher.Hash(dto.NovaSenha);
             await _repo.AtualizarAsync(usuario);
