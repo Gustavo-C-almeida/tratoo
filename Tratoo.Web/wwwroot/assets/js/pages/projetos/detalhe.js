@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
 // ── Detalhe do projeto + proposta v2 + convites ─────────────────────────────
 
 const root = () => document.getElementById('detalhe-root');
@@ -331,6 +332,12 @@ function renderFormNovaProposta(area, projeto) {
     document.getElementById('btn-salvar-rascunho').addEventListener('click', () => submitProposta(projeto.id, false));
 }
 
+// O valor vem do que foi digitado no formulário: entra como texto puro,
+// nunca como HTML.
+function itemPreview(rotulo, valor) {
+    return el('div', { class: 'preview-item' }, el('strong', {}, `${rotulo}:`), ` ${valor}`);
+}
+
 function abrirPreview(projetoId) {
     const objetivo = document.getElementById('prop-objetivo').value.trim();
     const escopo = document.getElementById('prop-escopo').value.trim();
@@ -347,14 +354,15 @@ function abrirPreview(projetoId) {
     }
 
     const restante = Math.max(0, valor - entrada);
-    document.getElementById('preview-conteudo').innerHTML = `
-        <div class="preview-item"><strong>Objetivo:</strong> ${esc(objetivo)}</div>
-        <div class="preview-item"><strong>Escopo:</strong> ${esc(escopo.substring(0, 200))}${escopo.length > 200 ? '...' : ''}</div>
-        <div class="preview-item"><strong>Valor:</strong> ${moeda(valor)}</div>
-        ${entrada > 0 ? `<div class="preview-item"><strong>Entrada:</strong> ${moeda(entrada)} — Restante: ${moeda(restante)}</div>` : ''}
-        <div class="preview-item"><strong>Prazo:</strong> ${dataFmt(prazo)}</div>
-        <div class="preview-item"><strong>Revisões:</strong> ${revisoes}</div>
-        <div class="preview-item"><strong>Pagamento:</strong> ${esc(pagamento)}</div>`;
+    document.getElementById('preview-conteudo').replaceChildren(...[
+        itemPreview('Objetivo', objetivo),
+        itemPreview('Escopo', escopo.substring(0, 200) + (escopo.length > 200 ? '...' : '')),
+        itemPreview('Valor', moeda(valor)),
+        entrada > 0 && itemPreview('Entrada', `${moeda(entrada)} — Restante: ${moeda(restante)}`),
+        itemPreview('Prazo', dataFmt(prazo)),
+        itemPreview('Revisões', revisoes),
+        itemPreview('Pagamento', pagamento),
+    ].filter(Boolean));
 
     document.getElementById('modal-preview').style.display = 'flex';
 

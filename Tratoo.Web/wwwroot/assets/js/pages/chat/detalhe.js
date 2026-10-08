@@ -1,12 +1,15 @@
 import { api } from '/assets/js/services/api.js';
+import { el, svg } from '/assets/js/utils/dom.js';
 // ── Conversa de projeto — Design Moderno Aprimorado ─────────────────────────
 
 const root = () => document.getElementById('chat-detalhe-root');
 
 // ── Parâmetros da URL ─────────────────────────────────────────────────────────
+// Controlados por quem monta o link: só aceitamos IDs inteiros (como na API).
+// Qualquer outro valor vira null e cai em "Parâmetros de conversa inválidos.".
 const params = new URLSearchParams(window.location.search);
-const projetoId = params.get('projetoId');
-const prestadorId = params.get('prestadorId');
+const projetoId = idInteiro(params.get('projetoId'));
+const prestadorId = idInteiro(params.get('prestadorId'));
 
 // ── Estado ────────────────────────────────────────────────────────────────────
 let usuarioId = null;
@@ -20,12 +23,12 @@ let typingTimeout = null;
 let isTyping = false;
 
 // ── Utilitários ───────────────────────────────────────────────────────────────
-function esc(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+function idInteiro(valor) {
+    return /^\d+$/.test(valor ?? '') ? valor : null;
+}
+
+function icone(classes) {
+    return el('i', { class: classes });
 }
 
 function dataFmt(d) {
@@ -131,8 +134,10 @@ async function iniciar() {
 
 // ── Layout fixo com design moderno ─────────────────────────────────────────
 function renderLayout() {
-    const linkProjeto = `/pages/projetos/detalhe.html?id=${projetoId}`;
-    const linkProposta = proposta ? `/pages/proposta/detalhe.html?id=${proposta.id}` : null;
+    // IDs entram na URL codificados (projetoId já foi validado como inteiro;
+    // proposta.id vem da API) — nunca como markup.
+    const linkProjeto = `/pages/projetos/detalhe.html?id=${encodeURIComponent(projetoId)}`;
+    const linkProposta = proposta ? `/pages/proposta/detalhe.html?id=${encodeURIComponent(proposta.id)}` : null;
     const ehContratante = usuarioId === projeto.contratanteId;
     // Contratante vê o nome do prestador (vindo da proposta deste chat);
     // prestador vê o nome do contratante do projeto.
@@ -144,61 +149,47 @@ function renderLayout() {
     const propostaAtiva = proposta && !['Recusada', 'Expirada', 'Cancelada'].includes(proposta.status);
     const podeEnviarProposta = ehContratante && conviteId && !propostaAtiva;
 
-    root().innerHTML = `
-    <div class="chat-detalhe-wrap">
+    // Montado via DOM: título, nomes e links vêm da URL/API e entram como
+    // texto/atributo, nunca interpretados como HTML.
+    root().replaceChildren(el('div', { class: 'chat-detalhe-wrap' },
+        el('header', { class: 'chat-detalhe-header' },
+            el('a', { class: 'chat-detalhe-back', href: '/pages/chat/index.html', 'aria-label': 'Voltar para conversas' },
+                'Voltar para conversas'),
+            el('div', { class: 'chat-detalhe-info' },
+                el('h1', { class: 'chat-detalhe-titulo' }, projeto.titulo),
+                el('p', { class: 'chat-detalhe-participantes' }, `Conversa com ${outroNome || 'participante'}`)),
+            el('div', { class: 'chat-detalhe-acoes' },
+                el('a', { class: 'chat-acao-link', href: linkProjeto },
+                    icone('fa-solid fa-clipboard-list'), ' Ver projeto'),
+                linkProposta && el('a', { class: 'chat-acao-link', href: linkProposta },
+                    icone('fa-solid fa-file-lines'), ' Ver proposta'),
+                podeEnviarProposta && el('button', { type: 'button', class: 'chat-acao-link chat-acao-btn', id: 'btn-enviar-proposta' },
+                    icone('fa-solid fa-envelope'), ' Enviar proposta'))),
 
-        <header class="chat-detalhe-header">
-            <a class="chat-detalhe-back" href="/pages/chat/index.html" aria-label="Voltar para conversas">
-                Voltar para conversas
-            </a>
-            <div class="chat-detalhe-info">
-                <h1 class="chat-detalhe-titulo">${esc(projeto.titulo)}</h1>
-                <p class="chat-detalhe-participantes">Conversa com ${esc(outroNome || 'participante')}</p>
-            </div>
-            <div class="chat-detalhe-acoes">
-                <a class="chat-acao-link" href="${linkProjeto}">
-                    <i class="fa-solid fa-clipboard-list"></i> Ver projeto
-                </a>
-                ${linkProposta ? `<a class="chat-acao-link" href="${linkProposta}">
-                    <i class="fa-solid fa-file-lines"></i> Ver proposta
-                </a>` : ''}
-                ${podeEnviarProposta ? `<button type="button" class="chat-acao-link chat-acao-btn" id="btn-enviar-proposta">
-                    <i class="fa-solid fa-envelope"></i> Enviar proposta
-                </button>` : ''}
-            </div>
-        </header>
+        el('div', { class: 'chat-mensagens', id: 'chat-mensagens', role: 'log', 'aria-live': 'polite', 'aria-label': 'Mensagens da conversa' },
+            el('div', { class: 'chat-estado' },
+                el('p', {}, 'Carregando mensagens...'))),
 
-        <div class="chat-mensagens" id="chat-mensagens" role="log" aria-live="polite" aria-label="Mensagens da conversa">
-            <div class="chat-estado">
-                <p>Carregando mensagens...</p>
-            </div>
-        </div>
-
-        <div class="chat-form-wrap">
-            <div id="typing-indicator-container"></div>
-            <form class="chat-form" id="chat-form">
-                <div class="chat-input-wrapper">
-                    <textarea
-                        id="chat-input"
-                        class="chat-input"
-                        rows="1"
-                        placeholder="Escreva uma mensagem... (Enter para enviar)"
-                        maxlength="2000"
-                        aria-label="Mensagem"
-                    ></textarea>
-                    <div class="char-counter" id="char-counter">0/2000</div>
-                </div>
-                <button type="submit" class="chat-btn-enviar ripple" aria-label="Enviar mensagem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"/>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                    </svg>
-                </button>
-            </form>
-        </div>
-
-    </div>`;
+        el('div', { class: 'chat-form-wrap' },
+            el('div', { id: 'typing-indicator-container' }),
+            el('form', { class: 'chat-form', id: 'chat-form' },
+                el('div', { class: 'chat-input-wrapper' },
+                    el('textarea', {
+                        id: 'chat-input',
+                        class: 'chat-input',
+                        rows: 1,
+                        placeholder: 'Escreva uma mensagem... (Enter para enviar)',
+                        maxlength: 2000,
+                        'aria-label': 'Mensagem'
+                    }),
+                    el('div', { class: 'char-counter', id: 'char-counter' }, '0/2000')),
+                el('button', { type: 'submit', class: 'chat-btn-enviar ripple', 'aria-label': 'Enviar mensagem' },
+                    svg('svg', {
+                        viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+                        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+                    },
+                        svg('line', { x1: 22, y1: 2, x2: 11, y2: 13 }),
+                        svg('polygon', { points: '22 2 15 22 11 13 2 9 22 2' })))))));
 
     // Setup listeners
     const form = document.getElementById('chat-form');
@@ -440,27 +431,25 @@ async function carregarMensagens(primeiraCarga = false) {
 // ── Renderização com animações e status de leitura ─────────────────────────
 function renderMensagens(lista) {
     if (!mensagens.length) {
-        lista.innerHTML = `
-        <div class="chat-estado">
-            <p><i class="fa-solid fa-comments"></i> Nenhuma mensagem ainda</p>
-            <small>Seja o primeiro a escrever!</small>
-        </div>`;
+        lista.replaceChildren(el('div', { class: 'chat-estado' },
+            el('p', {}, icone('fa-solid fa-comments'), ' Nenhuma mensagem ainda'),
+            el('small', {}, 'Seja o primeiro a escrever!')));
         return;
     }
 
-    let html = '';
+    const itens = document.createDocumentFragment();
     let ultimoDia = null;
 
     for (const m of mensagens) {
         const dia = diaMensagem(m.enviadoEm);
         if (dia !== ultimoDia) {
-            html += `<div class="chat-sep-data"><span>${dataFmt(m.enviadoEm)}</span></div>`;
+            itens.append(criarSeparadorData(m.enviadoEm));
             ultimoDia = dia;
         }
-        html += renderBolha(m);
+        itens.append(criarBolha(m));
     }
 
-    lista.innerHTML = html;
+    lista.replaceChildren(itens);
 
     // Adicionar efeito de fade-in nas mensagens
     const mensagensElements = lista.querySelectorAll('.msg-wrap');
@@ -469,18 +458,20 @@ function renderMensagens(lista) {
     });
 }
 
-function renderBolha(m) {
+function criarSeparadorData(d) {
+    return el('div', { class: 'chat-sep-data' }, el('span', {}, dataFmt(d)));
+}
+
+// Nome e texto vêm de outros usuários: entram como texto puro, nunca como HTML.
+function criarBolha(m) {
     const minha = m.remetenteId === usuarioId;
     const lido = m.lidoEm ? 'true' : 'false';
 
-    return `
-    <div class="msg-wrap ${minha ? 'msg-minha' : 'msg-outra'}">
-        <div class="msg-balao">
-            <div class="msg-autor">${esc(m.remetenteNome)}</div>
-            <div class="msg-texto">${esc(m.texto)}</div>
-            <div class="msg-hora" data-read="${lido}">${horaFmt(m.enviadoEm)}</div>
-        </div>
-    </div>`;
+    return el('div', { class: `msg-wrap ${minha ? 'msg-minha' : 'msg-outra'}` },
+        el('div', { class: 'msg-balao' },
+            el('div', { class: 'msg-autor' }, m.remetenteNome),
+            el('div', { class: 'msg-texto' }, m.texto),
+            el('div', { class: 'msg-hora', 'data-read': lido }, horaFmt(m.enviadoEm))));
 }
 
 // ── Scroll suave ───────────────────────────────────────────────────────────
@@ -544,15 +535,12 @@ async function enviarMensagem(e) {
     const diaAtual = diaMensagem(mensagemTemp.enviadoEm);
 
     if (ultimoDia !== diaAtual) {
-        const sepData = document.createElement('div');
-        sepData.className = 'chat-sep-data';
-        sepData.innerHTML = `<span>${dataFmt(mensagemTemp.enviadoEm)}</span>`;
-        lista.appendChild(sepData);
+        lista.appendChild(criarSeparadorData(mensagemTemp.enviadoEm));
     }
 
     const tempMsgDiv = document.createElement('div');
     tempMsgDiv.className = 'msg-wrap msg-minha';
-    tempMsgDiv.innerHTML = renderBolha(mensagemTemp);
+    tempMsgDiv.appendChild(criarBolha(mensagemTemp));
     tempMsgDiv.style.opacity = '0.6';
     lista.appendChild(tempMsgDiv);
     scrollParaFundo(lista, true);
