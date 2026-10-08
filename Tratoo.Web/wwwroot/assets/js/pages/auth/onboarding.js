@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
 // ── Estado do onboarding ──────────────────────────────────────────────────────
 const estado = {
     tipoPessoa: null,           // 'PessoaFisica' | 'PessoaJuridica'
@@ -85,12 +86,45 @@ function progresso(etapaAtual, total) {
             : n === etapaAtual
                 ? 'onboarding__passo--ativo'
                 : '';
-        const label = n < etapaAtual ? '&#10003;' : n;
+        const label = n < etapaAtual ? '✓' : n;
         const linha = n < total
-            ? `<span class="onboarding__passo-linha ${n < etapaAtual ? 'onboarding__passo-linha--ativa' : ''}"></span>`
-            : '';
-        return `<span class="onboarding__passo ${cls}">${label}</span>${linha}`;
-    }).join('');
+            ? el('span', { class: `onboarding__passo-linha ${n < etapaAtual ? 'onboarding__passo-linha--ativa' : ''}` })
+            : null;
+        return [el('span', { class: `onboarding__passo ${cls}` }, label), linha];
+    });
+}
+
+// ── Montagem das etapas ───────────────────────────────────────────────────────
+// Os formulários são montados via DOM (utils/dom.js): o que o usuário já
+// digitou (estado) volta aos campos como atributo `value`, sem nunca passar
+// pelo parser de HTML.
+
+function exibirEtapa(etapaAtual, totalEtapas, titulo, subtitulo, form) {
+    container().replaceChildren(el('div', { class: 'onboarding' },
+        el('div', { class: 'onboarding__progresso' }, progresso(etapaAtual, totalEtapas)),
+        el('h2', { class: 'onboarding__title' }, titulo),
+        el('p', { class: 'onboarding__subtitle' }, subtitulo),
+        form));
+}
+
+// Grupo rótulo + input. `opcional` acrescenta o selo "(opcional)" ao rótulo;
+// `classe` (modificador) e `style` vão para o wrapper do grupo.
+function campo(id, rotulo, attrsInput, { opcional = false, classe, style } = {}) {
+    return el('div', { class: classe ? `onboarding__group ${classe}` : 'onboarding__group', style },
+        el('label', { for: id },
+            opcional ? `${rotulo} ` : rotulo,
+            opcional && el('span', { class: 'onboarding__opcional' }, '(opcional)')),
+        el('input', { id, ...attrsInput }));
+}
+
+function areaErro(id) {
+    return el('p', { id, class: 'onboarding__erro', hidden: true });
+}
+
+function acoes(idVoltar, textoAvancar = 'Continuar', idAvancar) {
+    return el('div', { class: 'onboarding__acoes' },
+        el('button', { type: 'button', id: idVoltar, class: 'onboarding__btn-secundario' }, 'Voltar'),
+        el('button', { type: 'submit', id: idAvancar, class: 'onboarding__btn-principal' }, textoAvancar));
 }
 
 // ── Etapa 1: escolha PF / PJ ──────────────────────────────────────────────────
@@ -129,42 +163,25 @@ function renderizarEtapa1() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function renderizarPF_Etapa2() {
-    container().innerHTML = `
-        <div class="onboarding">
-            <div class="onboarding__progresso">${progresso(2, 3)}</div>
-            <h2 class="onboarding__title">Seus dados</h2>
-            <p class="onboarding__subtitle">Dados do titular da conta.</p>
-            <form id="pf-form2" novalidate>
-                <div class="onboarding__group">
-                    <label for="nomeLegal">Nome completo</label>
-                    <input type="text" id="nomeLegal" placeholder="Ex: João da Silva"
-                        value="${estado.nomeLegal}" autocomplete="name" required>
-                </div>
-                <div class="onboarding__group">
-                    <label for="cpfCnpj">CPF</label>
-                    <input type="text" id="cpfCnpj" placeholder="000.000.000-00"
-                        maxlength="14" inputmode="numeric" value="${estado.cpfCnpj}" required>
-                </div>
-                <div class="onboarding__group">
-                    <label for="dataNascimento">Data de nascimento</label>
-                    <input type="date" id="dataNascimento"
-                        value="${estado.dataNascimento}" required>
-                </div>
-                <div class="onboarding__group">
-                    <label style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
-                        <input type="checkbox" id="exibirIdade" ${estado.exibirIdade ? 'checked' : ''}
-                            style="width:auto;margin:0">
-                        Exibir minha idade publicamente no perfil
-                    </label>
-                </div>
-                <p id="pf-erro2" class="onboarding__erro" hidden></p>
-                <div class="onboarding__acoes">
-                    <button type="button" id="btn-voltar2" class="onboarding__btn-secundario">Voltar</button>
-                    <button type="submit" class="onboarding__btn-principal">Continuar</button>
-                </div>
-            </form>
-        </div>
-    `;
+    exibirEtapa(2, 3, 'Seus dados', 'Dados do titular da conta.',
+        el('form', { id: 'pf-form2', novalidate: true },
+            campo('nomeLegal', 'Nome completo', {
+                type: 'text', placeholder: 'Ex: João da Silva',
+                value: estado.nomeLegal, autocomplete: 'name', required: true
+            }),
+            campo('cpfCnpj', 'CPF', {
+                type: 'text', placeholder: '000.000.000-00',
+                maxlength: 14, inputmode: 'numeric', value: estado.cpfCnpj, required: true
+            }),
+            campo('dataNascimento', 'Data de nascimento', {
+                type: 'date', value: estado.dataNascimento, required: true
+            }),
+            el('div', { class: 'onboarding__group' },
+                el('label', { style: 'flex-direction:row;align-items:center;gap:8px;cursor:pointer' },
+                    el('input', { type: 'checkbox', id: 'exibirIdade', checked: estado.exibirIdade, style: 'width:auto;margin:0' }),
+                    ' Exibir minha idade publicamente no perfil')),
+            areaErro('pf-erro2'),
+            acoes('btn-voltar2')));
 
     const inputCpf = document.getElementById('cpfCnpj');
     inputCpf.addEventListener('input', () => { inputCpf.value = formatarCpf(inputCpf.value); });
@@ -201,56 +218,35 @@ function renderizarPF_Etapa2() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function renderizarPJ_Etapa2() {
-    container().innerHTML = `
-        <div class="onboarding">
-            <div class="onboarding__progresso">${progresso(2, 4)}</div>
-            <h2 class="onboarding__title">Identificação da empresa</h2>
-            <p class="onboarding__subtitle">Dados cadastrais da sua empresa.</p>
-            <form id="pj-form2" novalidate>
-                <div class="onboarding__group">
-                    <label for="razaoSocial">Razão Social</label>
-                    <input type="text" id="razaoSocial" placeholder="Ex: Empresa Comércio Ltda"
-                        value="${estado.razaoSocial}" required>
-                </div>
-                <div class="onboarding__group">
-                    <label for="nomeEmpresa">Nome fantasia <span class="onboarding__opcional">(opcional)</span></label>
-                    <input type="text" id="nomeEmpresa" placeholder="Ex: Minha Empresa"
-                        value="${estado.nomeEmpresa}">
-                </div>
-                <div class="onboarding__group">
-                    <label for="cnpj">CNPJ</label>
-                    <input type="text" id="cnpj" placeholder="00.000.000/0001-00"
-                        maxlength="18" inputmode="numeric" value="${estado.cnpj}" required>
-                </div>
-                <div class="onboarding__group">
-                    <label for="segmento">Segmento de atuação</label>
-                    <input type="text" id="segmento" placeholder="Ex: Tecnologia, Construção civil..."
-                        value="${estado.segmento}" required>
-                </div>
-                <div class="onboarding__row">
-                    <div class="onboarding__group" style="flex:1">
-                        <label for="inscricaoEstadual">Inscrição Estadual <span class="onboarding__opcional">(opcional)</span></label>
-                        <input type="text" id="inscricaoEstadual" placeholder="Ex: 123.456.789.000"
-                            value="${estado.inscricaoEstadual}">
-                    </div>
-                    <div class="onboarding__group" style="flex:1">
-                        <label for="inscricaoMunicipal">Inscrição Municipal <span class="onboarding__opcional">(opcional)</span></label>
-                        <input type="text" id="inscricaoMunicipal" placeholder="Ex: 00123456"
-                            value="${estado.inscricaoMunicipal}">
-                    </div>
-                </div>
-                <div class="onboarding__group">
-                    <label for="dataAbertura">Data de abertura <span class="onboarding__opcional">(opcional)</span></label>
-                    <input type="date" id="dataAbertura" value="${estado.dataAbertura}">
-                </div>
-                <p id="pj-erro2" class="onboarding__erro" hidden></p>
-                <div class="onboarding__acoes">
-                    <button type="button" id="btn-voltar-pj2" class="onboarding__btn-secundario">Voltar</button>
-                    <button type="submit" class="onboarding__btn-principal">Continuar</button>
-                </div>
-            </form>
-        </div>
-    `;
+    exibirEtapa(2, 4, 'Identificação da empresa', 'Dados cadastrais da sua empresa.',
+        el('form', { id: 'pj-form2', novalidate: true },
+            campo('razaoSocial', 'Razão Social', {
+                type: 'text', placeholder: 'Ex: Empresa Comércio Ltda',
+                value: estado.razaoSocial, required: true
+            }),
+            campo('nomeEmpresa', 'Nome fantasia', {
+                type: 'text', placeholder: 'Ex: Minha Empresa', value: estado.nomeEmpresa
+            }, { opcional: true }),
+            campo('cnpj', 'CNPJ', {
+                type: 'text', placeholder: '00.000.000/0001-00',
+                maxlength: 18, inputmode: 'numeric', value: estado.cnpj, required: true
+            }),
+            campo('segmento', 'Segmento de atuação', {
+                type: 'text', placeholder: 'Ex: Tecnologia, Construção civil...',
+                value: estado.segmento, required: true
+            }),
+            el('div', { class: 'onboarding__row' },
+                campo('inscricaoEstadual', 'Inscrição Estadual', {
+                    type: 'text', placeholder: 'Ex: 123.456.789.000', value: estado.inscricaoEstadual
+                }, { opcional: true, style: 'flex:1' }),
+                campo('inscricaoMunicipal', 'Inscrição Municipal', {
+                    type: 'text', placeholder: 'Ex: 00123456', value: estado.inscricaoMunicipal
+                }, { opcional: true, style: 'flex:1' })),
+            campo('dataAbertura', 'Data de abertura', {
+                type: 'date', value: estado.dataAbertura
+            }, { opcional: true }),
+            areaErro('pj-erro2'),
+            acoes('btn-voltar-pj2')));
 
     const inputCnpj = document.getElementById('cnpj');
     inputCnpj.addEventListener('input', () => { inputCnpj.value = formatarCnpj(inputCnpj.value); });
@@ -289,47 +285,29 @@ function renderizarPJ_Etapa2() {
 }
 
 function renderizarPJ_Etapa3() {
-    container().innerHTML = `
-        <div class="onboarding">
-            <div class="onboarding__progresso">${progresso(3, 4)}</div>
-            <h2 class="onboarding__title">Representante legal</h2>
-            <p class="onboarding__subtitle">Dados de quem representa a empresa legalmente.</p>
-            <form id="pj-form3" novalidate>
-                <div class="onboarding__group">
-                    <label for="nomeRepresentante">Nome completo</label>
-                    <input type="text" id="nomeRepresentante" placeholder="Ex: Maria Souza"
-                        value="${estado.nomeRepresentanteLegal}" required>
-                </div>
-                <div class="onboarding__group">
-                    <label for="cpfRepresentante">CPF</label>
-                    <input type="text" id="cpfRepresentante" placeholder="000.000.000-00"
-                        maxlength="14" inputmode="numeric"
-                        value="${estado.cpfRepresentanteLegal ? formatarCpf(estado.cpfRepresentanteLegal) : ''}" required>
-                </div>
-                <div class="onboarding__group">
-                    <label for="cargoRepresentante">Cargo <span class="onboarding__opcional">(opcional)</span></label>
-                    <input type="text" id="cargoRepresentante" placeholder="Ex: Sócio-Diretor, CEO..."
-                        value="${estado.cargoRepresentante}">
-                </div>
-                <div class="onboarding__group">
-                    <label for="emailRepresentante">E-mail <span class="onboarding__opcional">(opcional)</span></label>
-                    <input type="email" id="emailRepresentante" placeholder="contato@empresa.com.br"
-                        value="${estado.emailRepresentante}">
-                </div>
-                <div class="onboarding__group">
-                    <label for="telefoneRepresentante">Telefone / WhatsApp <span class="onboarding__opcional">(opcional)</span></label>
-                    <input type="text" id="telefoneRepresentante" placeholder="(11) 99999-0000"
-                        maxlength="15" inputmode="numeric"
-                        value="${estado.telefoneRepresentante}">
-                </div>
-                <p id="pj-erro3" class="onboarding__erro" hidden></p>
-                <div class="onboarding__acoes">
-                    <button type="button" id="btn-voltar-pj3" class="onboarding__btn-secundario">Voltar</button>
-                    <button type="submit" class="onboarding__btn-principal">Continuar</button>
-                </div>
-            </form>
-        </div>
-    `;
+    exibirEtapa(3, 4, 'Representante legal', 'Dados de quem representa a empresa legalmente.',
+        el('form', { id: 'pj-form3', novalidate: true },
+            campo('nomeRepresentante', 'Nome completo', {
+                type: 'text', placeholder: 'Ex: Maria Souza',
+                value: estado.nomeRepresentanteLegal, required: true
+            }),
+            campo('cpfRepresentante', 'CPF', {
+                type: 'text', placeholder: '000.000.000-00', maxlength: 14, inputmode: 'numeric',
+                value: estado.cpfRepresentanteLegal ? formatarCpf(estado.cpfRepresentanteLegal) : '',
+                required: true
+            }),
+            campo('cargoRepresentante', 'Cargo', {
+                type: 'text', placeholder: 'Ex: Sócio-Diretor, CEO...', value: estado.cargoRepresentante
+            }, { opcional: true }),
+            campo('emailRepresentante', 'E-mail', {
+                type: 'email', placeholder: 'contato@empresa.com.br', value: estado.emailRepresentante
+            }, { opcional: true }),
+            campo('telefoneRepresentante', 'Telefone / WhatsApp', {
+                type: 'text', placeholder: '(11) 99999-0000', maxlength: 15, inputmode: 'numeric',
+                value: estado.telefoneRepresentante
+            }, { opcional: true }),
+            areaErro('pj-erro3'),
+            acoes('btn-voltar-pj3')));
 
     const inputCpfRep = document.getElementById('cpfRepresentante');
     inputCpfRep.addEventListener('input', () => { inputCpfRep.value = formatarCpf(inputCpfRep.value); });
@@ -391,68 +369,43 @@ function renderizarEndereco(fnVoltar, etapaAtual, totalEtapas) {
     const labelSub = isPF ? 'Informe seu endereço.' : 'Informe o endereço da sede da empresa.';
 
     const opcoesEstado = ESTADOS_BR.map(uf =>
-        `<option value="${uf}" ${estado.estado === uf ? 'selected' : ''}>${uf}</option>`
-    ).join('');
+        el('option', { value: uf, selected: estado.estado === uf }, uf)
+    );
 
-    container().innerHTML = `
-        <div class="onboarding">
-            <div class="onboarding__progresso">${progresso(etapaAtual, totalEtapas)}</div>
-            <h2 class="onboarding__title">${labelTitulo}</h2>
-            <p class="onboarding__subtitle">${labelSub}</p>
-            <form id="enderecoForm" novalidate>
-                <div class="onboarding__group">
-                    <label for="cep">CEP</label>
-                    <div class="onboarding__cep-wrap">
-                        <input type="text" id="cep" placeholder="00000-000"
-                            maxlength="9" inputmode="numeric"
-                            value="${estado.cep ? formatarCep(estado.cep) : ''}" required>
-                        <span id="cep-loading" class="onboarding__cep-loading" hidden>Buscando...</span>
-                    </div>
-                </div>
-                <div class="onboarding__group">
-                    <label for="logradouro">Logradouro</label>
-                    <input type="text" id="logradouro" placeholder="Ex: Rua das Flores"
-                        value="${estado.logradouro}" required>
-                </div>
-                <div class="onboarding__row">
-                    <div class="onboarding__group onboarding__group--numero">
-                        <label for="numero">Número</label>
-                        <input type="text" id="numero" placeholder="Ex: 123"
-                            value="${estado.numero}" required>
-                    </div>
-                    <div class="onboarding__group onboarding__group--complemento">
-                        <label for="complemento">Complemento <span class="onboarding__opcional">(opcional)</span></label>
-                        <input type="text" id="complemento" placeholder="Ex: Apto 4"
-                            value="${estado.complemento}">
-                    </div>
-                </div>
-                <div class="onboarding__group">
-                    <label for="bairro">Bairro</label>
-                    <input type="text" id="bairro" placeholder="Ex: Centro"
-                        value="${estado.bairro}" required>
-                </div>
-                <div class="onboarding__row">
-                    <div class="onboarding__group onboarding__group--cidade">
-                        <label for="cidade">Cidade</label>
-                        <input type="text" id="cidade" placeholder="Ex: São Paulo"
-                            value="${estado.cidade}" required>
-                    </div>
-                    <div class="onboarding__group onboarding__group--estado">
-                        <label for="estadoUF">Estado</label>
-                        <select id="estadoUF" required>
-                            <option value="">UF</option>
-                            ${opcoesEstado}
-                        </select>
-                    </div>
-                </div>
-                <p id="endereco-erro" class="onboarding__erro" hidden></p>
-                <div class="onboarding__acoes">
-                    <button type="button" id="btn-voltar-end" class="onboarding__btn-secundario">Voltar</button>
-                    <button type="submit" id="btn-finalizar" class="onboarding__btn-principal">Finalizar cadastro</button>
-                </div>
-            </form>
-        </div>
-    `;
+    exibirEtapa(etapaAtual, totalEtapas, labelTitulo, labelSub,
+        el('form', { id: 'enderecoForm', novalidate: true },
+            el('div', { class: 'onboarding__group' },
+                el('label', { for: 'cep' }, 'CEP'),
+                el('div', { class: 'onboarding__cep-wrap' },
+                    el('input', {
+                        type: 'text', id: 'cep', placeholder: '00000-000', maxlength: 9, inputmode: 'numeric',
+                        value: estado.cep ? formatarCep(estado.cep) : '', required: true
+                    }),
+                    el('span', { id: 'cep-loading', class: 'onboarding__cep-loading', hidden: true }, 'Buscando...'))),
+            campo('logradouro', 'Logradouro', {
+                type: 'text', placeholder: 'Ex: Rua das Flores', value: estado.logradouro, required: true
+            }),
+            el('div', { class: 'onboarding__row' },
+                campo('numero', 'Número', {
+                    type: 'text', placeholder: 'Ex: 123', value: estado.numero, required: true
+                }, { classe: 'onboarding__group--numero' }),
+                campo('complemento', 'Complemento', {
+                    type: 'text', placeholder: 'Ex: Apto 4', value: estado.complemento
+                }, { opcional: true, classe: 'onboarding__group--complemento' })),
+            campo('bairro', 'Bairro', {
+                type: 'text', placeholder: 'Ex: Centro', value: estado.bairro, required: true
+            }),
+            el('div', { class: 'onboarding__row' },
+                campo('cidade', 'Cidade', {
+                    type: 'text', placeholder: 'Ex: São Paulo', value: estado.cidade, required: true
+                }, { classe: 'onboarding__group--cidade' }),
+                el('div', { class: 'onboarding__group onboarding__group--estado' },
+                    el('label', { for: 'estadoUF' }, 'Estado'),
+                    el('select', { id: 'estadoUF', required: true },
+                        el('option', { value: '' }, 'UF'),
+                        opcoesEstado))),
+            areaErro('endereco-erro'),
+            acoes('btn-voltar-end', 'Finalizar cadastro', 'btn-finalizar')));
 
     const inputCep = document.getElementById('cep');
 
