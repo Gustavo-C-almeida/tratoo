@@ -479,7 +479,7 @@ Rejeições retornam **429** com mensagem amigável em JSON.
 
 | Medida | Implementação |
 |--------|---------------|
-| CPF/CNPJ | Criptografado em repouso (AES, `DataProtector`); mascarado nos contratos |
+| CPF/CNPJ, conta bancária e chave PIX | Criptografados em repouso (AES, `DataProtector`), com a chave fora do código (`DataProtector__Chave`); mascarados nas respostas e contratos |
 | Consentimento | `ConsentLog` (termos/privacidade) com IP e versão |
 | Auditoria | `AuditLog` de ações críticas |
 | Direito ao esquecimento | Soft delete: anonimiza nome para "Usuário indisponível", remove e-mail/foto, bloqueia login, retira perfil das buscas; preserva contratos, pagamentos e avaliações |
@@ -525,6 +525,7 @@ Chaves esperadas (valores fornecidos pelo ambiente, **não** comitados):
 ConnectionStrings:DefaultConnection   # SQL Server   (TratooContext)
 ConnectionStrings:VectorConnection    # PostgreSQL + pgvector (VectorContext)
 Jwt:SecretKey / Jwt:Issuer / Jwt:Audience / Jwt:ExpirationHours
+DataProtector:Chave      # chave AES dos dados sensíveis (variável DataProtector__Chave) — OBRIGATÓRIA
 Asaas:ApiKey / Asaas:BaseUrl / Asaas:WebhookToken / ...
 OpenAI:ApiKey / OpenAI:BaseUrl
 CloudflareR2:*          # bucket público
@@ -532,6 +533,8 @@ CloudflareR2Private:*   # bucket privado
 RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_FROM_NAME   # e-mail transacional (Resend)
 Seed:SenhaUsuario       # senha dos usuários de seed (somente desenvolvimento)
 ```
+
+**`DataProtector:Chave`** cifra conta bancária, chave PIX e CPF/CNPJ. A API **não sobe** sem ela, e o `/health/ready` (check `dados-cifrados`) fica não saudável se a chave configurada não decifrar os dados que já existem — num deploy, isso impede a promoção da versão. Para um banco com dados, a chave precisa ser **exatamente** a que os cifrou; trocá-la exige recifrar os dados (rotação), não basta mudar a variável.
 
 ---
 

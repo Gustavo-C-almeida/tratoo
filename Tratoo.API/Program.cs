@@ -34,6 +34,26 @@ QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ─── Chave de criptografia dos dados sensíveis ───────────────────────────────
+// Vem de DataProtector:Chave (variável DataProtector__Chave) — nunca do código.
+// Primeira coisa depois do builder, de propósito: sem a chave a API NÃO sobe (o
+// processo sai aqui, o health check do deploy falha e a versão anterior continua
+// no ar). Subir sem ela só adiaria o erro para a primeira leitura de conta bancária,
+// PIX ou CPF/CNPJ. Se a chave estiver ERRADA, quem barra o deploy é o check
+// "dados-cifrados" do /health/ready (DadosCifradosHealthCheck).
+try
+{
+    Tratoo.Domain.Features.Shared.DataProtector.Configurar(
+        builder.Configuration[Tratoo.Domain.Features.Shared.DataProtector.ChaveConfiguracao]);
+}
+catch (InvalidOperationException ex)
+{
+    // Saída limpa (uma linha, exit 1) em vez de exceção não tratada: no log do deploy
+    // tem de ficar óbvio que falta configuração, não que o processo "quebrou".
+    Console.Error.WriteLine($"[startup] {ex.Message}");
+    return 1;
+}
+
 // ─── Porta ───────────────────────────────────────────────────────────────────
 // Escuta no PORT injetado pela plataforma (Railway); sem ele, 8080 via
 // ASPNETCORE_HTTP_PORTS do Dockerfile. Ver PortaHttpSetup para a precedência.

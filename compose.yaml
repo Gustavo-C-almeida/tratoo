@@ -135,6 +135,11 @@ services:
       AllowedHosts: localhost;127.0.0.1
 
       Jwt__SecretKey: ${JWT_SECRET_KEY:?defina JWT_SECRET_KEY no .env (32+ caracteres aleatórios)}
+
+      # Chave AES dos dados sensíveis (conta bancária, PIX, CPF/CNPJ). Não está mais no
+      # código: sem ela a API não sobe. Aqui é uma chave LOCAL qualquer — nunca a de
+      # produção. Trocar o valor torna ilegível o que já foi cifrado no banco local.
+      DataProtector__Chave: ${DATAPROTECTOR_CHAVE:?defina DATAPROTECTOR_CHAVE no .env (openssl rand -base64 32)}
       Jwt__Issuer: tratoo-local
       Jwt__Audience: tratoo-local
       Jwt__ExpirationHours: "8"

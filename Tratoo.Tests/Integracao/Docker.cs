@@ -14,7 +14,7 @@ namespace Tratoo.Tests.Integracao
     {
         private static readonly Lazy<bool> _disponivel = new(() =>
         {
-            try { return Executar(TimeSpan.FromSeconds(20), "info", "--format", "{{.ServerVersion}}").ExitCode == 0; }
+            try { return Executar(TimeSpan.FromSeconds(60), "info", "--format", "{{.ServerVersion}}").ExitCode == 0; }
             catch { return false; }
         });
 
