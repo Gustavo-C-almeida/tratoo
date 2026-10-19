@@ -351,15 +351,24 @@ Observações:
 
 ## 7. Achados fora do escopo (registrados para não se perderem)
 
-### 7.1 Chave AES fixa no código-fonte — **grave**
+### 7.1 Chave AES fixa no código-fonte — **grave** (chave retirada do código em 2026-10-13; rotação pendente)
 
-`Tratoo.Domain/Features/Shared/DataProtector.cs` usa
-`BuildKey("CHAVE_SECRETA_32_BYTES_PLACEHOLDER")` como chave AES-256. Essa classe cifra **conta
-bancária, chave PIX** (`DadosBancariosService`) e **CPF/CNPJ** (`IdentidadeService`), e é usada
-na descriptografia do PIX na liberação de pagamento **[C]**. Quem tiver acesso ao repositório
-decifra tudo o que estiver no banco. Além disso, o modo é AES-CBC sem autenticação (sem MAC).
-Corrigir exige chave vinda de secret e **re-cifragem dos dados existentes** — trabalho próprio,
-fora da Trilha 2.
+`Tratoo.Domain/Features/Shared/DataProtector.cs` tinha a chave AES-256 **fixa no código** — um
+texto literal com cara de placeholder, mas que era a chave real de produção. Essa classe cifra
+**conta bancária, chave PIX** (`DadosBancariosService`) e **CPF/CNPJ** (`IdentidadeService`), e é
+usada na descriptografia do PIX na liberação de pagamento **[C]**. O repositório é público, então
+a chave deve ser tratada como **comprometida**: quem obtiver o conteúdo do banco decifra esses
+dados. Além disso, o modo é AES-CBC sem autenticação (sem MAC).
+
+O que já foi feito: a chave saiu do código e passou a vir de `DataProtector__Chave` (a API não
+sobe sem ela, e o check `dados-cifrados` do `/health/ready` barra o deploy se a chave não
+decifrar os dados existentes). Em produção a variável recebe **o mesmo valor de antes** — isso
+só tira a chave do repositório, não a troca.
+
+O que falta: **rotacionar** — gerar chave nova, recifrar os dados existentes lendo com a antiga
+e gravando com a nova (as sobrecargas de `Encrypt`/`Decrypt` com chave explícita existem para
+isso), de preferência já em formato autenticado e versionado. O valor antigo foi removido deste
+documento e do histórico do Git, mas cópias anteriores do repositório continuam com ele.
 
 ### 7.2 Configuração local aponta para o Neon de produção
 

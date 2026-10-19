@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Security.Cryptography;
 using Tratoo.Domain.Data;
+using Tratoo.Domain.Features.Shared;
 
 namespace Tratoo.API.Infrastructure
 {
@@ -71,6 +73,115 @@ namespace Tratoo.API.Infrastructure
             catch (Exception ex)
             {
                 return HealthCheckResult.Unhealthy("Falha ao verificar a base vetorial/pgvector.", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lembra que a chave já foi conferida contra dados reais neste processo. A chave não
+    /// muda sem reiniciar, então depois do primeiro "ok" o check não consulta mais o banco.
+    /// </summary>
+    public sealed class EstadoChaveDados
+    {
+        private volatile bool _confirmada;
+        public bool Confirmada { get => _confirmada; set => _confirmada = value; }
+    }
+
+    /// <summary>
+    /// Readiness: a chave configurada (<c>DataProtector:Chave</c>) decifra os dados que JÁ
+    /// existem no banco?
+    ///
+    /// A API subir e o health check de banco passar não dizem nada sobre a chave: com uma
+    /// chave diferente da usada para cifrar, tudo parece saudável até alguém abrir os dados
+    /// bancários ou uma liberação de pagamento falhar. Este check pega algumas amostras
+    /// reais (chave PIX, conta, CPF/CNPJ) e tenta decifrá-las:
+    ///
+    ///  • nenhuma amostra decifra → Unhealthy (503). No deploy da Railway isso impede a
+    ///    promoção: a versão com a chave errada nunca recebe tráfego;
+    ///  • parte decifra → Degraded (200, visível no corpo) — dados cifrados com mais de uma
+    ///    chave, o que só deve acontecer durante uma rotação;
+    ///  • todas decifram, ou não há dado cifrado → Healthy.
+    ///
+    /// Só entram valores com FORMA de dado cifrado (<see cref="DataProtector.PareceCifrado"/>):
+    /// valores fictícios de seed não contam. Nada decifrado sai daqui — só contagens.
+    /// </summary>
+    public sealed class DadosCifradosHealthCheck : IHealthCheck
+    {
+        private const int AmostrasPorColuna = 3;
+
+        private readonly TratooContext _db;
+        private readonly EstadoChaveDados _estado;
+
+        public DadosCifradosHealthCheck(TratooContext db, EstadoChaveDados estado)
+        {
+            _db = db;
+            _estado = estado;
+        }
+
+        public async Task<HealthCheckResult> CheckHealthAsync(
+            HealthCheckContext context, CancellationToken cancellationToken = default)
+        {
+            if (_estado.Confirmada)
+                return HealthCheckResult.Healthy("Chave de dados já conferida contra dados existentes.");
+
+            try
+            {
+                var amostras = new List<string?>();
+
+                amostras.AddRange(await _db.ContasBancarias.AsNoTracking()
+                    .OrderByDescending(c => c.Id).Select(c => c.PixChave)
+                    .Take(AmostrasPorColuna).ToListAsync(cancellationToken));
+                amostras.AddRange(await _db.ContasBancarias.AsNoTracking()
+                    .OrderByDescending(c => c.Id).Select(c => c.ContaCriptografada)
+                    .Take(AmostrasPorColuna).ToListAsync(cancellationToken));
+                amostras.AddRange(await _db.UserIdentities.AsNoTracking()
+                    .OrderByDescending(u => u.Id).Select(u => u.CpfCnpjCriptografado)
+                    .Take(AmostrasPorColuna).ToListAsync(cancellationToken));
+
+                var cifradas = amostras.Where(DataProtector.PareceCifrado).Select(a => a!).ToList();
+                if (cifradas.Count == 0)
+                    return HealthCheckResult.Healthy("Nenhum dado cifrado para conferir.");
+
+                var decifradas = cifradas.Count(Decifra);
+
+                if (decifradas == cifradas.Count)
+                {
+                    _estado.Confirmada = true;
+                    return HealthCheckResult.Healthy(
+                        $"Chave de dados confere: {decifradas} de {cifradas.Count} amostras decifradas.");
+                }
+
+                if (decifradas == 0)
+                    return HealthCheckResult.Unhealthy(
+                        $"A chave configurada NÃO decifra os dados existentes (0 de {cifradas.Count} amostras). " +
+                        "DataProtector__Chave não é a chave com que os dados foram cifrados.");
+
+                return HealthCheckResult.Degraded(
+                    $"Chave de dados decifra só {decifradas} de {cifradas.Count} amostras (dados cifrados com mais de uma chave).");
+            }
+            catch (Exception ex)
+            {
+                return HealthCheckResult.Unhealthy("Falha ao conferir a chave de dados contra o banco.", ex);
+            }
+        }
+
+        private static bool Decifra(string valor)
+        {
+            try
+            {
+                var claro = DataProtector.Decrypt(valor);
+
+                // Com a chave ERRADA o AES-CBC ainda "decifra" sem erro em ~1 de cada 256
+                // valores (o padding casa por acaso) e devolve lixo. Só conta como decifrado
+                // o que é texto de verdade: sem bytes UTF-8 inválidos (U+FFFD) nem caracteres
+                // de controle. Sem isto, uma chave errada teria alguns % de chance de passar
+                // como "Degraded" e o deploy seria promovido.
+                return claro.Length > 0 && !claro.Any(c => c == '�' || char.IsControl(c));
+            }
+            catch (Exception ex) when (ex is CryptographicException or FormatException)
+            {
+                // Chave errada = padding inválido. O valor nunca é registrado.
+                return false;
             }
         }
     }
