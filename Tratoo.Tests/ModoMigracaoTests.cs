@@ -1,7 +1,4 @@
 using Microsoft.Extensions.Configuration;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 using Tratoo.API.Infrastructure;
 using Xunit;
 
@@ -59,69 +56,15 @@ namespace Tratoo.Tests
             Assert.Null(ModoMigracao.ResolverConexaoPrincipal(Config()));
         }
 
-        private static int PortaLivre()
-        {
-            using var l = new TcpListener(IPAddress.Loopback, 0);
-            l.Start();
-            return ((IPEndPoint)l.LocalEndpoint).Port;
-        }
-
-        private static async Task<(int ExitCode, string Saida)> RodarApiAsync(
-            string argumento, IDictionary<string, string?> ambiente)
-        {
-            var dll = Path.Combine(AppContext.BaseDirectory, "Tratoo.API.dll");
-            Assert.True(File.Exists(dll), $"Tratoo.API.dll não encontrado em {AppContext.BaseDirectory}");
-
-            // Diretório de trabalho VAZIO: o appsettings.json copiado para a pasta dos
-            // testes aponta para o Neon de produção e não pode ser lido por este teste.
-            var cwd = Directory.CreateTempSubdirectory("tratoo-migrate-teste-").FullName;
-
-            var psi = new ProcessStartInfo("dotnet")
-            {
-                WorkingDirectory = cwd,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-            psi.ArgumentList.Add(dll);
-            psi.ArgumentList.Add(argumento);
-
-            foreach (var chave in psi.Environment.Keys.Where(k => k.StartsWith("ConnectionStrings__")).ToList())
-                psi.Environment.Remove(chave);
-            foreach (var (k, v) in ambiente)
-                psi.Environment[k] = v;
-
-            using var processo = Process.Start(psi)!;
-            var stdout = processo.StandardOutput.ReadToEndAsync();
-            var stderr = processo.StandardError.ReadToEndAsync();
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
-            try
-            {
-                await processo.WaitForExitAsync(cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                processo.Kill(entireProcessTree: true);
-                throw new TimeoutException($"{argumento} não encerrou em 90s (subiu um host?).");
-            }
-            finally
-            {
-                Directory.Delete(cwd, recursive: true);
-            }
-
-            return (processo.ExitCode, await stdout + await stderr);
-        }
-
         [Fact]
         public async Task Banco_fora_do_ar_encerra_com_falha_sem_subir_Kestrel_nem_BackgroundServices()
         {
             // Porta local sem ninguém escutando = "banco fora do ar", recusa imediata.
-            var portaBanco = PortaLivre();
-            var portaHttp = PortaLivre();
+            var portaBanco = ProcessoApi.PortaLivre();
+            var portaHttp = ProcessoApi.PortaLivre();
             var conexao = $"Host=127.0.0.1;Port={portaBanco};Database=x;Username=x;Password=x;Timeout=3";
 
-            var (exit, saida) = await RodarApiAsync(ModoMigracao.Argumento, new Dictionary<string, string?>
+            var (exit, saida) = await ProcessoApi.RodarAsync(ModoMigracao.Argumento, new Dictionary<string, string?>
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["PORT"] = portaHttp.ToString(),
@@ -143,7 +86,7 @@ namespace Tratoo.Tests
         [Fact]
         public async Task Sem_connection_string_encerra_com_codigo_proprio()
         {
-            var (exit, saida) = await RodarApiAsync(ModoMigracao.Argumento, new Dictionary<string, string?>
+            var (exit, saida) = await ProcessoApi.RodarAsync(ModoMigracao.Argumento, new Dictionary<string, string?>
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production"
             });
