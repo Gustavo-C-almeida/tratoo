@@ -117,4 +117,8 @@ $RECYCLE.BIN/
 
 !**/Migrations/*.cs
 
-!**/Properties/PublishProfiles/*.pubxml
+# Perfis de publicação do Visual Studio (Azure) e artefatos binários de docs: não versionar.
+# O deploy é na Railway e o banco no Neon; esses arquivos podem conter IDs de recursos.
+**/Properties/PublishProfiles/
+**/Properties/ServiceDependencies/
+Docs/*.rar
