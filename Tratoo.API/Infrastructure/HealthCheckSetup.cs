@@ -52,7 +52,16 @@ namespace Tratoo.API.Infrastructure
                     "pgvector",
                     failureStatus: HealthStatus.Unhealthy,
                     tags: new[] { TagReady },
+                    timeout: TimeoutPorCheck)
+                // A chave de DataProtector decifra os dados existentes? Com a chave errada,
+                // o deploy não é promovido. Ver DadosCifradosHealthCheck.
+                .AddCheck<DadosCifradosHealthCheck>(
+                    "dados-cifrados",
+                    failureStatus: HealthStatus.Unhealthy,
+                    tags: new[] { TagReady },
                     timeout: TimeoutPorCheck);
+
+            services.AddSingleton<EstadoChaveDados>();
 
             return services;
         }
