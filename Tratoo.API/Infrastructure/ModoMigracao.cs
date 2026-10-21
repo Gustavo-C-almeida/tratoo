@@ -57,15 +57,7 @@ namespace Tratoo.API.Infrastructure
 
         public static async Task<int> ExecutarAsync()
         {
-            // Mesmas fontes que o host web usa para estes valores: JSON do diretório de
-            // trabalho (content root) + variáveis de ambiente, que vencem.
-            var ambiente = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environments.Production;
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: true)
-                .AddJsonFile($"appsettings.{ambiente}.json", optional: true)
-                .AddEnvironmentVariables()
-                .Build();
+            var configuration = LerConfiguracao();
 
             using var loggerFactory = LoggerFactory.Create(b => b
                 .AddSimpleConsole(o => { o.SingleLine = true; o.TimestampFormat = "HH:mm:ss "; })
@@ -135,8 +127,24 @@ namespace Tratoo.API.Infrastructure
             }
         }
 
+        /// <summary>
+        /// Configuração dos modos de linha de comando: as mesmas fontes que o host web usa
+        /// para estes valores — JSON do diretório de trabalho (content root) + variáveis de
+        /// ambiente, que vencem.
+        /// </summary>
+        internal static IConfiguration LerConfiguracao()
+        {
+            var ambiente = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environments.Production;
+            return new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: true)
+                .AddJsonFile($"appsettings.{ambiente}.json", optional: true)
+                .AddEnvironmentVariables()
+                .Build();
+        }
+
         /// <summary>Host/porta/banco, nunca usuário nem senha.</summary>
-        private static string Descrever(string conexao)
+        internal static string Descrever(string conexao)
         {
             try
             {

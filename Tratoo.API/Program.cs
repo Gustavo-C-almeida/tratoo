@@ -30,6 +30,12 @@ if (SondaHealthCheck.FoiSolicitada(args))
 if (ModoMigracao.FoiSolicitado(args))
     return await ModoMigracao.ExecutarAsync();
 
+// ─── Modo recifragem (rotação da chave de dados) ─────────────────────────────
+// `dotnet Tratoo.API.dll --recifrar-dados [--aplicar]`: regrava com a chave nova o
+// que ainda está na anterior e encerra. Ver Docs/ROTACAO-CHAVE-DADOS.md.
+if (ModoRecifragem.FoiSolicitado(args))
+    return await ModoRecifragem.ExecutarAsync(args);
+
 QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,10 +47,16 @@ var builder = WebApplication.CreateBuilder(args);
 // no ar). Subir sem ela só adiaria o erro para a primeira leitura de conta bancária,
 // PIX ou CPF/CNPJ. Se a chave estiver ERRADA, quem barra o deploy é o check
 // "dados-cifrados" do /health/ready (DadosCifradosHealthCheck).
+// DataProtector:ChaveAnterior só existe durante uma rotação: grava-se com a nova e
+// lê-se também com a anterior (Docs/ROTACAO-CHAVE-DADOS.md).
 try
 {
     Tratoo.Domain.Features.Shared.DataProtector.Configurar(
-        builder.Configuration[Tratoo.Domain.Features.Shared.DataProtector.ChaveConfiguracao]);
+        builder.Configuration[Tratoo.Domain.Features.Shared.DataProtector.ChaveConfiguracao],
+        builder.Configuration[Tratoo.Domain.Features.Shared.DataProtector.ChaveAnteriorConfiguracao]);
+
+    if (Tratoo.Domain.Features.Shared.DataProtector.Chaves.Anterior is not null)
+        Console.WriteLine("[startup] Rotação da chave de dados em curso: gravando com a chave nova, lendo também com a anterior.");
 }
 catch (InvalidOperationException ex)
 {

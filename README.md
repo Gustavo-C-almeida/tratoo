@@ -526,6 +526,7 @@ ConnectionStrings:DefaultConnection   # SQL Server   (TratooContext)
 ConnectionStrings:VectorConnection    # PostgreSQL + pgvector (VectorContext)
 Jwt:SecretKey / Jwt:Issuer / Jwt:Audience / Jwt:ExpirationHours
 DataProtector:Chave      # chave AES dos dados sensíveis (variável DataProtector__Chave) — OBRIGATÓRIA
+DataProtector:ChaveAnterior  # só durante uma rotação da chave (Docs/ROTACAO-CHAVE-DADOS.md)
 Asaas:ApiKey / Asaas:BaseUrl / Asaas:WebhookToken / ...
 OpenAI:ApiKey / OpenAI:BaseUrl
 CloudflareR2:*          # bucket público
@@ -534,7 +535,7 @@ RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_FROM_NAME   # e-mail transacional (R
 Seed:SenhaUsuario       # senha dos usuários de seed (somente desenvolvimento)
 ```
 
-**`DataProtector:Chave`** cifra conta bancária, chave PIX e CPF/CNPJ. A API **não sobe** sem ela, e o `/health/ready` (check `dados-cifrados`) fica não saudável se a chave configurada não decifrar os dados que já existem — num deploy, isso impede a promoção da versão. Para um banco com dados, a chave precisa ser **exatamente** a que os cifrou; trocá-la exige recifrar os dados (rotação), não basta mudar a variável.
+**`DataProtector:Chave`** cifra conta bancária, chave PIX e CPF/CNPJ. A API **não sobe** sem ela, e o `/health/ready` (check `dados-cifrados`) fica não saudável se a chave configurada não decifrar os dados que já existem — num deploy, isso impede a promoção da versão. Para um banco com dados, a chave precisa ser **exatamente** a que os cifrou; trocá-la exige recifrar os dados (rotação), não basta mudar a variável. O roteiro está em [`Docs/ROTACAO-CHAVE-DADOS.md`](Docs/ROTACAO-CHAVE-DADOS.md): a chave nova entra em `DataProtector:Chave`, a antiga em `DataProtector:ChaveAnterior`, e `dotnet Tratoo.API.dll --recifrar-dados --aplicar` regrava os dados.
 
 ---
 

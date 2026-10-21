@@ -140,6 +140,8 @@ services:
       # código: sem ela a API não sobe. Aqui é uma chave LOCAL qualquer — nunca a de
       # produção. Trocar o valor torna ilegível o que já foi cifrado no banco local.
       DataProtector__Chave: ${DATAPROTECTOR_CHAVE:?defina DATAPROTECTOR_CHAVE no .env (openssl rand -base64 32)}
+      # Só durante uma rotação de chave (Docs/ROTACAO-CHAVE-DADOS.md); vazio = sem rotação.
+      DataProtector__ChaveAnterior: ${DATAPROTECTOR_CHAVE_ANTERIOR:-}
       Jwt__Issuer: tratoo-local
       Jwt__Audience: tratoo-local
       Jwt__ExpirationHours: "8"
