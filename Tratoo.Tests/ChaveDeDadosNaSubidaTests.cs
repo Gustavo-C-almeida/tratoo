@@ -12,7 +12,7 @@ namespace Tratoo.Tests
     /// </summary>
     public class ChaveDeDadosNaSubidaTests
     {
-        private static Dictionary<string, string?> Ambiente(string? chaveDeDados)
+        private static Dictionary<string, string?> Ambiente(string? chaveDeDados, string? chaveAnterior = null)
         {
             // Banco propositalmente inalcançável: o que se observa aqui acontece ANTES dele.
             var conexao = $"Host=127.0.0.1;Port={ProcessoApi.PortaLivre()};Database=x;Username=x;Password=x;Timeout=3";
@@ -25,6 +25,8 @@ namespace Tratoo.Tests
             };
             if (chaveDeDados is not null)
                 ambiente[DataProtector.VariavelDeAmbiente] = chaveDeDados;
+            if (chaveAnterior is not null)
+                ambiente[DataProtector.VariavelDeAmbienteAnterior] = chaveAnterior;
             return ambiente;
         }
 
@@ -65,6 +67,42 @@ namespace Tratoo.Tests
             Assert.DoesNotContain(DataProtector.VariavelDeAmbiente, saida);
             Assert.Contains("Migração falhou", saida); // falha pelo banco inalcançável, como esperado
             Assert.NotEqual(0, exit);
+        }
+
+        [Fact]
+        public async Task Chave_anterior_igual_a_atual_impede_a_subida()
+        {
+            const string chave = "uma-chave-de-teste-qualquer-0123456789";
+            var (exit, saida) = await ProcessoApi.RodarAsync(argumento: null, Ambiente(chave, chaveAnterior: chave));
+
+            Assert.Equal(1, exit);
+            Assert.Contains("[startup]", saida);
+            Assert.Contains(DataProtector.VariavelDeAmbienteAnterior, saida);
+            Assert.DoesNotContain("Now listening", saida);
+        }
+
+        [Fact]
+        public async Task Recifragem_sem_chave_anterior_recusa_e_explica()
+        {
+            var (exit, saida) = await ProcessoApi.RodarAsync("--recifrar-dados", Ambiente("chave-nova-de-teste-0123456789-abcdef"));
+
+            Assert.Equal(2, exit);
+            Assert.Contains(DataProtector.VariavelDeAmbienteAnterior, saida);
+            Assert.DoesNotContain("Now listening", saida);
+        }
+
+        [Fact]
+        public async Task Recifragem_com_as_duas_chaves_segue_para_o_banco()
+        {
+            var (exit, saida) = await ProcessoApi.RodarAsync(
+                "--recifrar-dados",
+                Ambiente("chave-nova-de-teste-0123456789-abcdef", chaveAnterior: "chave-antiga-de-teste-0123456789-abcd"));
+
+            // Banco inalcançável: falha DEPOIS de aceitar a configuração, sem servir nada.
+            Assert.Equal(1, exit);
+            Assert.Contains("Recifragem falhou", saida);
+            Assert.DoesNotContain("Recifragem abortada", saida);
+            Assert.DoesNotContain("Now listening", saida);
         }
     }
 }
