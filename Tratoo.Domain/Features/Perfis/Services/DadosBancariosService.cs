@@ -92,28 +92,29 @@ namespace Tratoo.Domain.Features.Perfis
             if (string.IsNullOrWhiteSpace(token))
                 throw new NegocioException("Informe o código de confirmação.");
 
+            // Conta ANTES de comparar (atômico entre réplicas): no máximo MaxTentativas
+            // comparações por token, mesmo com várias requisições simultâneas.
+            var tentativas = await _estado.IncrementarAsync(TentativasKey(prestadorId), TokenTtl);
+            if (tentativas > MaxTentativas)
+                throw await BloquearTokenAsync(prestadorId, ip);
+
             var hash = await _estado.ObterAsync<string>(TokenKey(prestadorId));
             if (hash == null)
                 throw new NegocioException("Código expirado ou inexistente. Solicite um novo.");
 
             if (!SecureHasher.Verify(token.Trim(), hash))
             {
-                // Atômico entre réplicas: dois erros simultâneos contam dois.
-                var tentativas = await _estado.IncrementarAsync(TentativasKey(prestadorId), TokenTtl);
-
                 if (tentativas >= MaxTentativas)
-                {
-                    await _estado.RemoverAsync(TokenKey(prestadorId), TentativasKey(prestadorId));
-                    await _auditRepo.RegistrarAsync(prestadorId, "dados_bancarios_token_bloqueado", ip);
-                    _logger.LogWarning("Token de dados bancários bloqueado por brute force. Prestador {PrestadorId}.", prestadorId);
-                    throw new NegocioException("Muitas tentativas inválidas. Solicite um novo código.");
-                }
+                    throw await BloquearTokenAsync(prestadorId, ip);
 
                 throw new NegocioException("Código inválido.");
             }
 
-            // Sucesso: invalida o token (uso único) e libera a janela de edição.
-            await _estado.RemoverAsync(TokenKey(prestadorId), TentativasKey(prestadorId));
+            // Sucesso: invalida o token (uso único — só a requisição que de fato o apagou
+            // segue) e libera a janela de edição.
+            if (!await _estado.RemoverSeIgualAsync(TokenKey(prestadorId), hash))
+                throw new NegocioException("Código expirado ou inexistente. Solicite um novo.");
+            await _estado.RemoverAsync(TentativasKey(prestadorId));
             await _estado.DefinirAsync(EdicaoKey(prestadorId), true, EdicaoTtl);
 
             await _auditRepo.RegistrarAsync(prestadorId, "dados_bancarios_confirmado", ip);
@@ -125,10 +126,6 @@ namespace Tratoo.Domain.Features.Perfis
         // ─────────────────────────────────────────────────────────────────────────
         public async Task<DadosBancariosViewDTO> AtualizarAsync(int prestadorId, AtualizarDadosBancariosDTO dto, string ip)
         {
-            // Bloqueio funcional: só salva após confirmar o token (revalidação de identidade).
-            if (await _estado.ObterAsync<bool?>(EdicaoKey(prestadorId)) != true)
-                throw new NegocioException("Confirme o código enviado por e-mail antes de salvar os dados bancários.");
-
             if (string.IsNullOrWhiteSpace(dto.Banco))
                 throw new NegocioException("Informe o banco.");
             if (string.IsNullOrWhiteSpace(dto.Agencia))
@@ -138,6 +135,14 @@ namespace Tratoo.Domain.Features.Perfis
 
             // Valida e normaliza a chave PIX conforme o tipo.
             var chaveNormalizada = ChavePixValidator.ValidarENormalizar(dto.TipoPix, dto.ChavePix);
+
+            // Bloqueio funcional: só salva após confirmar o token (revalidação de identidade).
+            // Consome a autorização ANTES de gravar, de forma atômica: cada confirmação
+            // permite uma única gravação, mesmo com PUTs simultâneos. Fica depois das
+            // validações acima para que um erro de digitação não gaste a confirmação; se a
+            // gravação falhar daqui em diante, o prestador confirma um novo código.
+            if (!await _estado.RemoverSeIgualAsync(EdicaoKey(prestadorId), true))
+                throw new NegocioException("Confirme o código enviado por e-mail antes de salvar os dados bancários.");
 
             var conta = await _contaRepo.GetByPrestadorIdAsync(prestadorId);
             var nova = conta == null;
@@ -163,9 +168,6 @@ namespace Tratoo.Domain.Features.Perfis
 
             await _contaRepo.SaveChangesAsync();
 
-            // Consome a autorização: cada confirmação permite uma única gravação.
-            await _estado.RemoverAsync(EdicaoKey(prestadorId));
-
             await _auditRepo.RegistrarAsync(prestadorId,
                 nova ? "dados_bancarios_criado" : "dados_bancarios_atualizado", ip);
             _logger.LogInformation("Dados bancários {Acao} pelo prestador {PrestadorId}.",
@@ -177,6 +179,15 @@ namespace Tratoo.Domain.Features.Perfis
         // ─────────────────────────────────────────────────────────────────────────
         // Helpers
         // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Invalida o token (a partir daqui, só pedindo outro) e audita o bloqueio.</summary>
+        private async Task<NegocioException> BloquearTokenAsync(int prestadorId, string ip)
+        {
+            await _estado.RemoverAsync(TokenKey(prestadorId), TentativasKey(prestadorId));
+            await _auditRepo.RegistrarAsync(prestadorId, "dados_bancarios_token_bloqueado", ip);
+            _logger.LogWarning("Token de dados bancários bloqueado por brute force. Prestador {PrestadorId}.", prestadorId);
+            return new NegocioException("Muitas tentativas inválidas. Solicite um novo código.");
+        }
         private static DadosBancariosViewDTO MapearMascarado(ContaBancaria conta)
         {
             string? chaveMascarada = null;

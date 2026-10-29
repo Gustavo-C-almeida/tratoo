@@ -30,6 +30,14 @@ namespace Tratoo.Domain.Features.Infrastructure
         Task RemoverAsync(params string[] chaves);
 
         /// <summary>
+        /// Remove a chave só se ela ainda guardar <paramref name="esperado"/> (comparar e
+        /// apagar, atômico). true = ESTA chamada apagou. É o que torna um código de uso
+        /// único sob concorrência: entre N validações simultâneas do mesmo código, só uma
+        /// recebe true. Um valor regravado nesse meio-tempo (código novo) não é apagado.
+        /// </summary>
+        Task<bool> RemoverSeIgualAsync<T>(string chave, T esperado);
+
+        /// <summary>
         /// Soma 1 atomicamente (criando com 0 se não existir), renova o TTL e devolve o novo
         /// valor. Atômico entre réplicas — dois erros simultâneos contam dois.
         /// </summary>
