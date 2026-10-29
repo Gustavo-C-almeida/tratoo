@@ -260,28 +260,20 @@ namespace Tratoo.Domain.Features.Contratos
             if (string.IsNullOrWhiteSpace(otp))
                 throw new NegocioException("Informe o código de confirmação enviado ao seu e-mail.");
 
+            // Conta ANTES de comparar (atômico entre réplicas): no máximo MaxTentativasOtp
+            // comparações por código, mesmo com várias requisições simultâneas.
+            var tentativas = await _estado.IncrementarAsync(OtpTentativasKey(contratoId, usuarioId), OtpTtl);
+            if (tentativas > MaxTentativasOtp)
+                throw await BloquearOtpAsync();
+
             var otpHash = await _estado.ObterAsync<string>(OtpHashKey(contratoId, usuarioId));
             if (otpHash == null)
                 throw new NegocioException("Código expirado ou inválido. Solicite um novo código.");
 
             if (!SecureHasher.Verify(otp.Trim(), otpHash))
             {
-                // Atômico entre réplicas: dois erros simultâneos contam dois.
-                var tentativas = await _estado.IncrementarAsync(OtpTentativasKey(contratoId, usuarioId), OtpTtl);
-
                 if (tentativas >= MaxTentativasOtp)
-                {
-                    await _estado.RemoverAsync(OtpHashKey(contratoId, usuarioId), OtpTentativasKey(contratoId, usuarioId));
-                    await _repo.AddHistoricoAsync(new HistoricoAssinatura
-                    {
-                        ContratoId = contratoId, UsuarioId = usuarioId,
-                        Acao = AcaoHistoricoAssinatura.OtpBloqueadoBruteForce,
-                        Ip = ip, UserAgent = userAgent, DataEvento = DateTime.UtcNow
-                    });
-                    await _repo.SaveChangesAsync();
-                    _logger.LogWarning("OTP de assinatura bloqueado por brute force. Contrato {ContratoId}, usuário {UsuarioId}.", contratoId, usuarioId);
-                    throw new NegocioException("Muitas tentativas incorretas. Solicite um novo código.");
-                }
+                    throw await BloquearOtpAsync();
 
                 await _repo.AddHistoricoAsync(new HistoricoAssinatura
                 {
@@ -293,8 +285,10 @@ namespace Tratoo.Domain.Features.Contratos
                 throw new NegocioException($"Código inválido. {MaxTentativasOtp - tentativas} tentativa(s) restante(s).");
             }
 
-            // OTP correto — invalida para uso único
-            await _estado.RemoverAsync(OtpHashKey(contratoId, usuarioId), OtpTentativasKey(contratoId, usuarioId));
+            // OTP correto — uso único: só a requisição que de fato apagou o código assina.
+            if (!await _estado.RemoverSeIgualAsync(OtpHashKey(contratoId, usuarioId), otpHash))
+                throw new NegocioException("Código expirado ou inválido. Solicite um novo código.");
+            await _estado.RemoverAsync(OtpTentativasKey(contratoId, usuarioId));
 
             await _repo.AddHistoricoAsync(new HistoricoAssinatura
             {
@@ -415,6 +409,21 @@ namespace Tratoo.Domain.Features.Contratos
             });
 
             await _repo.SaveChangesAsync();
+
+            // Invalida o OTP (a partir daqui, só pedindo outro) e registra o bloqueio.
+            async Task<NegocioException> BloquearOtpAsync()
+            {
+                await _estado.RemoverAsync(OtpHashKey(contratoId, usuarioId), OtpTentativasKey(contratoId, usuarioId));
+                await _repo.AddHistoricoAsync(new HistoricoAssinatura
+                {
+                    ContratoId = contratoId, UsuarioId = usuarioId,
+                    Acao = AcaoHistoricoAssinatura.OtpBloqueadoBruteForce,
+                    Ip = ip, UserAgent = userAgent, DataEvento = DateTime.UtcNow
+                });
+                await _repo.SaveChangesAsync();
+                _logger.LogWarning("OTP de assinatura bloqueado por brute force. Contrato {ContratoId}, usuário {UsuarioId}.", contratoId, usuarioId);
+                return new NegocioException("Muitas tentativas incorretas. Solicite um novo código.");
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────────

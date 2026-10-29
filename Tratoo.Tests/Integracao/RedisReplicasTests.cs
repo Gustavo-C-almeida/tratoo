@@ -232,5 +232,172 @@ namespace Tratoo.Tests.Integracao
                 .CheckHealthAsync(new HealthCheckContext());
             Assert.Equal(HealthStatus.Healthy, resultado.Status);
         }
+
+        // ── Uso único sob concorrência, entre réplicas ──────────────────────────
+        // Mesmos cenários de OtpConcorrenciaTests (memória), agora com o código gerado numa
+        // réplica e validado ao mesmo tempo nas duas, sobre um Redis real.
+
+        private static IEstadoEfemero Estado(ServiceProvider replica) => replica.GetRequiredService<IEstadoEfemero>();
+
+        [FactComDocker]
+        public async Task Remover_se_igual_e_atomico_entre_replicas_e_nao_apaga_valor_regravado()
+        {
+            await using var replicaA = _redis.NovaReplica();
+            await using var replicaB = _redis.NovaReplica();
+            var estados = new[] { Estado(replicaA), Estado(replicaB) };
+            var chave = $"mfa:login:{EmailUnico()}";
+            await estados[0].DefinirAsync(chave, "hash", TimeSpan.FromMinutes(5));
+
+            var vencedores = await Task.WhenAll(Enumerable.Range(0, 40)
+                .Select(i => estados[i % 2].RemoverSeIgualAsync(chave, "hash")));
+
+            Assert.Equal(1, vencedores.Count(v => v));
+            Assert.Null(await estados[1].ObterAsync<string>(chave));
+
+            await estados[0].DefinirAsync(chave, "hash-antigo", TimeSpan.FromMinutes(5));
+            await estados[1].DefinirAsync(chave, "hash-novo", TimeSpan.FromMinutes(5));
+            Assert.False(await estados[0].RemoverSeIgualAsync(chave, "hash-antigo"));
+            Assert.Equal("hash-novo", await estados[0].ObterAsync<string>(chave));
+        }
+
+        [FactComDocker]
+        public async Task Codigo_validado_ao_mesmo_tempo_nas_duas_replicas_vale_uma_unica_vez()
+        {
+            await using var replicaA = _redis.NovaReplica();
+            await using var replicaB = _redis.NovaReplica();
+            var email = EmailUnico();
+            var codigo = await new VerificacaoMFAService(Estado(replicaA)).GerarECriarAsync(email, "login");
+
+            var simultaneas = VerificacaoMFAService.MaxTentativas;
+            var encontro = new Encontro(simultaneas);
+            var mfas = new[]
+            {
+                new VerificacaoMFAService(new EstadoObservado(Estado(replicaA), "mfa:", encontro.ChegarAsync)),
+                new VerificacaoMFAService(new EstadoObservado(Estado(replicaB), "mfa:", encontro.ChegarAsync))
+            };
+
+            var resultados = await Task.WhenAll(Enumerable.Range(0, simultaneas)
+                .Select(i => Otp.Resultado(() => mfas[i % 2].ValidarAsync(email, codigo, "login"))));
+
+            Assert.Equal(1, resultados.Count(r => r == "OK"));
+            Assert.All(resultados.Where(r => r != "OK"), r => Assert.Equal("Código expirado ou inválido", r));
+        }
+
+        [FactComDocker]
+        public async Task Palpites_simultaneos_nas_duas_replicas_sao_comparados_no_maximo_MaxTentativas_vezes()
+        {
+            await using var replicaA = _redis.NovaReplica();
+            await using var replicaB = _redis.NovaReplica();
+            var email = EmailUnico();
+            var codigo = await new VerificacaoMFAService(Estado(replicaA)).GerarECriarAsync(email, "login");
+            var errado = codigo == "000000" ? "111111" : "000000";
+
+            var observados = new[]
+            {
+                new EstadoObservado(Estado(replicaA), "mfa:", () => Task.Delay(20)),
+                new EstadoObservado(Estado(replicaB), "mfa:", () => Task.Delay(20))
+            };
+            var mfas = observados.Select(o => new VerificacaoMFAService(o)).ToArray();
+
+            var resultados = await Task.WhenAll(Enumerable.Range(0, 20)
+                .Select(i => Otp.Resultado(() => mfas[i % 2].ValidarAsync(email, errado, "login"))));
+
+            Assert.InRange(observados.Sum(o => o.LeiturasComValor), 1, VerificacaoMFAService.MaxTentativas);
+            Assert.DoesNotContain("OK", resultados);
+            Assert.Equal("Código expirado ou inválido", await Otp.Resultado(() => mfas[0].ValidarAsync(email, codigo, "login")));
+        }
+
+        [FactComDocker]
+        public async Task Codigo_regenerado_em_outra_replica_entre_ler_e_consumir_invalida_o_antigo()
+        {
+            await using var replicaA = _redis.NovaReplica();
+            await using var replicaB = _redis.NovaReplica();
+            var email = EmailUnico();
+            var geradorB = new VerificacaoMFAService(Estado(replicaB));
+            var antigo = await geradorB.GerarECriarAsync(email, "login");
+            string? novo = null;
+
+            var mfaA = new VerificacaoMFAService(new EstadoObservado(Estado(replicaA), "mfa:", async () =>
+            {
+                if (novo is null)
+                    novo = await geradorB.GerarECriarAsync(email, "login");
+            }));
+
+            Assert.Equal("Código expirado ou inválido", await Otp.Resultado(() => mfaA.ValidarAsync(email, antigo, "login")));
+            Assert.Equal("OK", await Otp.Resultado(() => mfaA.ValidarAsync(email, novo!, "login")));
+        }
+
+        [FactComDocker]
+        public async Task Codigo_expira_pelo_TTL_no_Redis()
+        {
+            await using var replicaA = _redis.NovaReplica();
+            await using var replicaB = _redis.NovaReplica();
+            var email = EmailUnico();
+
+            // TTL real do código MFA: 5 minutos, gravado no próprio Redis.
+            await new VerificacaoMFAService(Estado(replicaA)).GerarECriarAsync(email, "login");
+            var nome = replicaA.GetRequiredService<ProtecaoEstadoEfemero>().NomeDaChave($"mfa:login:{email}");
+            var ttl = await _redis.Bruto.GetDatabase().KeyTimeToLiveAsync(nome);
+            Assert.InRange(ttl!.Value, TimeSpan.FromMinutes(4.9), TimeSpan.FromMinutes(5));
+
+            // Expirado = ausente para qualquer réplica, e não pode ser consumido.
+            var chave = $"mfa:login:{EmailUnico()}";
+            await Estado(replicaA).DefinirAsync(chave, "hash", TimeSpan.FromMilliseconds(500));
+            await Task.Delay(1000);
+            Assert.Null(await Estado(replicaB).ObterAsync<string>(chave));
+            Assert.False(await Estado(replicaB).RemoverSeIgualAsync(chave, "hash"));
+        }
+
+        [FactComDocker]
+        public async Task OTP_de_assinatura_solicitado_numa_replica_assina_uma_unica_vez_nas_duas()
+        {
+            await using var replicaA = _redis.NovaReplica();
+            await using var replicaB = _redis.NovaReplica();
+            var cenario = new CenarioContrato();
+            await cenario.Servico(Estado(replicaA)).SolicitarOtpAssinaturaAsync(
+                cenario.ContratoId, CenarioContrato.ContratanteId, "203.0.113.10", "testes");
+
+            var simultaneas = 4;
+            var encontro = new Encontro(simultaneas);
+            var servicos = new[]
+            {
+                cenario.Servico(new EstadoObservado(Estado(replicaA), "otp-assinatura:", encontro.ChegarAsync)),
+                cenario.Servico(new EstadoObservado(Estado(replicaB), "otp-assinatura:", encontro.ChegarAsync))
+            };
+
+            var resultados = await Task.WhenAll(Enumerable.Range(0, simultaneas)
+                .Select(i => Otp.Resultado(() => cenario.AssinarAsync(servicos[i % 2], cenario.UltimoOtp!))));
+
+            Assert.Equal(1, resultados.Count(r => r == "OK"));
+            Assert.Equal(1, cenario.Assinaturas);
+        }
+
+        [FactComDocker]
+        public async Task Token_bancario_e_janela_de_edicao_valem_uma_unica_vez_entre_replicas()
+        {
+            await using var replicaA = _redis.NovaReplica();
+            await using var replicaB = _redis.NovaReplica();
+            var cenario = new CenarioBancario();
+            await cenario.Servico(Estado(replicaA)).SolicitarAlteracaoAsync(CenarioBancario.PrestadorId, "203.0.113.10");
+
+            // Confirmação simultânea nas duas réplicas: uma só passa.
+            var encontro = new Encontro(4);
+            var confirmadores = new[]
+            {
+                cenario.Servico(new EstadoObservado(Estado(replicaA), "bancarios:token:", encontro.ChegarAsync)),
+                cenario.Servico(new EstadoObservado(Estado(replicaB), "bancarios:token:", encontro.ChegarAsync))
+            };
+            var confirmacoes = await Task.WhenAll(Enumerable.Range(0, 4)
+                .Select(i => Otp.Resultado(() => confirmadores[i % 2].ConfirmarTokenAsync(CenarioBancario.PrestadorId, cenario.UltimoToken!, "203.0.113.10"))));
+            Assert.Equal(1, confirmacoes.Count(r => r == "OK"));
+
+            // Janela aberta pela confirmação: 10 PUTs simultâneos nas duas réplicas, uma gravação.
+            var servicos = new[] { cenario.Servico(Estado(replicaA)), cenario.Servico(Estado(replicaB)) };
+            var gravacoes = await Task.WhenAll(Enumerable.Range(0, 10)
+                .Select(i => Otp.Resultado(() => servicos[i % 2].AtualizarAsync(CenarioBancario.PrestadorId, CenarioBancario.DadosValidos(), "203.0.113.10"))));
+
+            Assert.Equal(1, gravacoes.Count(r => r == "OK"));
+            Assert.Equal(1, cenario.Gravacoes);
+        }
     }
 }

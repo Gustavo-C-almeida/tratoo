@@ -7,9 +7,10 @@ namespace Tratoo.Domain.Features.Infrastructure
     /// mesma expiração absoluta que os serviços usavam antes. Correto para UMA réplica;
     /// com mais de uma, cada processo enxerga só o próprio estado (use o Redis).
     ///
-    /// Diferença deliberada em relação ao código antigo: incrementar e "definir se
-    /// ausente" agora são atômicos (antes era ler → somar → gravar, que perdia contagem
-    /// sob requisições simultâneas).
+    /// Diferença deliberada em relação ao código antigo: incrementar, "definir se
+    /// ausente" e "remover se igual" são atômicos (antes era ler → somar → gravar, que
+    /// perdia contagem sob requisições simultâneas, e ler → apagar, que deixava o mesmo
+    /// código valer duas vezes).
     /// </summary>
     public sealed class EstadoEfemeroEmMemoria : IEstadoEfemero
     {
@@ -20,7 +21,10 @@ namespace Tratoo.Domain.Features.Infrastructure
 
         public Task DefinirAsync<T>(string chave, T valor, TimeSpan ttl)
         {
-            _cache.Set(chave, valor, ttl);
+            // Sob a trava: um código novo não pode ser gravado entre a comparação e a
+            // remoção do RemoverSeIgualAsync (ele apagaria o código novo).
+            lock (_trava)
+                _cache.Set(chave, valor, ttl);
             return Task.CompletedTask;
         }
 
@@ -44,6 +48,18 @@ namespace Tratoo.Domain.Features.Infrastructure
             foreach (var chave in chaves)
                 _cache.Remove(chave);
             return Task.CompletedTask;
+        }
+
+        public Task<bool> RemoverSeIgualAsync<T>(string chave, T esperado)
+        {
+            lock (_trava)
+            {
+                if (!_cache.TryGetValue(chave, out T? atual) || !EqualityComparer<T>.Default.Equals(atual, esperado))
+                    return Task.FromResult(false);
+
+                _cache.Remove(chave);
+                return Task.FromResult(true);
+            }
         }
 
         public Task<long> IncrementarAsync(string chave, TimeSpan ttl)

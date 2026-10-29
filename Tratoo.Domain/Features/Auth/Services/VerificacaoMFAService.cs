@@ -10,9 +10,9 @@ namespace Tratoo.Domain.Features.Auth
     /// memória com 1 réplica, no Redis com várias (o código gerado numa réplica precisa
     /// valer na outra).
     ///
-    /// Máximo de <see cref="MaxTentativas"/> erros por código, como já faziam o OTP de
-    /// assinatura e o token de dados bancários. Antes não havia limite: a única proteção era
-    /// o rate limit por IP, que um atacante distribuído contorna.
+    /// Máximo de <see cref="MaxTentativas"/> tentativas (comparações) por código, como o OTP
+    /// de assinatura e o token de dados bancários. Antes não havia limite: a única proteção
+    /// era o rate limit por IP, que um atacante distribuído contorna.
     /// </summary>
     public class VerificacaoMFAService : IVerificacaoMFAService
     {
@@ -42,25 +42,37 @@ namespace Tratoo.Domain.Features.Auth
             var chave = Chave(email, tipo);
             var chaveTentativas = ChaveTentativas(email, tipo);
 
+            // Conta ANTES de comparar: o incremento é atômico, então cada código é comparado
+            // no máximo MaxTentativas vezes, mesmo com várias requisições simultâneas (contar
+            // só depois do erro deixava todas as que já tinham lido o hash compararem).
+            var tentativas = await _estado.IncrementarAsync(chaveTentativas, Validade);
+            if (tentativas > MaxTentativas)
+                throw await InvalidarAsync(chave, chaveTentativas);
+
             var hash = await _estado.ObterAsync<string>(chave);
             if (hash is null)
                 throw new NegocioException("Código expirado ou inválido");
 
             if (!SecureHasher.Verify(codigoDigitado, hash))
             {
-                var tentativas = await _estado.IncrementarAsync(chaveTentativas, Validade);
                 if (tentativas >= MaxTentativas)
-                {
-                    // Invalida o código: a partir daqui, só pedindo outro.
-                    await _estado.RemoverAsync(chave, chaveTentativas);
-                    throw new NegocioException("Muitas tentativas inválidas. Solicite um novo código.");
-                }
+                    throw await InvalidarAsync(chave, chaveTentativas);
 
                 throw new NegocioException("Código inválido");
             }
 
-            // Uso único.
+            // Uso único: só a requisição que de fato apagou o código é aceita.
+            if (!await _estado.RemoverSeIgualAsync(chave, hash))
+                throw new NegocioException("Código expirado ou inválido");
+
+            await _estado.RemoverAsync(chaveTentativas);
+        }
+
+        /// <summary>Invalida o código: a partir daqui, só pedindo outro.</summary>
+        private async Task<NegocioException> InvalidarAsync(string chave, string chaveTentativas)
+        {
             await _estado.RemoverAsync(chave, chaveTentativas);
+            return new NegocioException("Muitas tentativas inválidas. Solicite um novo código.");
         }
 
         private static string GerarCodigo()
