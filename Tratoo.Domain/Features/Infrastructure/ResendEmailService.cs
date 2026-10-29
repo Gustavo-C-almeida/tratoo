@@ -420,49 +420,29 @@ Equipe Tratoo");
             {
                 var resposta = await _resend.EmailSendAsync(mensagem);
 
-                _logger.LogInformation(
-                    "E-mail enviado via Resend. Destino: {Destino}, Assunto: {Assunto}, Id: {Id}",
-                    MascararEmail(destino), assunto, resposta.Content);
+                // Sem destino nem assunto nos logs deste método: o e-mail é dado pessoal e o
+                // assunto leva texto do usuário (título do projeto). O Id localiza o envio no
+                // painel do Resend.
+                _logger.LogInformation("E-mail enviado via Resend. Id: {Id}", resposta.Content);
             }
             catch (ResendException ex)
             {
                 // ex.Message vem do corpo de erro do Resend (name/message/statusCode)
                 // e nunca ecoa a API key — ela só é usada no header Authorization.
                 _logger.LogError(ex,
-                    "Resend rejeitou o envio. Status: {StatusCode}, ErroTipo: {ErrorType}, Transitório: {Transiente}, Destino: {Destino}, Assunto: {Assunto}",
-                    ex.StatusCode, ex.ErrorType, ex.IsTransient, MascararEmail(destino), assunto);
+                    "Resend rejeitou o envio. Status: {StatusCode}, ErroTipo: {ErrorType}, Transitório: {Transiente}",
+                    ex.StatusCode, ex.ErrorType, ex.IsTransient);
 
                 throw new NegocioException($"Não foi possível enviar o e-mail. Detalhe: {ex.Message}");
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
                 // Timeout ou falha de rede antes mesmo de obter resposta do Resend.
-                _logger.LogError(ex,
-                    "Falha de rede/timeout ao enviar e-mail via Resend. Destino: {Destino}, Assunto: {Assunto}",
-                    MascararEmail(destino), assunto);
+                _logger.LogError(ex, "Falha de rede/timeout ao enviar e-mail via Resend.");
 
                 throw new NegocioException(
                     "Não foi possível enviar o e-mail no momento. Tente novamente em instantes.");
             }
-        }
-
-        /// <summary>
-        /// Mascara o e-mail para log — preserva a inicial e o domínio, no mesmo espírito
-        /// do MascararChave() usado no gateway de pagamento.
-        /// </summary>
-        private static string MascararEmail(string email)
-        {
-            if (string.IsNullOrWhiteSpace(email)) return "****";
-
-            var arroba = email.IndexOf('@');
-            if (arroba <= 0) return "****";
-
-            var local = email[..arroba];
-            var dominio = email[arroba..];
-
-            return local.Length == 1
-                ? $"*{dominio}"
-                : $"{local[0]}{new string('*', local.Length - 1)}{dominio}";
         }
     }
 }

@@ -116,7 +116,8 @@ namespace Tratoo.API.Infrastructure
             if (claro is null)
             {
                 // Segredo trocado ou valor adulterado: ilegível = ausente.
-                _logger.LogWarning("Valor ilegível em {Categoria}; tratado como ausente.", nome.Split(':')[1]);
+                // Nada da chave no log: o nome deriva do e-mail/IP da chave lógica.
+                _logger.LogWarning("Valor ilegível no estado efêmero; tratado como ausente.");
                 return (RedisValue.Null, default);
             }
 
