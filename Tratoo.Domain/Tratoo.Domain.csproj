@@ -11,7 +11,6 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.100.0" />
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
     <!-- Explícito para todos os consumidores resolverem a MESMA versão do core (9.0.10).

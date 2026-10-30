@@ -247,7 +247,7 @@ namespace Tratoo.API.EndPoints
             // CANCELAR CONTRATO
             // DELETE /api/contratos/{id}
             // Situação 1 (Gerado/AguardandoAssinatura): gratuito, projeto reabre.
-            // Situação 2 (Ativo, sem entrega): 5% taxa + 95% reembolso.
+            // Situação 2 (Ativo, sem entrega): estorno integral ao contratante.
             // Situação 3 (Ativo, com entrega): bloqueado — deve abrir disputa.
             // ──────────────────────────────────────────────────────────────────────
             app.MapDelete("/api/contratos/{id:guid}", async (

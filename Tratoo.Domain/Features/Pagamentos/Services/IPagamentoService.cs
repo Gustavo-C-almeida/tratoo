@@ -60,7 +60,7 @@ namespace Tratoo.Domain.Features.Pagamentos
 
         /// <summary>
         /// Processa o reembolso ao cancelar um contrato ativo com escrow retido.
-        /// Cobra taxa administrativa de 5% e reembolsa 95% ao contratante.
+        /// Estorno integral ao contratante — a plataforma não retém taxa de cancelamento.
         /// Não faz nada se não houver pagamento retido para o contrato.
         /// </summary>
         Task EstornarCancelamentoContratoAsync(Guid contratoServicoId, int usuarioId);

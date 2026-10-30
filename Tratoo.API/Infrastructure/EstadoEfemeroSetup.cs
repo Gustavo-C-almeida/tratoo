@@ -8,9 +8,9 @@ namespace Tratoo.API.Infrastructure
     /// Escolhe onde vive o estado efêmero compartilhado (OTP, tentativas, cadastro
     /// pendente, marcas de envio) e o contador do rate limiting:
     ///
-    ///  • SEM <c>Redis:ConnectionString</c> (produção hoje, 1 réplica): memória do processo —
+    ///  • SEM <c>Redis:ConnectionString</c> (dev local e testes, 1 réplica): memória do processo —
     ///    exatamente o comportamento anterior. Nada novo é exigido.
-    ///  • COM <c>Redis:ConnectionString</c> (compose com 2 réplicas): Redis, protegido por
+    ///  • COM <c>Redis:ConnectionString</c> (produção desde 29/10/2026, 1 réplica; compose com 2): Redis, protegido por
     ///    <c>Redis:ChaveProtecao</c> (obrigatória; a subida falha sem ela), com health check
     ///    de readiness.
     /// </summary>

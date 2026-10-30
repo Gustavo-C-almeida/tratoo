@@ -124,7 +124,7 @@ namespace Tratoo.API.Infrastructure
                         _ => new LimitadorJanelaFixaRedis(redis, protecao.NomeDaChave($"rl:{particao}"), opcoes, logger));
                 }
 
-                // Sem Redis (1 réplica, produção hoje): exatamente o comportamento anterior.
+                // Sem Redis (dev local, testes): exatamente o comportamento anterior.
                 // GetFixedWindowLimiter força AutoReplenishment=false e delega a
                 // reposição ao timer do PartitionedRateLimiter da política.
                 return RateLimitPartition.GetFixedWindowLimiter(particao, _ => opcoes);

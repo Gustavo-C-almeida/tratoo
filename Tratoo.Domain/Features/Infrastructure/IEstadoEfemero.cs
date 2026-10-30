@@ -9,9 +9,10 @@ namespace Tratoo.Domain.Features.Infrastructure
     /// idempotência de webhook ficam no Postgres. Ver Docs/TRILHA2-DECISOES.md, seção 1.
     ///
     /// Duas implementações, escolhidas por configuração (EstadoEfemeroSetup na API):
-    ///  • em memória — padrão, 1 réplica (produção hoje). Mesmo comportamento do
+    ///  • em memória — padrão sem Redis (dev local, testes). Mesmo comportamento do
     ///    IMemoryCache que os serviços usavam diretamente;
-    ///  • Redis — quando <c>Redis:ConnectionString</c> existe; compartilhado entre réplicas.
+    ///  • Redis — quando <c>Redis:ConnectionString</c> existe (produção desde 29/10/2026);
+    ///    compartilhado entre réplicas.
     ///
     /// Se o armazenamento estiver fora do ar, as operações lançam
     /// <see cref="Exceptions.ServicoIndisponivelException"/> (fail-closed): validar OTP

@@ -520,7 +520,7 @@ namespace Tratoo.Domain.Features.Contratos
                     "Há uma entrega registrada neste contrato. Para solicitar cancelamento, abra uma disputa — " +
                     "nossa equipe irá analisar e decidir sobre o reembolso.");
 
-            // ── Situação 2: ativo sem entrega → 5% taxa + 95% reembolso ────────
+            // ── Situação 2: ativo sem entrega → estorno integral ────────────────
             if (contrato.Status == ContratoServicoStatus.Ativo)
             {
                 await _pagamentoService.EstornarCancelamentoContratoAsync(contratoId, usuarioId);
