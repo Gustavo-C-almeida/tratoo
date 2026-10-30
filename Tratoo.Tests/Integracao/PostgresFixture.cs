@@ -21,7 +21,10 @@ namespace Tratoo.Tests.Integracao
         public async Task InitializeAsync()
         {
             if (!DockerCli.Disponivel)
+            {
+                DockerCli.FalharSeExigido();
                 return; // os testes desta coleção são [FactComDocker] e serão ignorados
+            }
 
             _container = ContainerDocker.Iniciar("pgvector/pgvector:pg16", 5432,
                 ambiente: new[] { $"POSTGRES_PASSWORD={Senha}" });

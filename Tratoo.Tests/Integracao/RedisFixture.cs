@@ -29,7 +29,10 @@ namespace Tratoo.Tests.Integracao
         public async Task InitializeAsync()
         {
             if (!DockerCli.Disponivel)
+            {
+                DockerCli.FalharSeExigido();
                 return;
+            }
 
             _container = ContainerDocker.Iniciar("redis:7-alpine", 6379,
                 comando: new[] { "redis-server", "--requirepass", Senha, "--save", "", "--appendonly", "no" });

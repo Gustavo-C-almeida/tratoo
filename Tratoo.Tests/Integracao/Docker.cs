@@ -20,6 +20,22 @@ namespace Tratoo.Tests.Integracao
 
         public static bool Disponivel => _disponivel.Value;
 
+        /// <summary>
+        /// <c>TRATOO_EXIGIR_DOCKER=1</c> (definido no CI): sem Docker, os testes de integração
+        /// FALHAM em vez de serem ignorados. Sem isso, um runner com Docker quebrado deixaria
+        /// o pipeline verde sem ter rodado nenhum teste contra Postgres/Redis reais.
+        /// </summary>
+        public static bool Exigido => Environment.GetEnvironmentVariable("TRATOO_EXIGIR_DOCKER") == "1";
+
+        /// <summary>Chamado pelas fixtures quando o Docker não está disponível.</summary>
+        public static void FalharSeExigido()
+        {
+            if (Exigido)
+                throw new InvalidOperationException(
+                    "TRATOO_EXIGIR_DOCKER=1, mas o Docker não respondeu a `docker info`. " +
+                    "Os testes de integração precisam de Postgres/Redis reais e não podem ser ignorados aqui.");
+        }
+
         public static (int ExitCode, string Saida, string Erro) Executar(TimeSpan timeout, params string[] args)
         {
             var psi = new ProcessStartInfo("docker")
@@ -47,13 +63,14 @@ namespace Tratoo.Tests.Integracao
 
     /// <summary>
     /// [Fact] que vira "Ignorado" (com o motivo) quando não há Docker — nunca um falso
-    /// "Aprovado". Com Docker disponível, roda normalmente.
+    /// "Aprovado". Com Docker disponível, roda normalmente. Com <see cref="DockerCli.Exigido"/>,
+    /// nunca é ignorado: o teste roda e a fixture falha com a explicação.
     /// </summary>
     public sealed class FactComDockerAttribute : FactAttribute
     {
         public FactComDockerAttribute()
         {
-            if (!DockerCli.Disponivel)
+            if (!DockerCli.Disponivel && !DockerCli.Exigido)
                 Skip = "Docker indisponível: teste de integração com Postgres/Redis reais. Suba o Docker para executá-lo.";
         }
     }
