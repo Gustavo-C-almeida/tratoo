@@ -1,0 +1,76 @@
+# CI do Tratoo — etapa 1: build + testes em todo PR e em todo push na main.
+#
+# Sem segredos de propósito: a suíte usa chave de dados própria (ConfiguracaoDosTestes)
+# e o appsettings.json não está no git, então nada aqui alcança o Neon de produção.
+# Os testes de integração sobem Postgres (pgvector) e Redis reais via `docker run` —
+# o runner ubuntu-latest já tem Docker.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Um push novo no mesmo PR cancela a execução anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-e-testes:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      # Sem Docker, os testes de integração FALHAM em vez de serem ignorados
+      # (DockerCli.Exigido) — o pipeline nunca fica verde sem tê-los rodado.
+      TRATOO_EXIGIR_DOCKER: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Mesma major do Dockerfile (sdk:8.0); global.json aceita qualquer 8.0.4xx+.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache do NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Baixa as imagens antes dos testes: a fixture tem timeout próprio e o download
+      # não deve competir com ele.
+      - name: Imagens dos testes de integração
+        run: |
+          docker pull -q pgvector/pgvector:pg16
+          docker pull -q redis:7-alpine
+
+      - name: Restore
+        run: dotnet restore Tratoo.sln
+
+      - name: Build
+        run: dotnet build Tratoo.sln -c Release --no-restore
+
+      - name: Testes
+        run: >
+          dotnet test Tratoo.sln -c Release --no-build
+          --logger "trx;LogFileName=resultados.trx"
+          --logger "console;verbosity=normal"
+          --results-directory TestResults
+
+      - name: Publicar resultados dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-testes
+          path: TestResults/
+          if-no-files-found: ignore
