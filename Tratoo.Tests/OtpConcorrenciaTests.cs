@@ -104,7 +104,10 @@ namespace Tratoo.Tests
             var resultados = await Task.WhenAll(Enumerable.Range(0, 20)
                 .Select(_ => Task.Run(() => Otp.Resultado(() => mfa.ValidarAsync(Email, errado, "reset_senha")))));
 
-            Assert.InRange(observado.LeiturasComValor, 1, VerificacaoMFAService.MaxTentativas);
+            // Mínimo 0, não 1: os palpites acima do limite invalidam o código, e sob carga isso
+            // pode acontecer antes de qualquer um dos MaxTentativas legítimos ler o hash.
+            // Nenhuma comparação é um desfecho seguro; o que importa é o teto.
+            Assert.InRange(observado.LeiturasComValor, 0, VerificacaoMFAService.MaxTentativas);
             Assert.DoesNotContain("OK", resultados);
             Assert.Contains(resultados, r => r.StartsWith("Muitas tentativas", StringComparison.Ordinal));
 
@@ -190,7 +193,7 @@ namespace Tratoo.Tests
             var resultados = await Task.WhenAll(Enumerable.Range(0, 20)
                 .Select(_ => Task.Run(() => Otp.Resultado(() => cenario.AssinarAsync(servico, errado)))));
 
-            Assert.InRange(observado.LeiturasComValor, 1, 5);
+            Assert.InRange(observado.LeiturasComValor, 0, 5); // mínimo 0: ver o teste do MFA
             Assert.DoesNotContain("OK", resultados);
             Assert.Equal("Código expirado ou inválido. Solicite um novo código.",
                 await Otp.Resultado(() => cenario.AssinarAsync(servico, cenario.UltimoOtp!)));
@@ -243,7 +246,7 @@ namespace Tratoo.Tests
             var resultados = await Task.WhenAll(Enumerable.Range(0, 20)
                 .Select(_ => Task.Run(() => Otp.Resultado(() => servico.ConfirmarTokenAsync(CenarioBancario.PrestadorId, errado, "203.0.113.10")))));
 
-            Assert.InRange(observado.LeiturasComValor, 1, 5);
+            Assert.InRange(observado.LeiturasComValor, 0, 5); // mínimo 0: ver o teste do MFA
             Assert.DoesNotContain("OK", resultados);
             await Assert.ThrowsAsync<NegocioException>(() =>
                 servico.ConfirmarTokenAsync(CenarioBancario.PrestadorId, cenario.UltimoToken!, "203.0.113.10"));
