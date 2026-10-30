@@ -1,603 +1,299 @@
-# Tratoo — Marketplace de Serviços com Escrow e Garantia
+# Tratoo
 
-[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/)
-[![EF Core](https://img.shields.io/badge/EF%20Core-9.0-512BD4)](https://learn.microsoft.com/ef/core/)
-[![SQL Server](https://img.shields.io/badge/SQL%20Server-transacional-CC2927)](https://www.microsoft.com/sql-server)
-[![pgvector](https://img.shields.io/badge/PostgreSQL-pgvector%20(HNSW)-336791)](https://github.com/pgvector/pgvector)
-[![Storage](https://img.shields.io/badge/Storage-Cloudflare%20R2-F38020)](https://developers.cloudflare.com/r2/)
+[![CI](https://github.com/Gustavo-C-almeida/tratoo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Gustavo-C-almeida/tratoo/actions/workflows/ci.yml)
 
-O Tratoo conecta quem precisa contratar um serviço a profissionais freelancers, com contrato digital assinado, pagamento retido em garantia (escrow) e mediação de disputas — reduzindo o risco para os dois lados de uma negociação entre desconhecidos.
+Marketplace de serviços que conecta **contratantes** a **prestadores freelancers**. Cobre o ciclo
+completo de uma contratação: o projeto é publicado, os interessados mandam propostas, as partes
+assinam um contrato digital, o pagamento fica retido em garantia (escrow) até a entrega ser
+aprovada e, no fim, os dois lados se avaliam. Se houver desacordo, um administrador media a
+disputa.
 
-> Projeto de estudo/portfólio. Estudo de arquitetura .NET com escrow, contratos digitais, busca semântica e fluxo administrativo. Veja [Configuração e Segredos](#configuração-e-segredos).
-
----
-
-## O Problema que o Tratoo Resolve
-
-| Problema | Solução Tratoo |
-|----------|----------------|
-| Prestador teme entregar e não receber | Valor retido em escrow antes de o trabalho começar |
-| Contratante teme pagar e não receber | Pagamento só é liberado após aprovação da entrega |
-| Falta de confiança entre desconhecidos | Identidade verificada (CPF/CNPJ), reputação e avaliações blind review |
-| Disputas sem mediação | Fluxo formal de disputa com resolução por administrador |
-| Sem prova documental do acordo | Contrato digital assinado com OTP + hash SHA-256 + IP, arquivado em PDF |
-
-Sobre valores: no MVP a plataforma não cobra taxa própria — o valor é repassado integralmente ao prestador. Existe apenas a taxa operacional do gateway (Asaas), exibida de forma meramente informativa (campo `Pagamento.TaxaGateway`, preenchido a partir do gateway; não entra em nenhum cálculo nem é deduzido do repasse).
+> **Status:** projeto de estudo e portfólio, publicado em
+> [www.tratoo.app.br](https://www.tratoo.app.br). Os pagamentos usam o **ambiente de sandbox do
+> Asaas**, então nenhuma transação é real.
+>
+> A documentação técnica completa, com decisões, evidências e limitações, fica em
+> **[Docs/ARQUITETURA.md](Docs/ARQUITETURA.md)**.
 
 ---
 
-## Índice
+## O problema que o Tratoo resolve
 
-- [Como Funciona (Fluxo End-to-End)](#como-funciona-fluxo-end-to-end)
-- [Arquitetura](#arquitetura)
-- [Stack Tecnológica](#stack-tecnológica)
-- [Estrutura do Projeto](#estrutura-do-projeto)
-- [Modelagem de Domínio](#modelagem-de-domínio)
-- [Integrações Externas](#integrações-externas)
-- [Segurança e Compliance](#segurança-e-compliance)
-- [Background Services](#background-services)
-- [Área Administrativa](#área-administrativa)
-- [Configuração e Segredos](#configuração-e-segredos)
-- [Rodando o Projeto](#rodando-o-projeto)
-- [Roadmap Técnico](#roadmap-técnico)
-- [Compliance Legal](#compliance-legal)
+| Problema | Como o Tratoo trata |
+|---|---|
+| O prestador teme entregar e não receber | O valor é pago via PIX e fica retido antes de o trabalho começar |
+| O contratante teme pagar e não receber | O pagamento só é liberado depois que a entrega é aprovada, ou quando o prazo de liberação automática vence |
+| Falta de confiança entre desconhecidos | Identidade verificada (CPF/CNPJ), reputação pública e avaliação às cegas |
+| Desacordos sem mediação | Disputa formal, decidida por um administrador |
+| Falta de prova do que foi combinado | Contrato assinado pelas duas partes com código por e-mail, hash SHA-256, IP registrado e PDF arquivado |
+
+A plataforma **não cobra taxa própria**. O valor vai inteiro para o prestador. A tela de pagamento
+mostra apenas a taxa operacional do gateway (Asaas), a título informativo.
 
 ---
 
-## Como Funciona (Fluxo End-to-End)
+## Principais funcionalidades
 
-### 1. Página inicial e escolha de papel
-
-A página inicial apresenta o que a plataforma faz e para quem ela serve. Ao clicar em "Começar", o usuário escolhe em qual contexto se encaixa: "Quero contratar serviços" ou "Sou um prestador de serviços". O design das duas opções é igual; o que muda é que o cadastro já nasce apontado para o tipo certo de usuário.
-
-### 2. Cadastro e confirmação de e-mail
-
-O formulário pede nome, e-mail, senha, confirmação de senha e a opção de ativar MFA (segunda camada de segurança). Independentemente do MFA, o sistema sempre envia um código de confirmação para o e-mail fornecido — sem isso o cadastro não é efetivado. Isso impede que alguém registre um e-mail que não é dele.
-
-Internamente: `POST /usuarios/cadastro` envia um OTP via `EmailService` e guarda os dados em cache. `POST /usuarios/cadastro/confirmar` valida o código e persiste o usuário. CPF/CNPJ informado no onboarding é criptografado em repouso via AES (`DataProtector`) e armazenado em `UserIdentity`.
-
-### 3. Onboarding (perfil mínimo obrigatório)
-
-No primeiro acesso, o sistema direciona para uma página de onboarding onde o usuário completa o perfil mínimo antes de poder usar a plataforma. Isso é obrigatório: se alguém tentar pular pela URL, o Onboarding Guard intercepta e devolve ao onboarding até que o perfil mínimo esteja completo (403 `ONBOARDING_PENDENTE`).
-
-O formulário se adapta ao tipo de pessoa: pessoa jurídica (caso típico de contratante empresa) exibe campos de CNPJ, razão social e segmento; pessoa física exibe CPF e dados pessoais.
-
-### 4. Perfil do contratante
-
-Após o onboarding, o contratante pode editar seu perfil com: foto, biografia ou apresentação da empresa, site, perfil do LinkedIn, telefone (campo privado — só a plataforma vê) e uma configuração de privacidade que controla se as avaliações recebidas ficam visíveis publicamente.
-
-### 5. Perfil do prestador
-
-O perfil do prestador é a vitrine de trabalho dele. Cada elemento preenchido impacta diretamente no ranqueamento da busca semântica.
-
-- Completude: barra de progresso mostrando quantos % do perfil estão preenchidos, com dicas do que falta (foto, bio, competências, portfólio etc.). O campo `PorcentagemCompleto` é calculado pelo sistema.
-- Portfólio: cards dos melhores trabalhos, cada um podendo ter imagens ou PDF (upload para R2 privado), link externo (GitHub, Behance, site...), descrição e competências utilizadas naquele trabalho.
-- Competências: habilidades com nível definido (Básico, Intermediário, Avançado, Especialista) e vinculadas ao portfólio e às experiências.
-- Experiência profissional: cargos anteriores, empresa, datas, responsabilidades, opção de marcar como emprego atual e competências utilizadas.
-- Certificações: certificados com data de validade, anexo (PDF ou imagem no R2) e link de verificação.
-- Avaliações: nota média, distribuição de estrelas, comentários recebidos e opção de resposta pública.
-- Profissionais similares: exibidos no perfil público para aumentar a chance de descoberta.
-
-### 6. Criação de projeto e recomendação inteligente
-
-O contratante cria um projeto informando título, descrição, categoria, orçamento, prazo e as habilidades que procura. O projeto pode ser salvo como rascunho (`Rascunho`) para revisão antes de publicar, ou publicado imediatamente (`Aberto`). Projetos rascunho não aparecem na busca pública — a publicação é um passo separado. Ao publicar, `ProjetoIndexadorService` transforma a descrição em embedding (OpenAI `text-embedding-3-small`, 1536 dims) e indexa no PostgreSQL/pgvector.
-
-Ao visualizar o projeto, o sistema apresenta o prestador mais recomendado. O `BuscaSemanticaService` opera em duas camadas: pgvector retorna os top-100 por distância de cosseno (índice HNSW), e em seguida C# aplica filtros e um score composto:
-
-| Fator | Peso |
-|-------|------|
-| Similaridade semântica | 35% |
-| Habilidades (match exato) | 15% |
-| Reputação | 15% |
-| Completude do perfil | 10% |
-| Contratos concluídos | 10% |
-| Verificação de identidade | 10% |
-| Disponibilidade | 5% |
-
-O capricho no perfil — competências, experiências, portfólio — faz diferença real no ranqueamento. A partir da sugestão, o contratante pode enviar um convite diretamente ao prestador.
-
-### 7. Convites e busca de projetos
-
-Lado do prestador ao receber um convite: aparece uma notificação com os detalhes do projeto (escopo, valor, prazo). Ele aceita ou recusa. Se aceitar, entra oficialmente como candidato e imediatamente ganha acesso ao chat do projeto — ele e o contratante podem conversar desde esse momento para alinhar expectativas antes de qualquer proposta.
-
-O prestador também pode buscar projetos ativamente na seção "Buscar Projetos", que exibe todos os projetos públicos dos contratantes. Os filtros disponíveis são: categoria, orçamento, prazo e palavra-chave. Cada card do projeto mostra título, descrição resumida, valor, habilidades exigidas e número de propostas enviadas. Depois de escolher, o prestador lê com calma e, se achar que dá conta, envia a proposta.
-
-Além da busca manual, o sistema também recomenda projetos ao prestador automaticamente (`GET /api/busca/projetos/recomendados`), cruzando o perfil dele — competências, portfólio, experiências — contra os projetos abertos. Quanto mais completo o perfil, mais relevantes as recomendações.
-
-O chat do projeto é liberado quando existe uma proposta entre as partes — seja ela enviada pelo prestador (espontânea ou após aceitar um convite) ou criada pelo contratante via fluxo de convite. Sem proposta, o acesso ao chat é negado (403). Funciona por REST com polling (3 s com aba ativa, 30 s em segundo plano) — não usa WebSocket. As duas partes conversam nele durante toda a negociação, podendo trocar mensagens, tirar dúvidas e alinhar detalhes antes de fechar no contrato.
-
-### 8. Proposta e negociação versionada
-
-A proposta tem dois estados antes de chegar ao contratante: o prestador primeiro cria um rascunho (`POST /api/propostas`) com valor, prazo, escopo e marcos de entrega, revisa e então envia explicitamente (`POST /api/propostas/{id}/enviar`). Só após o envio ela aparece para o contratante.
-
-O contratante pode aceitar, recusar ou fazer uma contraproposta. Cada rodada vira uma `PropostaVersao` (até 10 versões), com regra de turno obrigatório: quem enviou a última versão não pode aceitá-la — o que impede que um lado "aceite a si mesmo". Recusar encerra a proposta sem gerar contrato; o prestador pode cancelar a própria proposta enquanto ela está pendente.
-
-Na tela de propostas recebidas, o contratante vê um selo "Convidado" nas propostas de quem ele chamou diretamente e pode filtrar entre propostas de convidados e espontâneas, o que ajuda a organizar quando o projeto recebe muitos candidatos. Todo o histórico de versões fica registrado, versão por versão.
-
-Ao aceitar, o sistema gera automaticamente um contrato pendente de assinatura dos dois lados.
-
-### 9. Contrato e assinatura digital
-
-Cada parte assina com um OTP enviado por e-mail (6 dígitos, validade de 10 minutos, máximo de 5 tentativas). Na primeira assinatura, o sistema calcula o `ConteudoHash` (SHA-256) do contrato e registra o IP — status muda para `AguardandoAssinatura`. Na segunda, valida o hash, grava um `ContratoSnapshot` imutável com os dados das partes, gera o PDF (QuestPDF) e o armazena no bucket R2 privado.
-
-Se alguém tentar alterar qualquer dado depois, o hash detecta. O snapshot congela o que foi acordado. Base legal: MP 2.200-2/2001 (assinatura eletrônica simples, sem certificado ICP-Brasil).
-
-Após a segunda assinatura, o PDF do contrato fica disponível para ambas as partes via URL pré-assinada temporária (15 minutos, gerada sob demanda no R2 privado).
-
-### 10. Pagamento em garantia (escrow)
-
-Com o contrato assinado, o sistema leva o contratante para o pagamento. O valor não vai direto ao prestador — fica retido na plataforma (escrow). `POST /api/pagamentos/iniciar` cria a cobrança PIX no Asaas e retorna o QR Code. O contratante paga; o Asaas chama o webhook `PAYMENT_RECEIVED` e o `Pagamento` passa para `Retido`. Cada movimentação é registrada em `LedgerFinanceiro` (imutável).
-
-A tela mostra de forma transparente o valor bruto, a taxa operacional do gateway (campo `TaxaGateway`, meramente informativo — não é deduzido do repasse) e o que o prestador recebe.
-
-O prestador tem a garantia de que o dinheiro existe e está reservado. O contratante tem a garantia de que ele só sai quando o serviço for entregue.
-
-### 11. Execução e chat
-
-Com o pagamento feito, o projeto entra em andamento. As partes continuam se comunicando pelo chat do projeto. Quando o prestador termina, ele registra a entrega formalmente.
-
-### 12. Entrega formal
-
-O prestador registra a entrega com descrição, observações, data, links externos e anexos (arquivos enviados ao bucket R2 privado). `EntregaService` cria a entidade `Entrega` com status `PendenteAprovacao`, move o contrato para `AguardandoAprovacaoEntrega`, atualiza `EntregaRegistradaEm` e registra em `HistoricoContrato`. O contratante é notificado.
-
-### 13. Aprovação e liberação do pagamento
-
-O contratante confere a entrega. Se estiver tudo certo, aprova — `AprovarEntregaAsync` encerra o contrato, cria os slots de avaliação (blind review) e dispara `IPagamentoService.LiberarPagamentoAsync`, que inicia a transferência PIX ao prestador no Asaas. O webhook `TRANSFER_DONE` confirma e o pagamento vai para `Liberado`.
-
-Se houver algo a corrigir, o contratante solicita ajustes com um motivo obrigatório — a entrega vai para `Rejeitada`, o contrato volta a `Ativo` e o prestador pode enviar uma nova entrega.
-
-Se o contratante não agir dentro do prazo, `PagamentoLiberacaoService` (background) libera automaticamente — protegendo quem trabalhou.
-
-### 14. Cancelamento e estorno
-
-Cancelamento de contrato: qualquer das partes pode cancelar, mas o sistema trata de forma justa — antes do pagamento é gratuito; com contrato ativo sem entrega, pode haver taxa de 5%; com entrega já registrada, o cancelamento é bloqueado e o caminho passa a ser a disputa. A regra usa `EntregaRegistradaEm` para determinar a situação.
-
-Estorno de pagamento: antes de qualquer liberação ao prestador, o contratante pode solicitar estorno diretamente (`POST /api/pagamentos/{id}/estornar`). Isso aciona a devolução via Asaas sem necessidade de abrir disputa — um caminho mais simples para casos onde houve erro no pagamento ou acordo entre as partes. Diferente da disputa, o estorno não passa por análise administrativa.
-
-### 15. Disputa e resolução administrativa
-
-Se o contratante discordar da entrega em vez de aprovar ou solicitar ajustes, pode abrir uma disputa. `POST /api/pagamentos/{id}/disputar` cria `DisputaPagamento` e o pagamento vai para `EmDisputa` — a liberação automática por prazo fica suspensa. Um administrador resolve pela área restrita: a favor do contratante (estorno + `Cancelado`) ou do prestador (liberação + `Encerrado`). A decisão é imutável e gera trilha em `HistoricoContrato`, `AuditLog` e `LedgerFinanceiro`.
-
-### 16. Avaliação às cegas e reputação
-
-Com o contrato encerrado e o pagamento liberado, os dois se avaliam. É uma avaliação às cegas (blind review): nenhum dos lados vê a nota do outro até que ambos avaliem, ou até o prazo de 7 dias acabar. Após esse ponto, `AvaliacaoExpiracaoService` publica as avaliações preenchidas e oculta as vazias.
-
-Isso existe para ninguém ter medo de ser honesto. Se a nota aparecesse na hora, dava para esperar, ver o que recebeu, e devolver uma nota de vingança. Às cegas, cada um avalia de verdade. As notas entram na reputação pública do prestador — a nota média, distribuição de estrelas e comentários que aparecem no perfil. Com o tempo, os bons profissionais se destacam.
-
-### Gestão da conta
-
-A qualquer momento o usuário pode atualizar perfil, experiências, certificações e portfólio, configurar chave PIX, ativar MFA, alterar senha ou solicitar exclusão. Na exclusão, dados pessoais são anonimizados (nome → "Usuário indisponível", e-mail removido, login bloqueado, perfil retirado das buscas), mas contratos, pagamentos e avaliações são preservados para fins legais.
+1. **Cadastro e onboarding:** confirmação do e-mail por código, MFA opcional e perfil mínimo
+   obrigatório antes de usar a plataforma. O CPF/CNPJ é cifrado em repouso e o CNPJ é validado na
+   BrasilAPI.
+2. **Perfis:** vitrine do prestador com portfólio, competências, experiências e certificações, e
+   um percentual de completude do perfil.
+3. **Projetos e propostas:** rascunho e publicação, busca com filtros, convites, proposta com até
+   10 rodadas de negociação versionada e chat do projeto.
+4. **Busca semântica:** embeddings da OpenAI guardados no PostgreSQL com pgvector, ranqueados por
+   um score que combina similaridade, habilidades, comprovação, perfil, avaliação, histórico e
+   verificação. Se a IA falhar, a busca cai para palavras-chave.
+5. **Contrato digital:** gerado quando a proposta é aceita, assinado pelas duas partes com OTP (10
+   minutos, 5 tentativas) e congelado em snapshot e PDF num bucket privado.
+6. **Pagamento em escrow:** cobrança PIX no Asaas, webhook idempotente, ledger financeiro imutável,
+   liberação manual ou automática (prazo de entrega + 7 dias) e limite diário por contratante.
+7. **Entrega, cancelamento e disputa:** entrega formal com anexos, aprovação ou pedido de ajustes,
+   cancelamento com regras por estágio e disputa com resolução administrativa.
+8. **Avaliação às cegas:** nenhuma nota aparece antes de as duas partes avaliarem ou de a janela
+   de 7 dias fechar. Assim ninguém avalia por retaliação.
 
 ---
 
-## Arquitetura
+## Tecnologias
 
-Solução em camadas (Clean Architecture + Feature Folders) com persistência poliglota.
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                  CLIENTE — Web (HTML/CSS/JS vanilla)                  │
-│                  servido como arquivos estáticos pela API            │
-└───────────────────────────────┬──────────────────────────────────────┘
-                                │ cookie httpOnly "tratoo_auth" (JWT)
-                                ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                   APRESENTAÇÃO — Tratoo.API (.NET 8)                  │
-│  Minimal APIs · Security Headers · Exception Handler · Auth (JWT)     │
-│  Authorization · Rate Limiting · Onboarding Guard · Background Svcs   │
-└───────────────────────────────┬──────────────────────────────────────┘
-                                ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                      DOMÍNIO — Tratoo.Domain                          │
-│  Services (regra de negócio) · Repositories · Domain Models · DTOs    │
-│  Interfaces de Gateway/Storage/Email · Enums · Migrations             │
-└───────────────┬──────────────────────────────────┬───────────────────┘
-                ▼                                   ▼
-┌───────────────────────────┐      ┌───────────────────────────────────┐
-│       PERSISTÊNCIA        │      │           INFRAESTRUTURA          │
-│ ┌───────────────────────┐ │      │ ┌──────────┐  ┌────────────────┐  │
-│ │ SQL Server            │ │      │ │ Cloudflare│  │ Asaas (PIX/    │  │
-│ │ TratooContext         │ │      │ │ R2 (blob) │  │ escrow)        │  │
-│ └───────────────────────┘ │      │ └──────────┘  └────────────────┘  │
-│ ┌───────────────────────┐ │      │ ┌──────────┐  ┌────────────────┐  │
-│ │ PostgreSQL + pgvector │ │      │ │ OpenAI    │  │ Resend (e-mail)│  │
-│ │ VectorContext (HNSW)  │ │      │ │ Embeddings│  │                │  │
-│ └───────────────────────┘ │      │ └──────────┘  └────────────────┘  │
-└───────────────────────────┘      └───────────────────────────────────┘
-```
-
-### Persistência Poliglota
-
-| Banco | Uso | Por quê este banco |
-|-------|-----|--------------------|
-| SQL Server (`TratooContext`) | Usuários, projetos, propostas, contratos, pagamentos, disputas, ledger | Transações ACID e consistência forte para núcleo financeiro/contratual |
-| PostgreSQL + pgvector (`VectorContext`) | Embeddings de prestadores e projetos (busca semântica) | Índice HNSW para similaridade de cosseno eficiente em vetores 1536-dim |
-
-### Fluxo de uma Requisição (ex.: aprovar entrega)
-
-A ordem reflete o pipeline real em `Program.cs`:
-
-```
-Browser (cookie httpOnly "tratoo_auth")
-  │
-  ▼ 1. Security Headers        → CSP, X-Frame-Options, X-Content-Type-Options, Referrer/Permissions-Policy, HSTS
-  ▼ 2. UseExceptionHandler     → NegocioException = 400 amigável | demais = 500 + log (Serilog)
-  ▼ 3. Static Files            → wwwroot short-circuitado
-  ▼ 4. UseAuthentication       → lê/valida JWT do cookie (issuer, audience, lifetime, ClockSkew = 0)
-  ▼ 5. UseAuthorization        → roles/policies (Prestador / Contratante / Admin)
-  ▼ 6. UseRateLimiter          → janelas fixas por IP
-  ▼ 7. Onboarding Guard        → bloqueia perfis incompletos (403 ONBOARDING_PENDENTE)
-  ▼ 8. Endpoint                → extrai userId das claims e chama Service
-  ▼ 9. EntregaService.AprovarEntregaAsync
-        - valida ownership e status
-        - aprova entrega → encerra contrato → cria avaliações (blind review)
-        - libera pagamento via IPagamentoService → logado e auditado
-  ▼ 10. SaveChanges            → transação no SQL Server
-  ▼ 11. Resposta JSON          → DTO (entidades nunca serializadas diretamente)
-```
+| Camada | Tecnologia |
+|---|---|
+| Backend | .NET 8 · ASP.NET Core Minimal API · EF Core 9 · Npgsql |
+| Banco | PostgreSQL (Neon) com pgvector (índice HNSW) |
+| Cache e estado compartilhado | Redis (StackExchange.Redis) |
+| Autenticação | JWT em cookie `HttpOnly` · BCrypt · MFA por e-mail |
+| Integrações | Asaas (PIX) · Resend (e-mail) · OpenAI (embeddings) · Cloudflare R2 (arquivos) · BrasilAPI · ViaCEP |
+| Frontend | HTML, CSS e JavaScript sem framework · Web Components · ES Modules · Bootstrap 5.3 |
+| Infraestrutura | Docker · Railway · Docker Compose (Nginx, Postgres, Redis) para o ambiente local |
+| Qualidade | xUnit · GitHub Actions · CodeQL |
+| Outros | Serilog · QuestPDF |
 
 ---
 
-## Stack Tecnológica
+## Arquitetura resumida
 
-### Backend
+```mermaid
+flowchart LR
+    B["Navegador"] -->|HTTPS| R["Borda da Railway"]
+    R --> API["Tratoo.API (.NET 8)<br/>API + frontend estático"]
+    API --> PG[("PostgreSQL / Neon<br/>tratoo + tratoo_vector")]
+    API --> RD[("Redis<br/>rede privada")]
+    API --> EXT["Asaas · Resend · OpenAI · R2"]
+```
 
-| Componente | Tecnologia | Para que serve |
-|------------|------------|-----------------|
-| Runtime / API | .NET 8 · ASP.NET Core Minimal APIs | Endpoints organizados por recurso (Extension Methods) |
-| ORM transacional | EF Core 9 + SQL Server | Migrations, transações e consistência do núcleo |
-| Busca vetorial | Npgsql + Pgvector.EntityFrameworkCore | Embeddings no PostgreSQL com índice HNSW |
-| Autenticação | JWT (HMAC-SHA256) em cookie httpOnly `tratoo_auth` | Sessão sem estado, protegida contra JS |
-| Hash de senha | BCrypt.Net-Next | Hash + salt das senhas |
-| Criptografia de PII | AES (`DataProtector`) | CPF/CNPJ criptografado em repouso (LGPD) |
-| Geração de PDF | QuestPDF | PDF imutável do contrato assinado (R2 privado) |
-| Storage de blobs | AWS SDK S3 (compatível R2) | Fotos/portfólio (público) e contratos/anexos (privado, pré-assinado) |
-| Logging | Serilog | Logs estruturados em console + arquivo rotativo |
-| Validação | Manual no domínio via `NegocioException` | Regra inválida vira 400 amigável |
-| DI / Mapeamento | `Microsoft.Extensions.DependencyInjection` | Composição explícita; DTOs na fronteira HTTP |
+| Projeto | Responsabilidade |
+|---|---|
+| `Tratoo.API` | Host HTTP: `Program.cs`, endpoints Minimal API, middlewares, health checks, background services e infraestrutura (proxy, rate limiting, Redis, encerramento) |
+| `Tratoo.Domain` | Regras de negócio organizadas por feature, entidades e `DbContext` do EF Core, além das implementações das integrações externas |
+| `Tratoo.Web` | Frontend estático (`wwwroot`), servido pela própria API |
+| `Tratoo.Tests` | 238 testes: unidade, host em memória e integração com Postgres e Redis reais via Docker |
 
-### Frontend
-
-HTML/CSS/JavaScript vanilla (sem framework), servido como arquivos estáticos pela API (`UseStaticFiles`). Mensagens por projeto usam polling (sem WebSocket).
-
-### Infraestrutura
-
-| Serviço | Finalidade |
-|---------|-----------|
-| Cloudflare R2 (bucket público) | Fotos de perfil e portfólio (`R2StorageService`) |
-| Cloudflare R2 (bucket privado) | PDFs e anexos — URL pré-assinada (`R2PrivateStorageService`) |
-| Asaas | Cobrança PIX, escrow, transferências, estornos e webhooks |
-| OpenAI Embeddings (`text-embedding-3-small`, 1536 dims) | Vetores para busca semântica |
-| Resend (API HTTPS) | OTP, assinatura, MFA + notificações |
+O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda do Docker),
+`--migrate-only` (aplica migrations e sai) e `--recifrar-dados` (rotação da chave de criptografia).
 
 ---
 
-## Estrutura do Projeto
+## Infraestrutura e deploy
 
-```
-Tratoo/
-├── Tratoo.API/                     # Apresentação
-│   ├── EndPoints/                  # Minimal APIs por recurso (Extension Methods)
-│   │   ├── ProjetoExtensions.cs        PropostaExtensions.cs
-│   │   ├── ContratoExtensions.cs       PagamentoExtensions.cs
-│   │   ├── AvaliacaoExtensions.cs      BuscaExtensions.cs
-│   │   ├── AdminDisputaExtensions.cs   ChatConviteExtensions.cs   ...
-│   ├── BackgroundServices/         # Serviços em segundo plano (IHostedService)
-│   ├── Requests/                   # DTOs de entrada HTTP
-│   └── Program.cs                  # Composição, DI, pipeline, segurança
-│
-├── Tratoo.Domain/                  # Núcleo
-│   ├── Domain/
-│   │   ├── Models/                 # Entidades EF Core (Usuario, Projeto, Pagamento, ...)
-│   │   │   ├── Financeiro/         # Pagamento, DisputaPagamento, LedgerFinanceiro, WebhookLog, ContaBancaria
-│   │   │   └── Prestador/          # Competencia, Experiencia, Certificacao, Portfolio, ...
-│   │   └── Enums/                  # Enumerações de domínio
-│   ├── Features/                   # Feature Folders (coesão por funcionalidade)
-│   │   ├── Auth/  Projetos/  Propostas/  Contratos/  Pagamentos/
-│   │   ├── Avaliacoes/  Perfis/  Mensagens/  IA/  Storage/  Infrastructure/
-│   │   │     └── cada uma com DTOs/ · Repositories/ · Services/
-│   ├── Config/                     # ResendSettings (bind de configuração, sem segredos)
-│   ├── Data/                       # TratooContext (SQL Server) e VectorContext (pgvector)
-│   └── Migrations/                 # Migrations EF Core
-│
-└── Tratoo.Web/wwwroot/             # Frontend estático
-    ├── pages/                      # Páginas por área (contratante, prestador, admin, ...)
-    ├── assets/css · assets/js      # Estilos e scripts (vanilla)
-    └── components/                 # Header/footer reutilizáveis
-```
+- **Produção na Railway:**
+  - uma réplica da API, gerada a partir do `Dockerfile` da raiz, na região `sfo`;
+  - um serviço Redis acessível só pela rede privada;
+  - o banco no Neon, fora da Railway, na região `us-east-2`.
+- **Deploy contínuo:** todo push na `main` gera um deploy, mas a Railway só faz o build depois que
+  os checks do GitHub (CI e CodeQL) passam. A versão nova só recebe tráfego depois de passar no
+  `/health/ready`. O rollback é manual, pelo histórico de deploys.
+- **Container:**
+  - imagem multi-stage (`sdk:8.0` → `aspnet:8.0`), processo rodando sem root (UID 1654);
+  - a porta vem da variável `PORT` (8080 como reserva);
+  - `ENTRYPOINT` em forma exec e encerramento gracioso de até 25 s.
+- **Health checks:** `/health/live` verifica só o processo. `/health/ready` verifica PostgreSQL,
+  pgvector, se a chave de criptografia decifra os dados existentes e, quando há Redis, o Redis. É
+  ele que a Railway usa para decidir se promove uma versão.
+- **Ambiente local:** o `compose.yaml` reproduz a topologia de produção com Nginx (TLS), duas
+  réplicas da API, Postgres com pgvector, Redis e um serviço de migrations.
+
+> A Railway não lê mais o `railway.toml` (o Config as Code foi depreciado). O health check e o
+> *draining* de 30 s ficam nas configurações do serviço, e o arquivo continua no repositório como
+> referência. A auditoria de 29/10 descobriu que eles nunca tinham sido aplicados, e a correção
+> entrou em 30/10. Detalhes em [ARQUITETURA.md §4.3](Docs/ARQUITETURA.md#43-railwaytoml--configuração-efetiva).
 
 ---
 
-## Modelagem de Domínio
+## Segurança e confiabilidade
 
-### Usuário — herança TPT (Table Per Type)
-
-`Usuario` é a base abstrata; `Prestador` e `Contratante` são mapeados em **tabelas próprias** (`ToTable("Prestadores")` / `ToTable("Contratantes")`).
-
-```
-Usuario (abstrata)
-  - Id (int) · Nome · Email · SenhaHash
-  - TipoUsuario (Prestador | Contratante)
-  - Status (Pending | Active | Blocked) · IsAdmin (definido só via seed/banco)
-  - MFA · IdentidadeVerificada · TipoPessoa · Endereco · Telefone
-  - ExcluidoEm (soft delete / LGPD) · DataCadastro
-        ├── Prestador     (TituloProfissional, AreaEspecializacao, FotoUrl,
-        │                  competências, experiências, certificações, portfólio,
-        │                  conta bancária / chave PIX, PorcentagemCompleto)
-        └── Contratante   (Segmento, NomeEmpresa, LogoUrl, SiteUrl, Disponibilidade...)
-
-  Identidade / consentimento:
-   - UserIdentity (CPF/CNPJ criptografado em AES, NivelVerificacao)
-   - ConsentLog   (termos/privacidade, IP, versão) · AuditLog (ações críticas)
-```
-
-### Projeto → Proposta → Contrato → Pagamento
-
-```
-Projeto (1) ───< PropostaProjeto (1) ───< PropostaVersao (negociação versionada, até 10)
-   │                                            │  turno obrigatório:
-   │  Status: Rascunho/Aberto/                  │  autor da última versão NÃO pode aceitá-la
-   │          EmAndamento/Cancelado             ▼  (no aceite)
-   │                                     ContratoServico (1) ───── Pagamento (1)
-   │   Status do contrato:                          │  ValorBruto + TaxaGateway (informativa)
-   │   Gerado → AguardandoAssinatura → Ativo →       │
-   │   AguardandoAprovacaoEntrega → Encerrado|Cancelado
-   │   ConteudoJson + ConteudoHash (SHA-256)         ├──< Entrega (1) ──< EntregaAnexo / EntregaLink
-   │   + ContratoSnapshot (imutável) + PdfKey        │
-   │   + HistoricoAssinatura (IP por parte)          ├──< DisputaPagamento (0..N)
-   │                                                 └──< LedgerFinanceiro (imutável)
-   │
-   └──< Avaliacao (2 slots por contrato, blind review) · HistoricoContrato (trilha de eventos)
-```
-
-**`LedgerFinanceiro`** é um livro-razão **imutável** (nunca alterado/excluído) — base de rastreabilidade financeira. **`ContratoSnapshot`** congela os dados das partes no instante da assinatura.
-
-### Entidades de auditoria / compliance
-
-| Entidade | Finalidade |
-|----------|-----------|
-| **AuditLog** | Ações críticas (login, assinatura, exclusão de conta, resolução de disputa) |
-| **ConsentLog** | Consentimento LGPD (termos/privacidade) com IP e versão |
-| **HistoricoContrato** | Trilha por contrato (entrega, aprovação, liberação, disputa resolvida) |
-| **HistoricoAssinatura** | Registro de cada assinatura com IP |
-| **WebhookLog** | Idempotência dos webhooks do gateway |
+- **IP real do cliente atrás do proxy**, com um trust boundary explícito. Só a rede interna da
+  Railway pode apresentar `X-Forwarded-For`, e o número de saltos (2) foi medido em produção. O IP
+  correto alimenta a auditoria, o rate limiting e o HSTS.
+- **Rate limiting por IP** em login, cadastro, reset de senha, dados bancários e OTP de contrato.
+  O contador é distribuído no Redis e, se o Redis cair, o limite volta para a memória do processo.
+- **OTP de uso único sob concorrência:** a tentativa é contada antes da comparação e o código é
+  apagado de forma atômica. Se o armazenamento ficar indisponível, a operação é recusada com 503.
+- **Dados sensíveis cifrados com AES-256** (conta bancária, chave PIX, CPF/CNPJ). A chave fica fora
+  do código, a API não sobe sem ela e já existe um roteiro de rotação sem indisponibilidade.
+- **Estado no Redis protegido:** valores cifrados com AES-256-GCM e nomes de chave em HMAC, para
+  não expor e-mails nem IPs.
+- **XSS:** CodeQL ativo no repositório e montagem de DOM segura (`utils/dom.js`). Ainda há alertas
+  em aberto e uma migração em andamento, descritas na documentação técnica.
+- **Idempotência financeira:** índices únicos para cobrança e webhook, e a liberação de pagamento
+  reivindica o registro de forma atômica no banco. Duas instâncias não liberam o mesmo pagamento.
+- **Segredos:** nenhum segredo versionado. Produção usa variáveis da Railway, e o CI roda sem
+  segredos.
 
 ---
 
-## Integrações Externas
+## CI e testes automatizados
 
-### Asaas (pagamentos) — `AsaasGatewayService`
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em todo PR e em todo push na
+`main`. Ele faz restore, build em Release e roda os testes. A branch `main` exige que esse check
+passe; a regra não se aplica a administradores.
 
-Operações reais expostas pelo serviço: criar/reutilizar cliente, criar cobrança PIX, obter QR Code (com *retry*), criar transferência PIX ao prestador, estornar cobrança, consultar status e simular pagamento (sandbox).
-
-Ciclo de vida:
-
-```
-1. POST /api/pagamentos/iniciar
-   → cria cliente (cus_...) e cobrança PIX (pay_...) + QR Code
-2. Contratante paga PIX
-   → webhook PAYMENT_RECEIVED → Pagamento = Retido (escrow)
-3. Entrega aprovada
-   → cria transferência PIX ao prestador (tra_...)
-   → webhook TRANSFER_DONE → Pagamento = Liberado
-```
-
-Webhooks tratados (idempotentes via `WebhookLog`):
-
-| Evento | Ação |
-|--------|------|
-| `PAYMENT_RECEIVED` | Pagamento → `Retido` (escrow) |
-| `PAYMENT_REFUNDED` | Pagamento → `Estornado` |
-| `TRANSFER_DONE` | Transferência ao prestador confirmada → `Liberado` |
-| `TRANSFER_FAILED` | Marca falha para reprocessamento |
-
-O endpoint `POST /api/webhooks/asaas` é público, protegido por token compartilhado (`Asaas:WebhookToken`) em vez de JWT. Em ambientes sem webhook (localhost), há fallback (`ConfirmarTransferenciaImediatamente`) e endpoints de sincronizar/simular.
-
-### Cloudflare R2 (storage)
-
-| Bucket | Conteúdo | Acesso | Classe |
-|--------|----------|--------|--------|
-| Público | Fotos de perfil, portfólio | URL direta | `R2StorageService` |
-| Privado | PDFs de contrato, anexos de entrega | **URL pré-assinada** temporária (ex.: 15 min) | `R2PrivateStorageService` |
-
-Usa o **AWS SDK S3** apontando para o endpoint S3-compatível do R2.
-
-### Busca Semântica (OpenAI + pgvector)
-
-Prestadores e projetos são convertidos em embeddings (`text-embedding-3-small`, 1536 dims) e armazenados no PostgreSQL/pgvector (índice HNSW). A busca (`BuscaSemanticaService`) tem duas camadas:
-
-1. pgvector — top-100 por distância de cosseno (HNSW)
-2. C# — aplica filtros de negócio e score composto (soma = 1.00)
-
-| Fator | Peso |
-|-------|------|
-| Similaridade semântica | 35% |
-| Habilidades (match exato de stack) | 15% |
-| Reputação | 15% |
-| Completude do perfil | 10% |
-| Contratos concluídos | 10% |
-| Verificação de identidade | 10% |
-| Disponibilidade | 5% |
-
-Quando a IA está indisponível, há *fallback* para busca textual. A reindexação roda periodicamente (background service).
-
-### E-mail transacional — `ResendEmailService`
-
-Envia OTPs (confirmação de cadastro, assinatura de contrato, MFA), redefinição de senha e notificações (ex.: lembrete de avaliação pendente).
-
-Usa a **API HTTPS do Resend** (`POST https://api.resend.com/emails`) em vez de SMTP: o plano Trial do Railway bloqueia SMTP outbound (25/465/587), enquanto HTTPS/443 funciona normalmente. Registrado como `HttpClient` tipado (`AddHttpClient<IEmailService, ResendEmailService>`), com timeout configurável e erros da API tratados sem expor a credencial.
-
-A API key vem da variável de ambiente `RESEND_API_KEY` — nunca do `appsettings`, que carrega apenas remetente/URL/timeout (bind em `ResendSettings`).
-
----
-
-## Segurança e Compliance
-
-### Pipeline de Segurança (ordem real dos middlewares)
-
-```
-Security Headers → Exception Handler → Static Files →
-Authentication → Authorization → Rate Limiter → Onboarding Guard → Endpoint
-```
-
-### Autenticação e Autorização
-
-| Mecanismo | Detalhe |
-|-----------|---------|
-| JWT | HMAC-SHA256, cookie httpOnly `tratoo_auth`, issuer/audience/lifetime, `ClockSkew = 0` |
-| Roles | `Prestador`, `Contratante`, `Admin` (Admin apenas via seed/banco) |
-| Policies | `RequireAuthorization("Prestador" | "Contratante" | "Admin")` |
-| Ownership | Validado em cada serviço (usuário edita apenas o que lhe pertence) |
-| MFA | Opcional, OTP por e-mail |
-| Senhas | BCrypt (hash + salt) |
-| Onboarding Guard | Bloqueia rotas (403) para perfis incompletos |
-
-### Hardening HTTP
-
-```
-X-Content-Type-Options: nosniff
-X-Frame-Options: DENY
-Referrer-Policy: strict-origin-when-cross-origin
-Permissions-Policy: geolocation=(), camera=(), microphone=()
-Content-Security-Policy: default-src 'self'; frame-ancestors 'none'
-Strict-Transport-Security: (produção)
-```
-
-### Rate Limiting (janela fixa por IP)
-
-| Política | Limite |
-|----------|--------|
-| `cadastro` | 5 / minuto |
-| `login` | 10 / minuto |
-| `senha` (reset) | 3 / minuto |
-| `dados-bancarios` (token/confirmar/salvar) | 5 / minuto |
-| `otp-assinatura` (OTP de contrato) | 3 / minuto |
-
-Rejeições retornam **429** com mensagem amigável em JSON.
-
-### Proteção de Dados (LGPD)
-
-| Medida | Implementação |
-|--------|---------------|
-| CPF/CNPJ, conta bancária e chave PIX | Criptografados em repouso (AES, `DataProtector`), com a chave fora do código (`DataProtector__Chave`); mascarados nas respostas e contratos |
-| Consentimento | `ConsentLog` (termos/privacidade) com IP e versão |
-| Auditoria | `AuditLog` de ações críticas |
-| Direito ao esquecimento | Soft delete: anonimiza nome para "Usuário indisponível", remove e-mail/foto, bloqueia login, retira perfil das buscas; preserva contratos, pagamentos e avaliações |
-
----
-
-## Background Services
-
-| Serviço | Intervalo | Delay inicial | Função |
-|---------|-----------|---------------|--------|
-| `PropostaExpiracaoService` | 1 h | 15 s | Expira propostas vencidas (`ValidoAte`) |
-| `ContratoExpiracaoService` | 1 h | 30 s | Cancela contratos não assinados no prazo |
-| `PagamentoLiberacaoService` | 4 h | 2 min | Libera pagamentos `Retido` cujo prazo de liberação automática venceu |
-| `AvaliacaoExpiracaoService` | 24 h | 3 min | Publica/oculta avaliações pendentes após 7 dias |
-| `ReindexacaoBackgroundService` | semanal | 2 min | Reindexa embeddings desatualizados |
-
-Características comuns: tratamento de erro **por item** (falha isolada não interrompe o lote), logging estruturado e *scope* próprio (`IServiceScopeFactory`) — um `DbContext` por iteração.
-
----
-
-## Área Administrativa
-
-Módulo protegido pela role Admin (concedida apenas via seed/banco).
-
-```
-/pages/admin/disputas   → lista filtrável (status, datas, contratante, prestador, projeto)
-/pages/admin/disputa    → detalhe (projeto, partes, valor, evidências, histórico, status)
-                        → A favor do contratante: estorno + Cancelado
-                        → A favor do prestador: liberação + Encerrado
-```
-
-Resolução é imutável (não reabre) e gera trilha (estado anterior → posterior) em `HistoricoContrato`, `AuditLog` e `LedgerFinanceiro`. Liberação automática fica suspensa enquanto há disputa ativa.
-
----
-
-## Configuração e Segredos
-
-> **Nenhum segredo é versionado.** Os `appsettings.json` reais são ignorados pelo `.gitignore`. O repositório versiona apenas **`appsettings.example.json`** (template com placeholders). Configure localmente via **User Secrets** (`dotnet user-secrets`) ou **variáveis de ambiente**.
-
-Chaves esperadas (valores fornecidos pelo ambiente, **não** comitados):
-
-```
-ConnectionStrings:DefaultConnection   # SQL Server   (TratooContext)
-ConnectionStrings:VectorConnection    # PostgreSQL + pgvector (VectorContext)
-Jwt:SecretKey / Jwt:Issuer / Jwt:Audience / Jwt:ExpirationHours
-DataProtector:Chave      # chave AES dos dados sensíveis (variável DataProtector__Chave) — OBRIGATÓRIA
-DataProtector:ChaveAnterior  # só durante uma rotação da chave (Docs/ROTACAO-CHAVE-DADOS.md)
-Asaas:ApiKey / Asaas:BaseUrl / Asaas:WebhookToken / ...
-OpenAI:ApiKey / OpenAI:BaseUrl
-CloudflareR2:*          # bucket público
-CloudflareR2Private:*   # bucket privado
-RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_FROM_NAME   # e-mail transacional (Resend)
-Seed:SenhaUsuario       # senha dos usuários de seed (somente desenvolvimento)
-```
-
-**`DataProtector:Chave`** cifra conta bancária, chave PIX e CPF/CNPJ. A API **não sobe** sem ela, e o `/health/ready` (check `dados-cifrados`) fica não saudável se a chave configurada não decifrar os dados que já existem — num deploy, isso impede a promoção da versão. Para um banco com dados, a chave precisa ser **exatamente** a que os cifrou; trocá-la exige recifrar os dados (rotação), não basta mudar a variável. O roteiro está em [`Docs/ROTACAO-CHAVE-DADOS.md`](Docs/ROTACAO-CHAVE-DADOS.md): a chave nova entra em `DataProtector:Chave`, a antiga em `DataProtector:ChaveAnterior`, e `dotnet Tratoo.API.dll --recifrar-dados --aplicar` regrava os dados.
-
----
-
-## Rodando o Projeto
-
-### Com Docker (stack local completa)
-
-Pré-requisitos: Docker com Compose v2 e OpenSSL (vem com o Git Bash no Windows).
+- **238 testes** com xUnit: 206 de unidade e de host em memória (TestServer) e 32 de integração
+  contra Postgres (pgvector) e Redis reais, iniciados via Docker.
+- **No CI, a ausência de Docker é falha** (`TRATOO_EXIGIR_DOCKER=1`). Um pipeline verde garante
+  que os testes de integração rodaram.
+- **Cobertura:** proxy e IP, rate limiting, health checks, porta e encerramento, estado efêmero e
+  OTP (inclusive concorrência), criptografia e rotação de chave, migrations e jobs com várias
+  réplicas.
+- **Lacuna conhecida:** não há testes de ponta a ponta das regras de negócio nem do frontend.
 
 ```bash
-cp .env.example .env                 # preencha; o que faltar faz o `up` falhar com mensagem
+dotnet test Tratoo.sln
+```
+
+Sem Docker, os testes de integração são marcados como ignorados.
+
+---
+
+## Como executar localmente
+
+### Com Docker (recomendado)
+
+Pré-requisitos: Docker com Compose v2 e OpenSSL (já vem no Git Bash, no Windows).
+
+```bash
+cp .env.example .env
+```
+
+Preencha o `.env`. Se faltar uma variável obrigatória, o compose para e diz qual é.
+
+```bash
 bash infra/nginx/gerar-certificado.sh
+```
+
+```bash
 docker compose up -d --build --wait
 ```
 
-Acesse `https://localhost` (certificado autoassinado). Sobem Nginx (TLS, único serviço com
-porta publicada, só em `127.0.0.1`), **2 réplicas da API** balanceadas pelo Nginx,
-Postgres/pgvector com os bancos `tratoo` e `tratoo_vector` e Redis — banco e Redis só são
-alcançáveis pela rede interna. O Redis guarda o estado que as réplicas precisam
-compartilhar (códigos OTP, tentativas, cadastro pendente, rate limiting), cifrado com
-`REDIS_CHAVE_PROTECAO`; sem `Redis__ConnectionString` (produção hoje, 1 réplica) a API usa a
-memória do processo, como antes. Nada aponta
-para produção: Asaas fica fixo no sandbox. `docker compose down` preserva os dados;
-`down -v` os apaga. Decisões e limites em `Docs/TRILHA2-DECISOES.md`.
+Acesse `https://localhost` (o certificado é autoassinado). A ordem de subida é: Postgres e Redis
+saudáveis → `migrate` aplica o schema e sai → duas réplicas da API → Nginx.
 
-As migrations rodam sozinhas: o serviço `migrate` (`dotnet Tratoo.API.dll --migrate-only`)
-aplica o schema e sai, e só então a API sobe. Se a migração falhar, a API não inicia. Para
-rodar de novo à mão: `docker compose run --rm migrate`.
+- Para rodar as migrations de novo: `docker compose run --rm migrate`.
+- `docker compose down` preserva os dados; `docker compose down -v` apaga tudo.
+- Nada aponta para produção: o Asaas fica fixo no sandbox e o banco é local.
 
 ### Sem Docker
 
-Pré-requisitos: .NET 8 SDK, SQL Server e PostgreSQL com extensão pgvector.
+Pré-requisitos: .NET 8 SDK e PostgreSQL 16 com a extensão pgvector, com dois bancos (`tratoo` e
+`tratoo_vector`).
 
-```bash
-# 1. Clone o repositório
-git clone https://github.com/Gustavo-C-almeida/tratoo.git
-cd tratoo
+1. Configure os segredos com `user-secrets`, sem editar arquivos versionados:
 
-# 2. Configure os segredos
-#    Opção A — copie o template e preencha:
-cp Tratoo.API/appsettings.example.json Tratoo.API/appsettings.Development.json
-#    Opção B (recomendada) — use User Secrets no projeto Tratoo.API:
-cd Tratoo.API
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=...;Database=TRATOO;..."
-dotnet user-secrets set "ConnectionStrings:VectorConnection"  "Host=...;Database=...;Username=...;Password=..."
-dotnet user-secrets set "Jwt:SecretKey" "uma-chave-secreta-forte-com-no-minimo-32-caracteres"
-#    (repita para Asaas:*, OpenAI:*, CloudflareR2:*, CloudflareR2Private:*, Email:*)
-cd ..
+   ```bash
+   dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Database=tratoo;Username=...;Password=..." --project Tratoo.API
+   ```
 
-# 3. Aplique as migrations do SQL Server
-#    (o PostgreSQL/pgvector é inicializado automaticamente na subida da API)
-dotnet ef database update \
-  --project Tratoo.Domain \
-  --startup-project Tratoo.API \
-  --context TratooContext
+   ```bash
+   dotnet user-secrets set "ConnectionStrings:VectorConnection" "Host=localhost;Database=tratoo_vector;Username=...;Password=..." --project Tratoo.API
+   ```
 
-# 4. Rode a API (serve também o frontend estático)
-dotnet run --project Tratoo.API
+   ```bash
+   dotnet user-secrets set "Jwt:SecretKey" "<32+ caracteres aleatórios>" --project Tratoo.API
+   ```
+
+   ```bash
+   dotnet user-secrets set "DataProtector:Chave" "<chave local, nunca a de produção>" --project Tratoo.API
+   ```
+
+   Repita o comando para `Jwt:Issuer`, `Jwt:Audience` e `Resend:*`. Use
+   [`Tratoo.API/appsettings.example.json`](Tratoo.API/appsettings.example.json) como referência.
+
+2. Aplique as migrations. Isso exige a ferramenta `dotnet-ef` (`dotnet tool install --global dotnet-ef`).
+   O comando de design-time (`TratooContextFactory`) **não** lê os user-secrets do `Tratoo.API`.
+   Ele lê o `appsettings.json`, os user-secrets do `Tratoo.Domain` ou variáveis de ambiente. O
+   caminho mais simples é passar a conexão na própria linha de comando:
+
+   ```bash
+   ConnectionStrings__DefaultConnection="Host=localhost;Database=tratoo;Username=...;Password=..." dotnet ef database update --project Tratoo.Domain --startup-project Tratoo.API --context TratooContext
+   ```
+
+3. Rode a API, que também serve o frontend. O schema vetorial (`CREATE EXTENSION IF NOT EXISTS
+   vector`, tabelas e índices HNSW) é criado pela própria API na subida, então o usuário do banco
+   precisa de permissão para criar a extensão:
+
+   ```bash
+   dotnet run --project Tratoo.API
+   ```
+
+> **Cuidado:** a API sobe com os BackgroundServices ativos, que expiram contratos e liberam
+> pagamentos. Nunca rode localmente apontando para o banco de produção. Em `Development`, o
+> Swagger fica em `/swagger` e as rotas de seed ficam habilitadas, incluindo `/api/dev/seed-admin`,
+> que promove um usuário a Admin **sem autenticação**.
+
+---
+
+## Configurações necessárias
+
+Em produção, toda a configuração vem de variáveis de ambiente: a convenção `Secao__Chave`
+equivale a `Secao:Chave`. Os nomes abaixo são os que a aplicação lê. **Nenhum valor real é
+versionado.**
+
+| Configuração | Para quê | Obrigatória |
+|---|---|---|
+| `ConnectionStrings__DefaultConnection` | Banco de negócio (`TratooContext`) | Sim |
+| `ConnectionStrings__VectorConnection` | Banco vetorial (`VectorContext`, pgvector) | Sim |
+| `DataProtector__Chave` | Chave AES dos dados sensíveis. Sem ela a API **não sobe** | Sim |
+| `DataProtector__ChaveAnterior` | Só durante uma rotação de chave | Não |
+| `Jwt__SecretKey`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpirationHours` | Emissão e validação do token | Sim (a expiração tem padrão de 8 h) |
+| `Resend__ApiKey`, `Resend__FromEmail`, `Resend__FromName`, `Resend__BaseUrl`, `Resend__TimeoutSegundos` | E-mail transacional (o código também aceita `RESEND_API_KEY`/`RESEND_FROM_*`) | Sim, para cadastro, MFA e reset |
+| `Redis__ConnectionString`, `Redis__ChaveProtecao` | Estado compartilhado e rate limiting distribuído. Sem Redis, usa a memória do processo | Não; se houver Redis, a chave de proteção é obrigatória |
+| `Asaas__ApiKey`, `Asaas__BaseUrl`, `Asaas__WebhookToken`, `Asaas__ConfirmarTransferenciaImediatamente`, `Asaas__TaxaOperacionalEstimadaPercentual` | Pagamentos PIX e webhook | Para pagamentos |
+| `OpenAI__ApiKey`, `OpenAI__BaseUrl` | Embeddings da busca semântica. Sem chave, a busca usa só palavras-chave | Não |
+| `CloudflareR2__*`, `CloudflareR2Private__*` | Bucket público (fotos e portfólio) e privado (contratos e anexos) | Para uploads |
+| `ConnectionStrings__MigrationConnection` | Conexão direta para `--migrate-only` (opcional; usa a `DefaultConnection` se ausente) | Não |
+| `ForwardedHeaders__ForwardLimit`, `ForwardedHeaders__PeersConfiaveis__N` | Topologia de proxy. Os padrões já servem para a Railway; o compose usa 1 salto | Não |
+| `LogArquivo__Habilitado` | Liga ou desliga o log em arquivo (padrão: ligado) | Não |
+
+O ambiente local usa o [`.env.example`](.env.example), com placeholders e instruções.
+
+---
+
+## Estrutura do repositório
+
+```
+Tratoo/
+├── Tratoo.API/          # Host HTTP: Program.cs, EndPoints/, Infrastructure/, BackgroundServices/
+├── Tratoo.Domain/       # Features/<feature>/, Domain/Models, Data/ (DbContexts), Migrations/
+├── Tratoo.Web/wwwroot/  # Frontend estático
+├── Tratoo.Tests/        # Testes (Integracao/ = Docker)
+├── Docs/                # Documentação técnica
+├── infra/               # Nginx e Postgres do compose local
+├── compose.yaml         # Stack local
+├── Dockerfile           # Imagem de produção
+└── railway.toml         # Referência da configuração de deploy (a Railway não lê; ver Infraestrutura)
 ```
 
-Acesse a aplicação na URL exibida no console (porta definida em `Tratoo.API/Properties/launchSettings.json`). Em `ASPNETCORE_ENVIRONMENT=Development`, o **Swagger** fica disponível em `/swagger` e os endpoints de **seed** (incluindo promoção de um usuário a administrador) são habilitados.
+---
 
+## Documentação e links
 
-
-<sub>README descritivo do projeto Tratoo — estudo de arquitetura .NET com escrow, contratos digitais, busca semântica e fluxo administrativo de disputas.</sub>
+- **[Docs/ARQUITETURA.md](Docs/ARQUITETURA.md):** arquitetura completa, decisões técnicas,
+  segurança, concorrência, CI/CD, evolução do projeto e matriz de rastreabilidade.
+- [Docs/REVERSE-PROXY-IP-CLIENTE.md](Docs/REVERSE-PROXY-IP-CLIENTE.md): diagnóstico e correção do
+  IP do cliente atrás do proxy.
+- [Docs/TRILHA2-DECISOES.md](Docs/TRILHA2-DECISOES.md): decisões sobre Docker, Redis, réplicas e
+  migrations.
+- [Docs/ROTACAO-CHAVE-DADOS.md](Docs/ROTACAO-CHAVE-DADOS.md): roteiro de rotação da chave de
+  criptografia.
+- [Tratoo.Web/wwwroot/CONTRIBUTING.md](Tratoo.Web/wwwroot/CONTRIBUTING.md): convenções do frontend.
+- Aplicação: [www.tratoo.app.br](https://www.tratoo.app.br).
