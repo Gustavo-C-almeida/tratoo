@@ -1,9 +1,10 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
+import { guidDaUrl } from '/assets/js/utils/url.js';
 // Página: /pages/contrato/detalhe.html?id={guid}
 // Design Moderno para Detalhe do Contrato
 
-const params = new URLSearchParams(location.search);
-const contratoId = params.get('id');
+const contratoId = guidDaUrl('id');
 const root = document.getElementById('contrato-root');
 
 let contratoAtual = null;
@@ -66,7 +67,9 @@ async function init() {
         if (err?.status === 401) {
             location.href = '/pages/auth/login.html';
         } else {
-            root.innerHTML = `<div class="error-state"><span class="error-icon"><i class="fa-solid fa-circle-xmark"></i></span><p class="erro-msg">${err?.data?.mensagem || 'Erro ao carregar contrato.'}</p></div>`;
+            root.replaceChildren(el('div', { class: 'error-state' },
+                el('span', { class: 'error-icon' }, el('i', { class: 'fa-solid fa-circle-xmark' })),
+                el('p', { class: 'erro-msg' }, err?.data?.mensagem || 'Erro ao carregar contrato.')));
         }
     }
 }

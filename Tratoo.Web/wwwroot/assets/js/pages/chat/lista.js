@@ -1,12 +1,8 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
 // ── Lista centralizada de chats ───────────────────────────────────────────────
 
 const root = () => document.getElementById('chat-root');
-
-function esc(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 function tempoAtras(data) {
     if (!data) return '';
@@ -50,38 +46,32 @@ async function carregarChats() {
         return;
     }
 
-    const itensHtml = chats.map(c => {
+    const itens = chats.map(c => {
         const outro = c.outroParticipanteNome || c.prestadorNome || 'Participante';
         const mostrarBadge = c.ultimaMensagemPorId !== usuarioId;
-        return `
-    <a class="chat-card"
-       href="/pages/chat/detalhe.html?projetoId=${c.projetoId}&prestadorId=${c.prestadorId}"
-       aria-label="Chat sobre ${esc(c.projetoTitulo)} com ${esc(outro)}">
-        <div class="chat-card-avatar" aria-hidden="true">
-            ${esc((outro.charAt(0) || '?').toUpperCase())}
-        </div>
-        <div class="chat-card-body">
-            <div class="chat-card-header">
-                <span class="chat-card-nome">${esc(outro)}</span>
-                <span class="chat-card-tempo">${tempoAtras(c.ultimaMensagemEm)}</span>
-            </div>
-            <div class="chat-card-projeto"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> ${esc(c.projetoTitulo)}</div>
-            <div class="chat-card-preview">${esc(c.ultimaMensagem)}</div>
-        </div>
-        ${mostrarBadge ? `<div class="chat-card-badge" aria-label="1 nova mensagem">1</div>` : ''}
-    </a>`;
-    }).join('');
+        const href = `/pages/chat/detalhe.html?projetoId=${encodeURIComponent(c.projetoId)}`
+            + `&prestadorId=${encodeURIComponent(c.prestadorId)}`;
+        return el('a', {
+            class: 'chat-card',
+            href,
+            'aria-label': `Chat sobre ${c.projetoTitulo || ''} com ${outro}`,
+        },
+            el('div', { class: 'chat-card-avatar', 'aria-hidden': 'true' }, (outro.charAt(0) || '?').toUpperCase()),
+            el('div', { class: 'chat-card-body' },
+                el('div', { class: 'chat-card-header' },
+                    el('span', { class: 'chat-card-nome' }, outro),
+                    el('span', { class: 'chat-card-tempo' }, tempoAtras(c.ultimaMensagemEm))),
+                el('div', { class: 'chat-card-projeto' },
+                    el('i', { class: 'fa-solid fa-folder-open', 'aria-hidden': 'true' }), ' ', c.projetoTitulo),
+                el('div', { class: 'chat-card-preview' }, c.ultimaMensagem)),
+            mostrarBadge && el('div', { class: 'chat-card-badge', 'aria-label': '1 nova mensagem' }, '1'));
+    });
 
-    root().innerHTML = `
-    <div class="chat-lista-wrap">
-        <div class="chat-lista-header">
-            <h1>Conversas</h1>
-            <span class="chat-lista-count">${chats.length} conversa${chats.length !== 1 ? 's' : ''}</span>
-        </div>
-        <div class="chat-lista-items">
-            ${itensHtml}
-        </div>
-    </div>`;
+    root().replaceChildren(el('div', { class: 'chat-lista-wrap' },
+        el('div', { class: 'chat-lista-header' },
+            el('h1', {}, 'Conversas'),
+            el('span', { class: 'chat-lista-count' }, `${chats.length} conversa${chats.length !== 1 ? 's' : ''}`)),
+        el('div', { class: 'chat-lista-items' }, itens)));
 }
 
 carregarChats();

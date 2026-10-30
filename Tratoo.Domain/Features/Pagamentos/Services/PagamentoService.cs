@@ -725,9 +725,10 @@ namespace Tratoo.Domain.Features.Pagamentos
         {
             if (descricao.Length <= 140) return descricao;
             var truncada = descricao[..137] + "...";
+            // Só o tamanho: a descrição inclui texto do usuário (título do projeto) e não vai para o log.
             _logger.LogInformation(
-                "Descrição da transferência truncada para 140 chars (pagamento {PagamentoId}). Original: {Original}",
-                pagamentoId, descricao[..Math.Min(descricao.Length, 200)]);
+                "Descrição da transferência truncada para 140 chars (pagamento {PagamentoId}). Tamanho original: {TamanhoOriginal}",
+                pagamentoId, descricao.Length);
             return truncada;
         }
 
