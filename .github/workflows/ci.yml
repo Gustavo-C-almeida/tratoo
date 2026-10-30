@@ -33,15 +33,15 @@ jobs:
       TRATOO_EXIGIR_DOCKER: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Mesma major do Dockerfile (sdk:8.0); global.json aceita qualquer 8.0.4xx+.
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
       - name: Cache do NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
@@ -69,7 +69,7 @@ jobs:
 
       - name: Publicar resultados dos testes
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: resultados-testes
           path: TestResults/

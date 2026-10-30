@@ -302,7 +302,10 @@ namespace Tratoo.Tests.Integracao
             var resultados = await Task.WhenAll(Enumerable.Range(0, 20)
                 .Select(i => Otp.Resultado(() => mfas[i % 2].ValidarAsync(email, errado, "login"))));
 
-            Assert.InRange(observados.Sum(o => o.LeiturasComValor), 1, VerificacaoMFAService.MaxTentativas);
+            // Mínimo 0, não 1: os palpites acima do limite invalidam o código, e num runner lento
+            // isso pode acontecer antes de qualquer um dos MaxTentativas legítimos ler o hash.
+            // Nenhuma comparação é um desfecho seguro; o que importa é o teto.
+            Assert.InRange(observados.Sum(o => o.LeiturasComValor), 0, VerificacaoMFAService.MaxTentativas);
             Assert.DoesNotContain("OK", resultados);
             Assert.Equal("Código expirado ou inválido", await Otp.Resultado(() => mfas[0].ValidarAsync(email, codigo, "login")));
         }
