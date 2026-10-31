@@ -208,7 +208,7 @@ function render() {
             </div>` : ''}
 
             <div class="versoes-section">
-                <button id="btn-versoes" class="btn-texto" onclick="toggleVersoes()">
+                <button id="btn-versoes" class="btn-texto" data-acao="toggle-versoes">
                     Ver histórico de versões (${proposta.versoes?.length || 0})
                 </button>
                 <div id="lista-versoes" style="display:none"></div>
@@ -247,8 +247,8 @@ function render() {
             <!-- Ações do contratante -->
             ${podeRecusarContratante ? `
             <div id="acoes-contratante" class="acoes-bloco">
-                ${podeAceitarContratante ? `<button id="btn-aceitar" class="btn-aceitar" onclick="abrirModalAceite()" data-tooltip="Aceitar esta proposta"><i class="fa-solid fa-check"></i> Aceitar proposta</button>` : `<div class="aviso-turno"><i class="fa-solid fa-clock" aria-hidden="true"></i> Aguardando resposta da outra parte</div>`}
-                <button id="btn-recusar" class="btn-recusar" onclick="mostrarFormRecusar()" data-tooltip="Recusar esta proposta"><i class="fa-solid fa-xmark"></i> Recusar</button>
+                ${podeAceitarContratante ? `<button id="btn-aceitar" class="btn-aceitar" data-acao="abrir-aceite" data-tooltip="Aceitar esta proposta"><i class="fa-solid fa-check"></i> Aceitar proposta</button>` : `<div class="aviso-turno"><i class="fa-solid fa-clock" aria-hidden="true"></i> Aguardando resposta da outra parte</div>`}
+                <button id="btn-recusar" class="btn-recusar" data-acao="toggle-recusar" data-tooltip="Recusar esta proposta"><i class="fa-solid fa-xmark"></i> Recusar</button>
                 <!-- Formulário de Recusa Moderno -->
                 <div id="form-recusar" class="recusar-form-modern" style="display:none">
                     <div class="recusar-form-container">
@@ -268,23 +268,23 @@ function render() {
 
                         <!-- Motivos Rápidos -->
                         <div class="motivos-rapidos-modern">
-                            <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Fora do orçamento')">
+                            <button type="button" class="motivo-chip-modern" data-acao="selecionar-motivo" data-motivo="Fora do orçamento">
                                 <span class="chip-icon"><i class="fa-solid fa-money-bill-wave"></i></span>
                                 Fora do orçamento
                             </button>
-                            <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Prazo muito longo')">
+                            <button type="button" class="motivo-chip-modern" data-acao="selecionar-motivo" data-motivo="Prazo muito longo">
                                 <span class="chip-icon"><i class="fa-solid fa-clock"></i></span>
                                 Prazo muito longo
                             </button>
-                            <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Escopo insuficiente')">
+                            <button type="button" class="motivo-chip-modern" data-acao="selecionar-motivo" data-motivo="Escopo insuficiente">
                                 <span class="chip-icon"><i class="fa-solid fa-clipboard-list"></i></span>
                                 Escopo insuficiente
                             </button>
-                            <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Valor acima do esperado')">
+                            <button type="button" class="motivo-chip-modern" data-acao="selecionar-motivo" data-motivo="Valor acima do esperado">
                                 <span class="chip-icon"><i class="fa-solid fa-money-bill-transfer"></i></span>
                                 Valor acima do esperado
                             </button>
-                            <button type="button" class="motivo-chip-modern" onclick="selecionarMotivo('Já contratei outro profissional')">
+                            <button type="button" class="motivo-chip-modern" data-acao="selecionar-motivo" data-motivo="Já contratei outro profissional">
                                 <span class="chip-icon"><i class="fa-solid fa-check"></i></span>
                                 Já contratei outro
                             </button>
@@ -313,10 +313,10 @@ function render() {
 
                         <!-- Botões de Ação -->
                         <div class="recusar-form-actions">
-                            <button type="button" class="recusar-btn-cancelar" onclick="toggleRecusarForm()">
+                            <button type="button" class="recusar-btn-cancelar" data-acao="toggle-recusar">
                                 Cancelar
                             </button>
-                            <button type="button" class="recusar-btn-confirmar" onclick="confirmarRecusa()">
+                            <button type="button" class="recusar-btn-confirmar" data-acao="confirmar-recusa">
                                 <span class="btn-icon"><i class="fa-solid fa-xmark"></i></span>
                                 Confirmar recusa
                             </button>
@@ -337,20 +337,20 @@ function render() {
 
             ${!ehContratante && proposta.status === 'Draft' ? `
             <div class="acoes-bloco">
-                <button class="btn-enviar" onclick="enviarProposta()" ${!pixConfigurado ? 'disabled title="Cadastre sua chave PIX antes de enviar propostas"' : ''} data-tooltip="Enviar proposta para análise"><i class="fa-solid fa-paper-plane"></i> Enviar proposta</button>
-                <button class="btn-secundario" style="margin-top:8px;width:100%" onclick="mostrarFormContraproposta()"><i class="fa-solid fa-pen"></i> Editar rascunho</button>
+                <button class="btn-enviar" data-acao="enviar-proposta" ${!pixConfigurado ? 'disabled title="Cadastre sua chave PIX antes de enviar propostas"' : ''} data-tooltip="Enviar proposta para análise"><i class="fa-solid fa-paper-plane"></i> Enviar proposta</button>
+                <button class="btn-secundario" style="margin-top:8px;width:100%" data-acao="abrir-contraproposta"><i class="fa-solid fa-pen"></i> Editar rascunho</button>
             </div>` : ''}
 
             ${!ehContratante && ['Submitted', 'EmNegociacao'].includes(proposta.status) ? `
             <div class="acoes-bloco">
-                ${podeAceitarComoPresrador() ? `<button class="btn-aceitar" style="width:100%;margin-bottom:8px" onclick="abrirModalAceitePrestador()" ${!pixConfigurado ? 'disabled title="Cadastre sua chave PIX antes de aceitar"' : ''}><i class="fa-solid fa-check"></i> Aceitar proposta do contratante</button>` : ''}
-                ${podeAceitarComoPresrador() ? `<button class="btn-secundario" style="width:100%;margin-bottom:8px" onclick="mostrarFormContraproposta()"><i class="fa-solid fa-arrows-rotate"></i> Fazer contraproposta</button>` : ''}
-                <button class="btn-recusar" style="margin-top:8px;width:100%" onclick="cancelarProposta()"><i class="fa-solid fa-trash-can"></i> Cancelar proposta</button>
+                ${podeAceitarComoPresrador() ? `<button class="btn-aceitar" style="width:100%;margin-bottom:8px" data-acao="abrir-aceite-prestador" ${!pixConfigurado ? 'disabled title="Cadastre sua chave PIX antes de aceitar"' : ''}><i class="fa-solid fa-check"></i> Aceitar proposta do contratante</button>` : ''}
+                ${podeAceitarComoPresrador() ? `<button class="btn-secundario" style="width:100%;margin-bottom:8px" data-acao="abrir-contraproposta"><i class="fa-solid fa-arrows-rotate"></i> Fazer contraproposta</button>` : ''}
+                <button class="btn-recusar" style="margin-top:8px;width:100%" data-acao="cancelar-proposta"><i class="fa-solid fa-trash-can"></i> Cancelar proposta</button>
             </div>` : ''}
 
             ${ehContratante && podeNegociar && !podeAceitarComoPresrador() ? `
             <div class="acoes-bloco" style="margin-top:16px">
-                <button class="btn-secundario" style="width:100%" onclick="mostrarFormContraproposta()"><i class="fa-solid fa-arrows-rotate"></i> Fazer contraproposta</button>
+                <button class="btn-secundario" style="width:100%" data-acao="abrir-contraproposta"><i class="fa-solid fa-arrows-rotate"></i> Fazer contraproposta</button>
             </div>` : ''}
 
             ${proposta.status === 'Convertida' ? `
@@ -390,7 +390,7 @@ function render() {
         <div class="form-container">
             <div class="form-header">
                 <h3><i class="fa-solid fa-arrows-rotate"></i> Nova Contraproposta</h3>
-                <button class="close-form" onclick="fecharFormContraproposta()" aria-label="Fechar"><i class="fa-solid fa-xmark"></i></button>
+                <button class="close-form" data-acao="fechar-contraproposta" aria-label="Fechar"><i class="fa-solid fa-xmark"></i></button>
             </div>
             
             <div class="form-stepper">
@@ -487,7 +487,7 @@ function render() {
                     <button type="button" id="btn-prev" class="btn-secundario" style="display:none"><i class="fa-solid fa-arrow-left"></i> Anterior</button>
                     <button type="button" id="btn-next" class="btn-enviar btn-com-icone">Próximo <i class="fa-solid fa-arrow-right"></i></button>
                     <button type="submit" id="btn-submit" class="btn-enviar btn-com-icone" style="display:none">Enviar contraproposta</button>
-                    <button type="button" class="btn-secundario" onclick="fecharFormContraproposta()">Cancelar</button>
+                    <button type="button" class="btn-secundario" data-acao="fechar-contraproposta">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -495,6 +495,7 @@ function render() {
 
     // Eventos
     document.getElementById('form-contra').addEventListener('submit', enviarContraproposta);
+    document.getElementById('motivo-recusar')?.addEventListener('input', atualizarContadorMotivo);
 
     // Setup do stepper
     setupStepper();
@@ -761,7 +762,7 @@ async function renderVersoesLazy() {
     let html = versoesRecentes.map(v => renderVersao(v)).join('');
 
     if (proposta.versoes.length > 5) {
-        html += `<button class="btn-texto" onclick="carregarMaisVersoes()" style="margin-top: 12px;">
+        html += `<button class="btn-texto" data-acao="mais-versoes" style="margin-top: 12px;">
             <i class="fa-solid fa-book"></i> Carregar mais ${proposta.versoes.length - 5} versões...
         </button>`;
     }
@@ -1023,12 +1024,20 @@ function selecionarMotivo(motivo) {
     const motivoTextarea = document.getElementById('motivo-recusar');
     if (motivoTextarea) {
         motivoTextarea.value = motivo;
+        atualizarContadorMotivo();
     }
 }
 
-async function confirmarRecusa() {
+function atualizarContadorMotivo() {
+    const motivoTextarea = document.getElementById('motivo-recusar');
+    const contador = document.getElementById('recusar-char-counter');
+    if (motivoTextarea && contador) {
+        contador.textContent = `${motivoTextarea.value.length}/${motivoTextarea.maxLength}`;
+    }
+}
+
+async function confirmarRecusa(btn) {
     const motivo = document.getElementById('motivo-recusar')?.value.trim() || '';
-    const btn = event.target;
     setLoading(btn, true);
 
     try {
@@ -1041,9 +1050,8 @@ async function confirmarRecusa() {
     }
 }
 
-async function enviarProposta() {
+async function enviarProposta(btn) {
     if (!confirm('Deseja enviar esta proposta ao contratante?')) return;
-    const btn = event.target;
     setLoading(btn, true);
 
     try {
@@ -1056,11 +1064,10 @@ async function enviarProposta() {
     }
 }
 
-async function cancelarProposta() {
+async function cancelarProposta(btn) {
     const motivo = prompt('Motivo do cancelamento (opcional):');
     if (motivo === null) return;
 
-    const btn = event.target;
     setLoading(btn, true);
 
     try {
@@ -1126,6 +1133,32 @@ async function enviarContraproposta(e) {
         setLoading(btn, false);
     }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// DELEGAÇÃO DE EVENTOS
+// O módulo não expõe funções em window: os botões gerados no render levam
+// data-acao e um único listener no root despacha o clique. O root sobrevive
+// aos re-renders (só o innerHTML muda), então o listener é registrado uma vez.
+// ────────────────────────────────────────────────────────────────────────────
+const ACOES = {
+    'toggle-versoes': () => toggleVersoes(),
+    'mais-versoes': () => carregarMaisVersoes(),
+    'abrir-aceite': () => abrirModalAceite(),
+    'abrir-aceite-prestador': () => abrirModalAceitePrestador(),
+    'toggle-recusar': () => mostrarFormRecusar(),
+    'selecionar-motivo': (btn) => selecionarMotivo(btn.dataset.motivo),
+    'confirmar-recusa': (btn) => confirmarRecusa(btn),
+    'enviar-proposta': (btn) => enviarProposta(btn),
+    'cancelar-proposta': (btn) => cancelarProposta(btn),
+    'abrir-contraproposta': () => mostrarFormContraproposta(),
+    'fechar-contraproposta': () => fecharFormContraproposta(),
+};
+
+root().addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-acao]');
+    if (!btn || btn.disabled) return;
+    ACOES[btn.dataset.acao]?.(btn);
+});
 
 // Iniciar
 carregar();
