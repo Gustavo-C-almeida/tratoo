@@ -1,11 +1,20 @@
-# Configuração de deploy da Railway versionada no repositório.
+# ATENÇÃO: a Railway NÃO lê este arquivo para o serviço `tratoo`.
 #
-# Deliberadamente mínimo: só declara o que precisa mudar. Campos não
-# especificados aqui continuam valendo o que está no dashboard — não sobrescreve
-# builder, região, réplicas nem variáveis.
+# Config as Code (railway.toml/railway.json) foi depreciado; só vale para
+# serviços que já o usavam antes, e o `tratoo` não usava. A Railway faz parse do
+# arquivo, mas descarta os valores: meta.fileServiceManifest = {} em todos os
+# deploys de 06/08 a 30/10/2026. E o recurso inteiro deixa de funcionar em
+# 01/12/2026.
 #
-# O build já usava DOCKERFILE (confirmado via `railway status --json`), então
-# nada de [build] aqui.
+# Os valores abaixo estão aplicados nas SETTINGS do serviço (Railway → tratoo →
+# production → Settings → Deploy), definidas em 30/10/2026 via
+# `serviceInstanceUpdate`. Este arquivo virou a documentação versionada desses
+# valores: o ShutdownTests lê drainingSeconds daqui. Se mudar um valor, mude nos
+# dois lugares. Para conferir o que vale de fato, consulte
+# deployment(id){ meta } → meta.serviceManifest.deploy na API da Railway.
+#
+# O build usa o Dockerfile da raiz (detectado automaticamente), então nada de
+# [build] aqui.
 
 [deploy]
 # A Railway usa este caminho durante o deploy para decidir quando a nova versão
@@ -48,7 +57,8 @@ drainingSeconds = 30
 #      todas as tabelas e falharia (deploy bloqueado);
 #   2. criar na Railway ConnectionStrings__MigrationConnection = a DefaultConnection
 #      com o host SEM "-pooler".
-# Aí é descomentar a linha abaixo. Toda migration nova precisa ser retrocompatível:
+# Aí é configurar o comando abaixo nas SETTINGS do serviço (Pre-deploy Command):
+# descomentar aqui não tem efeito, pelo motivo do topo do arquivo. Toda migration nova precisa ser retrocompatível:
 # a versão anterior continua servindo enquanto este comando roda.
 #
 # preDeployCommand = "dotnet Tratoo.API.dll --migrate-only"
