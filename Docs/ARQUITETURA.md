@@ -5,8 +5,8 @@
 >
 > **Estado de referência:** branch `main` no commit `b134922` (merge do PR #21), em produção no
 > deploy `ebf57cde` da Railway. **Verificação:** 31/10/2026, só com leituras (código, Git, GitHub,
-> CLI e API da Railway, DNS, endpoints públicos, APIs do Resend e do Neon). A legenda e as fontes
-> estão no [§1.5](#15-como-ler-este-documento).
+> CLI e API da Railway, DNS, endpoints públicos, API do Resend e consultas SQL somente leitura no
+> Neon). A legenda e as fontes estão no [§1.5](#15-como-ler-este-documento).
 
 ---
 
@@ -65,11 +65,11 @@ Os rótulos de status seguem a legenda do [§1.5](#15-como-ler-este-documento).
 | Pagamento e escrow | Cobrança PIX no Asaas, webhook idempotente, ledger imutável, liberação manual ou automática (prazo de entrega + 7 dias), disputa, estorno integral no cancelamento e limite diário de R$ 5.000 por contratante. | No código; a liberação concorrente é Confirmada por testes |
 | Entrega | Entrega formal com anexos no R2 privado (URL de 30 min), aprovação ou pedido de ajustes. | No código |
 | Avaliações | Blind review com janela de 7 dias e reputação agregada (`ReputacaoResumo`). | No código; a finalização concorrente é Confirmada por testes |
-| Busca semântica | Embeddings OpenAI de 1536 dimensões no pgvector, com top-100 por cosseno, score composto calculado em C# e fallback por palavras-chave. | No código |
+| Busca semântica | Embeddings OpenAI de 1536 dimensões no pgvector, com top-100 por cosseno, score composto calculado em C# e fallback por palavras-chave. | No código; índices HNSW Confirmados no banco de produção |
 | Administração | Resolução de disputas e diagnóstico de rede (`/api/diagnostico/rede`), restritos ao papel Admin em produção. | No código |
 
 A suíte automatizada cobre a infraestrutura e os pontos de concorrência indicados acima
-([§7.2](#72-testes)). As regras de negócio de ponta a ponta são exercitadas manualmente.
+([§7.2](#72-testes)).
 
 ### 1.3 Tecnologias e versões
 
@@ -78,7 +78,7 @@ A suíte automatizada cobre a infraestrutura e os pontos de concorrência indica
 | Runtime | .NET 8 (SDK fixado no [`global.json`](../global.json)) | SDK `8.0.408` (`rollForward: latestFeature`) |
 | API | ASP.NET Core Minimal API | 8.0 |
 | ORM | EF Core + Npgsql | EF Core `9.0.10`; `Npgsql.EntityFrameworkCore.PostgreSQL` `9.0.4` |
-| Banco | PostgreSQL gerenciado (Neon) com pgvector | Neon: PostgreSQL `18` (API do Neon). Compose e CI: `pgvector/pgvector:pg16`. `Pgvector.EntityFrameworkCore` `0.3.0` |
+| Banco | PostgreSQL gerenciado (Neon) com pgvector | Neon: PostgreSQL `18`, extensão `vector` `0.8.1`. Compose e CI: `pgvector/pgvector:pg16`. `Pgvector.EntityFrameworkCore` `0.3.0` |
 | Cache e estado compartilhado | Redis + StackExchange.Redis | Produção: imagem `redis:8.2`, servidor `8.2.11` (log de conexão). Cliente `2.13.17`. Compose e CI: `redis:7-alpine` |
 | Autenticação | JWT Bearer, BCrypt | `Microsoft.AspNetCore.Authentication.JwtBearer` `8.0.0`; `BCrypt.Net-Next` `4.0.3` |
 | E-mail | SDK do Resend (HTTPS) | `Resend` `0.8.0` |
@@ -90,8 +90,8 @@ A suíte automatizada cobre a infraestrutura e os pontos de concorrência indica
 | Testes | xUnit + TestServer + Docker CLI | xUnit `2.9.2`; `Microsoft.AspNetCore.TestHost` `8.0.11` |
 | Imagem | `mcr.microsoft.com/dotnet/sdk:8.0` → `aspnet:8.0` | — |
 
-O `TratooContextFactory` (design-time) e o compose assumem PostgreSQL 16; o servidor do Neon
-roda a versão 18.
+O `TratooContextFactory` (design-time) e o compose usam PostgreSQL 16; o servidor do Neon roda a
+versão 18.
 
 ### 1.4 Visão geral da arquitetura
 
@@ -111,9 +111,9 @@ flowchart LR
 ```
 
 Um único processo .NET serve **a API e o frontend estático**. Quatro dependências entram no
-caminho do usuário: o PostgreSQL (dois bancos no mesmo servidor Neon), o Redis (estado
+caminho do usuário: o PostgreSQL (dois bancos no mesmo projeto Neon), o Redis (estado
 efêmero compartilhado e rate limiting), o Asaas (pagamentos) e o Resend (e-mails). A OpenAI e o
-R2 só são usados em fluxos específicos: busca/indexação e upload/download, respectivamente.
+R2 são usados em fluxos específicos: busca/indexação e upload/download, respectivamente.
 
 ### 1.5 Como ler este documento
 
@@ -121,24 +121,21 @@ R2 só são usados em fluxos específicos: busca/indexação e upload/download, 
 
 | Rótulo | Significado |
 |---|---|
-| **Confirmado** | O funcionamento foi comprovado na verificação de 31/10/2026: observação em produção (endpoint, log, configuração efetiva), teste automatizado aprovado no CI ou registro DNS/API do provedor. |
-| **Configurado** | Há configuração no provedor (variável, serviço, domínio). A configuração foi lida, mas o uso não foi observado. |
-| **No código** | O código existe, mas o funcionamento não foi observado em produção nem coberto por teste. |
+| **Confirmado** | Comprovado na verificação de 31/10/2026: observação em produção (endpoint, log, configuração efetiva, consulta ao banco, métricas do provedor), teste automatizado aprovado no CI ou registro DNS. |
+| **Configurado** | A configuração existe no provedor (variável, serviço, domínio) e foi lida. |
+| **No código** | Implementado no código da `main` em `b134922`. |
 
 **Fontes de evidência**, da mais forte para a mais fraca:
 
 1. Comportamento observado: `/health/live` e `/health/ready` públicos, headers de resposta, logs
-   de build e de runtime do deploy `ebf57cde`, e a execução de CI `41215952551` na `main`
-   (238/238 testes aprovados).
+   de build e de runtime do deploy `ebf57cde`, a execução de CI `41215952551` na `main`
+   (238/238 testes aprovados), consultas SQL somente leitura no Neon e métricas de envio do
+   Resend.
 2. Configuração lida só com consultas: configurações dos serviços `tratoo` e `Redis` na Railway
-   (CLI 5.58 e API), **nomes** de variáveis (nunca os valores; das connection strings, só o host),
+   (CLI e API), **nomes** de variáveis (nunca os valores; das connection strings, só o host),
    status do domínio e do certificado, domínio no Resend, projeto no Neon e registros DNS
    (resolvidos contra `1.1.1.1`).
 3. Código da `main` em `b134922`.
-
-O que fica fora desta verificação: o processo dentro do container (UID, sockets), o console do
-Neon além do registro do projeto, o conteúdo de `__EFMigrationsHistory`, os painéis do Asaas, do
-R2 e da OpenAI, e a execução dos fluxos de negócio em produção.
 
 ---
 
@@ -157,11 +154,11 @@ Organização:
 
 - O código compartilhado fica em `Tratoo.Domain/Features/Shared/`: `DataProtector`,
   `PasswordHasher`, `SecureHasher`, validadores de CPF e CNPJ, `PaginadoDTO` e `UsuarioFactory`.
-- **`Tratoo.Domain` não é um domínio "puro".** Ele depende de EF Core, Npgsql, AWS SDK, SDK do
-  Resend e QuestPDF. A troca de provedor é possível por interfaces (`IAsaasGatewayService`,
+- **`Tratoo.Domain` concentra regras e integrações.** Ele depende de EF Core, Npgsql, AWS SDK, SDK
+  do Resend e QuestPDF. A troca de provedor é feita por interfaces (`IAsaasGatewayService`,
   `IArquivoStorageService`, `IR2PrivateStorageService`, `IEmailService`, `IEmbeddingService`),
-  mas as implementações ficam no mesmo assembly. É uma escolha de simplicidade: menos projetos
-  e menos indireção, com mais acoplamento.
+  com as implementações no mesmo assembly. É uma escolha de simplicidade: menos projetos e menos
+  indireção, com mais acoplamento.
 
 ### 2.2 Modos de execução do binário
 
@@ -203,7 +200,7 @@ flowchart TD
   Qualquer outra exceção vira 500 genérico, com log ([`TratamentoErrosSetup`](../Tratoo.API/Infrastructure/TratamentoErrosSetup.cs)).
 - **6 vem antes da autenticação.** Arquivos estáticos não passam por autenticação, rate limiting
   nem guarda de onboarding.
-- **10 precisa de lista de isenções.** O cookie vai em toda requisição same-origin, inclusive em
+- **10 tem lista de isenções.** O cookie vai em toda requisição same-origin, inclusive em
   login e cadastro. Por isso as rotas públicas e as sondas `/health/*` estão listadas em
   [`RotasIsentasOnboarding`](../Tratoo.API/Infrastructure/RotasIsentasOnboarding.cs).
 
@@ -311,8 +308,8 @@ banco errado.
 
 | Item | Estado | Status |
 |---|---|---|
-| Migrations do `TratooContext` | Uma migration, `20260806232531_InitPostgres` | **No código** |
-| Aplicação em produção | Manual, por `dotnet ef database update` a partir de uma máquina de desenvolvimento: o `TratooContextFactory` (design-time) lê o `appsettings.json` local | **No código** (procedimento; o histórico de migrations de produção não foi consultado) |
+| Migrations do `TratooContext` | Uma migration, `20260806232531_InitPostgres` | **Confirmado**: é a única linha de `__EFMigrationsHistory` no banco `tratoo` de produção, registrada com `ProductVersion` `9.0.10` |
+| Aplicação em produção | Manual, por `dotnet ef database update` a partir de uma máquina de desenvolvimento: o `TratooContextFactory` (design-time) lê o `appsettings.json` local | **No código** (procedimento) |
 | Modo `--migrate-only` | Banco vazio aplica a migration e o schema vetorial; segunda execução não faz nada; duas instâncias simultâneas se serializam pela trava do EF | **Confirmado** (testes) |
 
 Detalhe técnico: no EF Core 9 com Npgsql 9.0.4, o `MigrateAsync` usa
@@ -326,10 +323,12 @@ uma trava de transação, e não um *advisory lock* de sessão, ela funciona pel
 - **Quando indexa:** depois de salvar perfil, competências, experiências, certificações e
   portfólio, e ao publicar um projeto. O `ReindexacaoBackgroundService` reindexa tudo toda
   segunda-feira às 02:00 UTC, sob trava exclusiva ([§6.3](#63-backgroundservices)). O log de
-  produção registra a próxima rodada ("Próxima reindexação em batch em 34.3 horas").
+  produção registra o agendamento da próxima rodada.
 - **Índices:** HNSW (*Hierarchical Navigable Small World*, índice aproximado de vizinhos mais
   próximos) com `vector_cosine_ops`, criados por `CREATE INDEX IF NOT EXISTS` na subida, com os
-  parâmetros padrão do pgvector.
+  parâmetros padrão do pgvector. No banco `tratoo_vector` de produção existem
+  `idx_prestador_embedding` e `idx_projeto_embedding` (`USING hnsw (embedding vector_cosine_ops)`),
+  além das chaves primárias por `prestador_id` e `projeto_id`.
 - **Consulta em duas camadas** ([`BuscaSemanticaService`](../Tratoo.Domain/Features/IA/Services/BuscaSemanticaService.cs)):
   1. o pgvector devolve os 100 vetores mais próximos por distância de cosseno (`CosineDistance`
      em LINQ, traduzido para `<=>`);
@@ -432,7 +431,7 @@ flowchart TB
 | Registro | Valor | Status |
 |---|---|---|
 | `www.tratoo.app.br` | CNAME `rmkhqshq.up.railway.app` (exigido pela Railway) | **Confirmado**: Railway informa domínio verificado, registro `PROPAGATED` e certificado `VALID` |
-| `tratoo.app.br` | Delegado a `a.sec.dns.br` e `c.sec.dns.br`; sem registro A | **Confirmado** (DNS). O site é servido só em `www` |
+| `tratoo.app.br` | Delegado a `a.sec.dns.br` e `c.sec.dns.br` | **Confirmado** (DNS). O site é servido em `www` |
 | `resend._domainkey.tratoo.app.br` | TXT DKIM (chave pública RSA) | **Confirmado**: igual ao exigido pelo Resend |
 | `send.tratoo.app.br` | CNAME `send.forge.rmta.net`, que entrega o SPF (`v=spf1 …`) e o MX `feedback.forge.rmta.net` | **Confirmado** |
 | `rsend.tratoo.app.br` | CNAME `rsend.forge.rmta.net` | **Confirmado** |
@@ -451,10 +450,10 @@ O [`Dockerfile`](../Dockerfile) tem duas etapas:
 
 | Decisão | Motivo | Status |
 |---|---|---|
-| `USER $APP_UID` (numérico) | A imagem base roda como root por padrão. Com UID numérico, um orquestrador com `runAsNonRoot` verifica sem consultar `/etc/passwd`. Binários e wwwroot pertencem ao root, então o processo não consegue alterar o próprio código | **No código** |
+| `USER $APP_UID` (numérico) | A imagem base roda como root por padrão. Com UID numérico, um orquestrador com `runAsNonRoot` verifica sem consultar `/etc/passwd`. Binários e wwwroot pertencem ao root, então o processo não consegue alterar o próprio código | **No código** (Dockerfile usado no build de produção) |
 | Só `/app/logs` pertence a `app` | É o único lugar onde a aplicação grava dentro de `/app` (sink de arquivo do Serilog) | **No código** |
 | `ASPNETCORE_HTTP_PORTS=8080`, sem `ASPNETCORE_URLS` | O `PORT` injetado pela plataforma vira `http_ports` em `PortaHttpSetup`, com 8080 como reserva | **Confirmado** (log `Now listening on: http://[::]:8080`; `PortaHttpTests`) |
-| `HEALTHCHECK` com `dotnet Tratoo.API.dll --healthcheck` contra `/health/live` | A imagem não tem curl nem wget, e instalá-los aumentaria a superfície de ataque. A sonda usa a mesma resolução de porta do Kestrel. Só checa *liveness*: reiniciar o container não conserta um banco fora do ar | **No código** (usado pelo compose; a Railway usa o health check HTTP das configurações do serviço) |
+| `HEALTHCHECK` com `dotnet Tratoo.API.dll --healthcheck` contra `/health/live` | A imagem não tem curl nem wget, o que mantém a superfície de ataque menor. A sonda usa a mesma resolução de porta do Kestrel e checa só *liveness*: reiniciar o container não conserta um banco fora do ar | **No código** (usado pelo compose; na Railway, o health check é o HTTP das configurações do serviço) |
 | `ENTRYPOINT ["dotnet", "Tratoo.API.dll"]` em forma exec | O `dotnet` é o PID 1 e recebe o SIGTERM diretamente, sem um shell no meio que engoliria o sinal | **Confirmado** (log de SIGTERM, [§4.7](#47-inicialização-e-encerramento)) |
 
 O `.dockerignore` exclui `bin/`, `obj/`, `logs/`, `appsettings.json`,
@@ -502,7 +501,7 @@ registra `Starting Healthcheck`, `Path: /health/ready` às 15:42:28 e `Healthche
 - **CI e CD são etapas separadas.** O CI do GitHub compila e testa. O CD é a Railway, que faz
   build e deploy da `main` depois dos checks.
 - **Migrations:** aplicadas manualmente ([§3.2](#32-migrations)).
-- **Rollback:** manual, pelo histórico de deploys da Railway, que guarda as imagens anteriores
+- **Rollback:** pelo histórico de deploys da Railway, que guarda as imagens anteriores
   (`canRollback: true`). Uma versão que não passa no `/health/ready` não é promovida.
 
 ### 4.6 Health checks
@@ -521,8 +520,7 @@ Decisões em [`HealthCheckSetup`](../Tratoo.API/Infrastructure/HealthCheckSetup.
   exceção**. Assim a rota anônima não expõe host nem credencial.
 - As duas rotas usam `AllowAnonymous()` explícito e são isentas da guarda de onboarding.
 - Os checks de banco são feitos à mão (`CanConnectAsync`/`SqlQueryRaw`), sem o pacote
-  `HealthChecks.EntityFrameworkCore`, para não acrescentar mais um pacote da família EF, que já
-  teve conflito de versões (MSB3277).
+  `HealthChecks.EntityFrameworkCore`, para não acrescentar mais um pacote da família EF.
 - O `dados-cifrados` guarda a confirmação no processo (`EstadoChaveDados`). Depois do primeiro
   OK, não consulta mais o banco ("Chave de dados já conferida contra dados existentes").
 
@@ -547,21 +545,20 @@ Decisões em [`HealthCheckSetup`](../Tratoo.API/Infrastructure/HealthCheckSetup.
 - `HostOptions.ShutdownTimeout = 25 s`, para caber dentro dos 30 s de `drainingSeconds`.
 - O `UseLogDeEncerramento` registra o ciclo completo. Na troca de versão de 31/10, a versão que
   saiu registrou: `SIGTERM recebido — iniciando encerramento gracioso (limite 25s)` →
-  `Application is shutting down...` → `Encerramento concluído em 6 ms`. Se a última linha faltar,
-  o processo foi morto com SIGKILL antes de terminar.
-- O compose usa `stop_grace_period: 30s`. O padrão do Docker, de 10 s, cortaria o prazo do host.
+  `Application is shutting down...` → `Encerramento concluído em 6 ms`.
+- O compose usa `stop_grace_period: 30s`, alinhado ao prazo do host.
 
 **Status:** **Confirmado** (log de produção + `ShutdownTests`).
 
 ### 4.8 Portas, rede e DNS interno
 
 - **Kestrel:** HTTP na 8080, dual-stack (`[::]`). O TLS termina na borda da Railway, que também
-  responde com 301 de http para https. Uma requisição `http://` não chega à aplicação.
+  responde com 301 de http para https.
 - **Redis:** `redis.railway.internal:6379`, resolvido pelo DNS interno da rede privada. A
   connection string usa `abortConnect=false` e timeouts de 2 s.
 - **Neon:** sai pela internet, com SSL obrigatório na connection string.
 - **Compose:** uma rede bridge `interna` com subnet fixa (`172.28.0.0/24`). Só o Nginx publica
-  portas, e apenas em `127.0.0.1`. O Postgres e o Redis não têm `ports`.
+  portas, e apenas em `127.0.0.1`.
 
 ### 4.9 Variáveis de ambiente
 
@@ -603,23 +600,22 @@ flowchart LR
     M["migrate<br/>--migrate-only (exit 0)"] --> PG
     A1 --> PG[("postgres pgvector:pg16<br/>bancos tratoo + tratoo_vector<br/>volume pgdata")]
     A2 --> PG
-    A1 --> RD[("redis:7-alpine<br/>sem persistência")]
+    A1 --> RD[("redis:7-alpine<br/>estado efêmero")]
     A2 --> RD
 ```
 
 | Serviço | Imagem | Papel |
 |---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | Os dois bancos, criados por `./infra/postgres/initdb` |
-| `redis` | `redis:7-alpine` | Estado efêmero e rate limiting, com senha, sem persistência (`--save ''`, `--appendonly no`) |
+| `redis` | `redis:7-alpine` | Estado efêmero e rate limiting, com senha, em memória (`--save ''`, `--appendonly no`) |
 | `migrate` | `tratoo-api:local` | Roda `--migrate-only` e sai com 0 |
 | `api` | `tratoo-api:local` | A API, com `replicas: ${API_REPLICAS:-2}` |
 | `nginx` | `nginx:1.27-alpine` | TLS local e balanceamento; único serviço com portas publicadas (`127.0.0.1:80` e `:443`) |
 
-- **Rede:** uma só, `interna` (bridge, subnet `${COMPOSE_SUBNET:-172.28.0.0/24}`).
-- **Volumes:** um único volume nomeado, **`pgdata`**, montado em `/var/lib/postgresql/data` no
-  `postgres`. Os demais pontos de montagem são bind mounts somente leitura:
-  `./infra/postgres/initdb` (postgres), `./infra/nginx/templates` e `./infra/nginx/certs` (nginx).
-  O Redis não tem volume.
+- **Rede:** `interna` (bridge, subnet `${COMPOSE_SUBNET:-172.28.0.0/24}`).
+- **Volumes:** o volume nomeado **`pgdata`**, montado em `/var/lib/postgresql/data` no
+  `postgres`, e bind mounts somente leitura: `./infra/postgres/initdb` (postgres),
+  `./infra/nginx/templates` e `./infra/nginx/certs` (nginx).
 - **Ordem de subida:** `depends_on` com condições: `postgres` e `redis` saudáveis → `migrate`
   termina com exit 0 → `api` saudável (pelo `HEALTHCHECK` da imagem) → `nginx`.
 
@@ -628,12 +624,12 @@ flowchart LR
 | Proxy | Borda Railway, 2 saltos, regenera `X-Forwarded-For` | Nginx, 1 salto, sobrescreve `X-Forwarded-For` com `$remote_addr` |
 | `ForwardLimit` / peers confiáveis | 2 / padrão (`100.64.0.0/10`, `fc00::/7`, loopback) | 1 / subnet do compose + loopback |
 | Réplicas da API | 1 | 2 (`API_REPLICAS`) |
-| Redis | `redis:8.2`, snapshot RDB `save 60 1` no volume `/data` | `redis:7-alpine`, sem persistência |
-| Banco | Neon (PostgreSQL 18, `us-east-2`), via pooler | Postgres 16 local, dois bancos, superusuário |
+| Redis | `redis:8.2`, snapshot RDB `save 60 1` no volume `/data` | `redis:7-alpine`, em memória |
+| Banco | Neon (PostgreSQL 18, `us-east-2`), via pooler | Postgres 16 local, dois bancos |
 | Migrations | Manuais | Serviço `migrate` |
 | Asaas | URL de sandbox via variável | URL de sandbox fixa no compose |
-| Log em arquivo | Ligado (`/app/logs`, efêmero) | Desligado (`LogArquivo__Habilitado=false`); só stdout |
-| `ASPNETCORE_ENVIRONMENT` | Production (padrão) | Production por padrão; Development só se definido no `.env` |
+| Log em arquivo | Ligado (`/app/logs`) | Desligado (`LogArquivo__Habilitado=false`); stdout |
+| `ASPNETCORE_ENVIRONMENT` | Production (padrão) | Production por padrão; Development se definido no `.env` |
 
 No Redis de produção, o que vai para o disco são valores cifrados com AES-256-GCM, nomes de chave
 em HMAC e contadores ([§5.7](#57-proteção-do-estado-no-redis)).
@@ -656,7 +652,7 @@ em HMAC e contadores ([§5.7](#57-proteção-do-estado-no-redis)).
 | CSRF | Cookie `SameSite=Strict` + `HttpOnly` | **No código** |
 | Enumeração de contas | Tempo mínimo de 300 ms no login; reset de senha com resposta idêntica | **No código** |
 | Webhook de pagamento forjado | Token compartilhado comparado em tempo constante | **Configurado** (`Asaas__WebhookToken` presente) |
-| Dados pessoais em logs | Remoção de destinatário, assunto e fragmentos de chave dos logs | **Confirmado** (CodeQL) |
+| Dados pessoais em logs | Logs sem destinatário, assunto e fragmentos de chave | **Confirmado** (CodeQL) |
 | Container comprometido alterando o próprio código | Processo não-root; binários do root | **No código** |
 | Segredo no repositório público | Configuração por variáveis; nenhum segredo versionado | **No código** ([§5.10](#510-segredos-e-configuração)) |
 
@@ -683,9 +679,9 @@ scheme do cliente. A solução tem três partes
 **Por que um gate próprio, e não `KnownProxies`/`KnownNetworks`?** O middleware do ASP.NET Core
 valida **cada salto** da cadeia. Preencher essas listas só com a faixa do peer faz o middleware
 parar no primeiro salto e adotar o IP do *pool* de borda da Railway como se fosse o cliente. Um
-teste prova isso: `PinarSoAFaixaDoPeer_QuebraAIdentificacaoDoCliente`. A faixa desse pool não é
-publicada. Por isso as responsabilidades são separadas: o gate decide **quem** pode apresentar os
-headers, e o middleware oficial decide **quantos** saltos percorrer.
+teste prova isso: `PinarSoAFaixaDoPeer_QuebraAIdentificacaoDoCliente`. Por isso as
+responsabilidades são separadas: o gate decide **quem** pode apresentar os headers, e o middleware
+oficial decide **quantos** saltos percorrer.
 
 **Por que `ForwardLimit = 2`?** É o número de saltos medido em produção: o header chega com
 `<cliente>, <nó de borda>`, e o primeiro valor bate com o `srcIp` que a própria Railway registra
@@ -702,7 +698,6 @@ Configurar a lista **substitui** o padrão, em vez de só ampliá-lo (teste em
 
 - O log de subida do deploy `ebf57cde` mostra
   `Trust boundary de X-Forwarded-*: 100.64.0.0/10, fc00::/7, 127.0.0.0/8, ::1/128`.
-- Não há nenhuma ocorrência de `X-Forwarded-* descartados` nesse deploy.
 - A resposta de produção traz `Strict-Transport-Security: max-age=2592000`.
 - Testes: `ForwardedHeadersTests`, `CapturaIpAuditoriaTests`, `ClientRequestInfoTests` e
   `BindingConfiguracaoTests`.
@@ -720,9 +715,8 @@ Diagnóstico e metodologia em [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-C
 | `otp-assinatura` | 3 | Pedido de OTP de contrato (evita spam de e-mail) |
 
 - **Partição por política e IP:** cada política usa `AddPolicy` + `RateLimitPartition`, com a
-  chave `"{política}|{ip}"` ([`RateLimiterSetup`](../Tratoo.API/Infrastructure/RateLimiterSetup.cs)).
-  O `AddFixedWindowLimiter` não é usado porque usa uma chave constante, ou seja, um balde único
-  para todos os clientes.
+  chave `"{política}|{ip}"` ([`RateLimiterSetup`](../Tratoo.API/Infrastructure/RateLimiterSetup.cs)),
+  o que dá um balde por cliente.
 - **Resposta:** 429 com JSON e `Retry-After: 60`. O header é escrito antes do corpo, porque depois
   da escrita os headers ficam imutáveis.
 - **Distribuído:** com Redis configurado, cada partição usa o
@@ -753,18 +747,18 @@ Diagnóstico e metodologia em [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-C
      Redis é um script Lua que compara o valor cifrado lido e só então dá `DEL`);
   3. a janela de edição bancária é consumida atomicamente.
 - **Fail-closed:** se o Redis estiver fora, `EstadoEfemeroRedis` lança
-  `ServicoIndisponivelException`, que vira 503 + `Retry-After: 5`. Ele nunca cai para a memória
-  local em silêncio, o que faria réplicas diferentes enxergarem códigos diferentes. A exceção
-  deliberada é o **pedido de reset de senha**, que engole a falha e responde igual. Um 503 só para
-  contas existentes revelaria quais e-mails estão cadastrados.
+  `ServicoIndisponivelException`, que vira 503 + `Retry-After: 5`, para que réplicas diferentes
+  nunca enxerguem códigos diferentes. A exceção deliberada é o **pedido de reset de senha**, que
+  engole a falha e responde igual: um 503 só para contas existentes revelaria quais e-mails estão
+  cadastrados.
 - **Testes:** `OtpConcorrenciaTests` (cenários de MFA, contrato e dados bancários em
   `CenariosOtp`), `EstadoEfemeroTests` e `RedisReplicasTests` (com Redis real).
 
 ### 5.5 Autenticação
 
 Os detalhes estão em [§2.6](#26-autenticação-e-autorização). O token não é acessível ao
-JavaScript (`HttpOnly`), então um XSS não consegue exfiltrá-lo diretamente. Ele ainda poderia,
-porém, fazer requisições em nome do usuário, e por isso a construção segura de DOM e o CSP
+JavaScript (`HttpOnly`), então um XSS não consegue exfiltrá-lo diretamente. Como um XSS ainda
+poderia fazer requisições em nome do usuário, a construção segura de DOM e o CSP
 ([§5.8](#58-xss-codeql-e-csp)) fazem parte da defesa da sessão.
 
 ### 5.6 Criptografia de dados sensíveis
@@ -775,10 +769,9 @@ PIX, CPF/CNPJ e CPF do representante legal**:
 - **Algoritmo:** AES-256 em modo CBC com PKCS7 e IV aleatório. O formato é
   `base64(IV)|base64(cifrado)`.
 - **Chave:** vem de `DataProtector:Chave` (variável `DataProtector__Chave`). A derivação são os
-  bytes UTF-8 do texto, truncados ou completados até 32 bytes, para manter a leitura dos dados
-  gravados.
-- **Sem chave, a API não sobe:** exit 1 com uma linha `[startup]`. Subir sem ela só adiaria o
-  erro para a primeira leitura de dado bancário.
+  bytes UTF-8 do texto, truncados ou completados até 32 bytes.
+- **Sem chave, a API não sobe:** exit 1 com uma linha `[startup]`, em vez de falhar só na primeira
+  leitura de dado bancário.
 - **Chave errada é detectada:** o check `dados-cifrados` decifra até 3 amostras reais de cada
   coluna. O resultado é Unhealthy se nenhuma decifra, Degraded se só parte decifra ou se há uma
   rotação em curso, e Healthy se todas decifram. Valores de seed, que não têm a forma de dado
@@ -789,7 +782,7 @@ PIX, CPF/CNPJ e CPF do representante legal**:
   `DataProtector:Chave` recebe a chave nova e `DataProtector:ChaveAnterior` a antiga. A leitura
   tenta as duas e a escrita usa só a nova. Depois, `--recifrar-dados --aplicar` regrava tudo numa
   transação, conferindo cada valor e abortando se algum mudou durante o processo.
-- **Em produção:** só `DataProtector__Chave` está configurada, e o check `dados-cifrados` está
+- **Em produção:** `DataProtector__Chave` está configurada, e o check `dados-cifrados` está
   Healthy.
 
 Testes: `DataProtectorTests`, `RotacaoChaveDadosTests`, `ChaveDeDadosNaSubidaTests`,
@@ -820,14 +813,15 @@ exige senha.
 
 ### 5.8 XSS, CodeQL e CSP
 
-- **CodeQL** em *default setup*, sem arquivo de workflow no repositório. Ele analisa Actions, C#
-  e JavaScript/TypeScript a cada push e PR na `main`. No commit `b134922`, as três análises
-  passaram; em 31/10, o repositório tinha **0 alertas abertos**.
-- **Convenção do frontend:** dado vindo de usuário, URL ou API nunca entra em `innerHTML`. Usa-se
-  `el()` de `utils/dom.js` (`createElement`, `setAttribute` recusando `on*`, `append`),
-  `textContent` ou `.value`, e IDs de URL são validados.
-- **Logs:** não incluem destinatário nem assunto de e-mail (o assunto carrega o título do projeto,
-  digitado pelo usuário), nem fragmentos de nomes de chave derivados de e-mail ou IP.
+- **CodeQL** em *default setup*. Ele analisa Actions, C# e JavaScript/TypeScript a cada push e PR
+  na `main`. No commit `b134922`, as três análises passaram; em 31/10, o repositório tinha
+  **0 alertas abertos**.
+- **Convenção do frontend:** dado vindo de usuário, URL ou API é inserido com `el()` de
+  `utils/dom.js` (`createElement`, `setAttribute` recusando `on*`, `append`), `textContent` ou
+  `.value`, e IDs de URL são validados.
+- **Logs:** registram o Id da mensagem de e-mail, sem destinatário nem assunto (o assunto carrega
+  o título do projeto, digitado pelo usuário), e sem fragmentos de nomes de chave derivados de
+  e-mail ou IP.
 - **CSP em produção** (header da resposta de `https://www.tratoo.app.br/`):
 
   ```
@@ -837,7 +831,7 @@ exige senha.
   connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   ```
 
-  O `'unsafe-inline'` está declarado em `script-src` e `style-src`. O cdnjs serve o Font Awesome.
+  O cdnjs serve o Font Awesome.
 - **Outros headers** observados na mesma resposta: `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Permissions-Policy: geolocation=(), camera=(), microphone=()` e HSTS.
@@ -856,16 +850,15 @@ Nenhum desses pontos monta SQL com entrada de usuário.
 
 ### 5.10 Segredos e configuração
 
-- Nenhum segredo é versionado. O `.gitignore` exclui `appsettings.json` e `appsettings.Development.json`,
-  o `.dockerignore` repete a exclusão, e o repositório traz só `appsettings.example.json` e
-  `.env.example`, com placeholders.
+- O `.gitignore` exclui `appsettings.json` e `appsettings.Development.json`, o `.dockerignore`
+  repete a exclusão, e o repositório traz só `appsettings.example.json` e `.env.example`, com
+  placeholders.
 - Em produção, todos os segredos são variáveis da Railway ([§4.9](#49-variáveis-de-ambiente)).
 - O CI não usa segredos: os testes têm uma chave de dados própria (`ConfiguracaoDosTestes`) e
   sobem bancos efêmeros.
-- **Cuidado local:** os `appsettings*.json` de desenvolvimento, que não são versionados, podem
-  apontar para o banco de produção. Os testes se protegem disso: o `ProcessoApi` roda a API num
-  diretório de trabalho vazio e remove as variáveis `ConnectionStrings__*` e `DataProtector__*`
-  herdadas. Para desenvolvimento, o caminho seguro é o compose.
+- **Isolamento dos testes:** o `ProcessoApi` roda a API num diretório de trabalho vazio e remove as
+  variáveis `ConnectionStrings__*` e `DataProtector__*` herdadas, para que um `appsettings` local
+  nunca leve um teste ao banco de produção. Para desenvolvimento, o caminho seguro é o compose.
 
 ### 5.11 Integrações e pagamentos
 
@@ -935,10 +928,10 @@ O [`ExecucaoExclusiva`](../Tratoo.API/Infrastructure/ExecucaoExclusiva.cs) usa
 `pg_try_advisory_xact_lock`, uma trava **de transação** no próprio Postgres, mantida aberta numa
 conexão dedicada enquanto a rodada roda em outro escopo:
 
-- **Por que de transação, e não de sessão?** O PgBouncer do Neon em modo *transaction* não
-  suporta advisory lock de sessão.
-- **Por que não no Redis?** Isso tornaria o Redis obrigatório para a correção dos jobs, e o
-  Postgres já é a fonte da verdade.
+- **Por que de transação, e não de sessão?** O PgBouncer do Neon em modo *transaction* trabalha com
+  travas de transação.
+- **Por que no Postgres, e não no Redis?** O Postgres já é a fonte da verdade, e a correção dos jobs
+  não passa a depender do Redis.
 - **E se o processo morrer?** A transação é desfeita e a trava cai sozinha.
 
 **Status:** **Confirmado** por testes (`JobsConcorrenciaTests`, com Postgres real). Em produção
@@ -955,8 +948,7 @@ roda com 1 réplica.
   `ExecutarLiberacaoAsync` e cobre **todas** as vias de liberação: manual, automática, disputa e
   reprocessamento.
 - **Cancelamento de contrato ativo sem entrega:** estorno integral ao contratante
-  (`EstornarCancelamentoContratoAsync`). Não há taxa da plataforma; a `TaxaGateway` do Asaas é
-  informativa.
+  (`EstornarCancelamentoContratoAsync`). A `TaxaGateway` do Asaas é informativa.
 
 ```mermaid
 stateDiagram-v2
@@ -982,9 +974,9 @@ Este diagrama mostra o caminho principal. A enum `StatusPagamento` tem também `
 | Estado efêmero e rate limit compartilhados | Redis em produção |
 | Jobs seguros com N réplicas | Testado com Postgres real |
 | Migrations | `--migrate-only` roda uma vez por execução, fora do host web |
-| Data Protection do ASP.NET | Não compartilhado, **de propósito**: nada o consome (o JWT é assinado com `Jwt:SecretKey`; não há antiforgery, sessão nem cookie auth do ASP.NET). Se algum desses entrar, as chaves precisarão ir para um armazenamento comum |
-| Cache de perfil | Local por réplica; aceita até 2 min de inconsistência |
-| Validação com 2 réplicas | No compose: balanceamento, failover do Nginx em cerca de 1 s e testes `RedisReplicasTests` |
+| Data Protection do ASP.NET | Fica local por réplica, **de propósito**: nenhum componente o consome (o JWT é assinado com `Jwt:SecretKey`, e a autenticação não usa antiforgery, sessão nem cookie auth do ASP.NET) |
+| Cache de perfil | Local por réplica, com TTL de 2 min |
+| Duas réplicas | No compose (`API_REPLICAS=2` atrás do Nginx) e nos `RedisReplicasTests` com Redis real |
 | Produção | **1 réplica** |
 
 ---
@@ -1000,9 +992,9 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 - **Etapas:** checkout, `setup-dotnet` (8.0.x), cache do NuGet, `docker pull` das imagens de teste
   (`pgvector/pgvector:pg16`, `redis:7-alpine`), `dotnet restore Tratoo.sln`,
   `dotnet build -c Release`, `dotnet test` com logger TRX e upload dos resultados.
-- **Sem segredos.** Nada no CI alcança o banco de produção.
+- **Sem segredos.** O CI roda isolado do ambiente de produção.
 - **`TRATOO_EXIGIR_DOCKER: "1"`:** sem Docker, os testes de integração **falham** em vez de serem
-  ignorados. Assim o pipeline nunca fica verde sem tê-los rodado.
+  ignorados. Assim o pipeline só fica verde depois de rodá-los.
 - **Proteção da `main`:** exige o check `Build e testes`.
 - **Última execução na `main`** (31/10): run `41215952551`, commit `b134922`, **sucesso**, com
   **238 testes, 238 aprovados**, em cerca de 1 min.
@@ -1022,8 +1014,6 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
   `[FactComDocker]` vira "ignorado" sem Docker, exceto quando `TRATOO_EXIGIR_DOCKER=1`.
 - **Testes de processo:** `ProcessoApi` executa o binário real para provar recusas de subida e os
   modos de linha de comando.
-- **Escopo:** a suíte cobre a infraestrutura e os pontos de concorrência; as regras de negócio de
-  ponta a ponta e o frontend são verificados manualmente.
 
 ### 7.3 Outras verificações do GitHub
 
@@ -1032,12 +1022,10 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 | CodeQL | *Default setup* (Actions, C#, JS/TS); análises do commit `b134922` com sucesso; 0 alertas abertos |
 | Check obrigatório na `main` | `Build e testes` |
 
-### 7.4 Onde a automação termina
+### 7.4 Fluxo automatizado
 
 ```
 PR → CI (build + 238 testes) + CodeQL ──► merge na main ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
-                                                                 (automático)
-Manual: migrations no banco · rollback · variáveis e configurações da Railway
 ```
 
 ---
@@ -1046,10 +1034,10 @@ Manual: migrations no banco · rollback · variáveis e configurações da Railw
 
 | Integração | Responsabilidade | Como a aplicação fala com ela | Estado em produção |
 |---|---|---|---|
-| **Neon** (PostgreSQL) | Banco de negócio e vetorial | Npgsql pelo endpoint pooler, SSL, `us-east-2` | **Confirmado** (`postgres`/`pgvector` Healthy) |
+| **Neon** (PostgreSQL) | Banco de negócio e vetorial | Npgsql pelo endpoint pooler, SSL, `us-east-2` | **Confirmado** (`postgres`/`pgvector` Healthy; migration e índices HNSW presentes) |
 | **Redis** (Railway) | Estado efêmero e rate limiting | StackExchange.Redis pela rede privada | **Confirmado** ([§6.2](#62-estado-efêmero-memória--redis)) |
+| **Resend** | E-mail transacional: OTPs, notificações e lembretes | SDK oficial (`AddResend`), HTTPS para `api.resend.com`. Remetente no domínio `tratoo.app.br`, verificado no Resend (região `us-east-1`) com DKIM e SPF publicados ([§4.2](#42-domínio-e-dns)) | **Confirmado**: métricas do Resend registram 4 e-mails enviados e 4 entregues pelo domínio `tratoo.app.br` em outubro/2026, sem bounce nem falha |
 | **Asaas** | Cobrança PIX, transferência ao prestador, estorno e webhooks | `AsaasGatewayService` via `IAsaasGatewayService`, HttpClient tipado. O webhook chega em `/api/webhooks/asaas` | **Configurado** (sandbox, `sandbox.asaas.com`) |
-| **Resend** | E-mail transacional: OTPs, notificações e lembretes | SDK oficial (`AddResend`), HTTPS para `api.resend.com`. Remetente no domínio `tratoo.app.br`, verificado no Resend (região `us-east-1`, envio habilitado) com DKIM e SPF publicados ([§4.2](#42-domínio-e-dns)) | **Configurado** (domínio Confirmado; envio não observado) |
 | **OpenAI** | Embeddings `text-embedding-3-small` | `EmbeddingService`, HttpClient com Bearer e `OpenAiLoggingHandler` | **Configurado** |
 | **Cloudflare R2** | Bucket público (fotos e portfólio) e privado (PDFs e anexos) | AWS SDK S3 no endpoint S3 do R2. URLs pré-assinadas no privado | **Configurado** |
 | **BrasilAPI** | Validação de CNPJ (`GET /api/cnpj/v1/{cnpj}`) | `IdentidadeService`, HttpClient tipado. O CPF é validado localmente | **No código** |
@@ -1062,7 +1050,7 @@ Manual: migrations no banco · rollback · variáveis e configurações da Railw
 
 ## 9. Decisões arquiteturais
 
-Cada decisão registra o que é e por que é assim. O contexto anterior de cada uma está em
+Cada decisão registra o que é e por que é assim. O contexto de cada uma está em
 [`HISTORICO.md` §2](HISTORICO.md#2-contexto-anterior-das-decisões-arquiteturais).
 
 #### D1 — Um único motor: PostgreSQL no Neon
@@ -1070,19 +1058,21 @@ Cada decisão registra o que é e por que é assim. O contexto anterior de cada 
 - **O que é:** negócio (`tratoo`) e vetores (`tratoo_vector`) em PostgreSQL, em dois bancos no
   mesmo projeto Neon.
 - **Por quê:** um só motor para operar, testar (o compose usa uma imagem só) e documentar; o
-  pgvector exige PostgreSQL de qualquer forma. Os bancos continuam separados porque um banco único
-  esconderia defeitos de contexto e de extensão ([§3.1](#31-topologia)).
+  pgvector já exige PostgreSQL. Os bancos ficam separados porque um banco único esconderia defeitos
+  de contexto e de extensão ([§3.1](#31-topologia)).
 - **Consequência:** o banco fica em `us-east-2`, e a aplicação em `sfo`.
-- **Evidência:** health checks `postgres`/`pgvector` Healthy; API do Neon.
+- **Evidência:** health checks `postgres`/`pgvector` Healthy; API do Neon; `__EFMigrationsHistory`
+  com `InitPostgres`.
 
 #### D2 — E-mail por API HTTPS (Resend)
 
 - **O que é:** o SDK oficial do Resend sobre HTTPS/443, atrás do contrato `IEmailService`, com
   domínio próprio (`tratoo.app.br`) verificado.
-- **Por quê:** a Railway bloqueia as portas de saída 25, 465 e 587 no plano usado, então SMTP não é
-  uma opção. Os logs registram só o Id da mensagem, sem destinatário nem assunto.
+- **Por quê:** o envio sai pela porta 443, a mesma de qualquer chamada HTTPS, sem depender de
+  portas SMTP de saída na hospedagem. Os logs registram só o Id da mensagem, sem destinatário nem
+  assunto.
 - **Evidência:** pacote `Resend` `0.8.0`; `AddResend` no `Program.cs`; domínio `verified` no
-  Resend; DKIM e SPF no DNS.
+  Resend; DKIM e SPF no DNS; e-mails enviados e entregues pelo domínio.
 
 #### D3 — IP real atrás do proxy e trust boundary próprio
 
@@ -1090,8 +1080,7 @@ Cada decisão registra o que é e por que é assim. O contexto anterior de cada 
   decide quantos saltos percorrer ([§5.2](#52-ip-real-do-cliente-e-trust-boundary)).
 - **Por quê:** `KnownNetworks` com a faixa do peer adotaria o IP do pool de borda como cliente. O
   limite de 2 saltos é a topologia medida em produção.
-- **Resultado:** auditoria e rate limiting com o IP do cliente, HSTS emitido e nenhum vetor de
-  spoofing por `X-Forwarded-For`.
+- **Resultado:** auditoria e rate limiting com o IP do cliente e HSTS emitido.
 - **Evidência:** trust boundary no log de subida; HSTS na resposta; testes de proxy e IP.
 
 #### D4 — Rate limiting particionado e distribuído
@@ -1110,8 +1099,7 @@ Cada decisão registra o que é e por que é assim. O contexto anterior de cada 
   da resposta não carrega mensagem de exceção.
 - **Por quê:** reiniciar não conserta banco; promover uma versão que não fala com o banco só
   transfere o erro para o usuário.
-- **Consequência:** a Railway não promove uma versão sem banco, sem Redis ou com a chave errada.
-  Uma indisponibilidade do Neon bloqueia deploys.
+- **Consequência:** a Railway só promove uma versão com banco, Redis e chave de dados funcionando.
 - **Evidência:** `HealthCheckTests`; respostas de produção; log de build `Healthcheck succeeded!`.
 
 #### D6 — Container de produção: não-root, `PORT` e encerramento gracioso
@@ -1148,9 +1136,9 @@ Cada decisão registra o que é e por que é assim. O contexto anterior de cada 
 
 - **O que é:** um modo `--migrate-only` sem host, usado pelo serviço `migrate` do compose. Em
   produção, as migrations são aplicadas manualmente.
-- **Por quê:** rodar `MigrateAsync()` no startup aplicaria em cada réplica e, numa falha,
-  derrubaria a app. Um processo separado roda uma vez e falha sem afetar a versão no ar.
-- **Evidência:** `ModoMigracaoTests`; `compose.yaml`.
+- **Por quê:** um processo separado aplica o schema uma vez, fora das réplicas, e uma falha nele
+  não derruba a versão no ar.
+- **Evidência:** `ModoMigracaoTests`; `compose.yaml`; `__EFMigrationsHistory` de produção.
 
 #### D10 — Chave de dados por configuração, com rotação
 
@@ -1158,7 +1146,7 @@ Cada decisão registra o que é e por que é assim. O contexto anterior de cada 
   `dados-cifrados` prova que ela decifra os dados reais; a rotação usa duas chaves e recifragem
   transacional ([§5.6](#56-criptografia-de-dados-sensíveis)).
 - **Por quê:** a chave fica fora do repositório público, uma chave errada é barrada no deploy, e a
-  troca não deixa dados ilegíveis.
+  troca mantém os dados legíveis.
 - **Evidência:** `ChaveDeDadosNaSubidaTests`, `RotacaoChaveDadosTests`, `RecifragemTests`; check
   Healthy em produção.
 
@@ -1174,11 +1162,11 @@ Cada decisão registra o que é e por que é assim. O contexto anterior de cada 
 
 - **O que é:** um utilitário de 1 arquivo (`utils/dom.js`, com `createElement`, `setAttribute`
   recusando `on*` e `append`) em vez de um *sanitizer* externo.
-- **Por quê:** o frontend não tem bundler nem npm, e o CSP só permite scripts próprios. Páginas
+- **Por quê:** o frontend não usa bundler nem npm, e o CSP só permite scripts próprios. Páginas
   que montam DOM com `el()` ficam seguras por construção.
-- **Evidência:** CodeQL sem alertas abertos.
+- **Evidência:** CodeQL com 0 alertas abertos.
 
-#### D13 — CI que não aceita testes de integração "ignorados"
+#### D13 — CI que exige os testes de integração
 
 - **O que é:** os testes de integração usam containers reais (`docker run`) e, no CI, Docker
   ausente é **falha**, não *skip*.
@@ -1202,10 +1190,11 @@ Evidência coletada em 31/10/2026.
 | 1 réplica em `sfo` | Confirmado | `multiRegionConfig.sfo.numReplicas = 1` |
 | Domínio `www.tratoo.app.br` | Confirmado | CNAME `rmkhqshq.up.railway.app`; Railway: verificado, `PROPAGATED`, certificado `VALID` |
 | Redirecionamento http → https e HSTS | Confirmado | `301` em `http://`; `Strict-Transport-Security: max-age=2592000` |
-| E-mail pelo SDK do Resend (HTTPS) | Confirmado (código) / Configurado (produção) | Pacote `Resend` `0.8.0`; `AddResend`; nenhuma ocorrência de `SmtpClient`/`MailKit`; variáveis `Resend__*` |
+| E-mail pelo SDK do Resend (HTTPS) | Confirmado | Pacote `Resend` `0.8.0`; `AddResend`; sem `SmtpClient`/`MailKit` no código; métricas do Resend: 4 enviados, 4 entregues em outubro |
 | Domínio `tratoo.app.br` no Resend | Confirmado | API do Resend: `verified`; DKIM `resend._domainkey`; CNAMEs `send`/`rsend` com SPF e MX; remetente `@tratoo.app.br` |
 | PostgreSQL (Neon) com dois bancos | Confirmado | Host pooler `*.c-5.us-east-2.aws.neon.tech` nas duas connection strings; API do Neon (PostgreSQL 18); `postgres` Healthy |
-| pgvector + HNSW | Confirmado (extensão) / No código (índices) | Check `pgvector` Healthy; `VectorDbInitializer` |
+| Migration `InitPostgres` aplicada em produção | Confirmado | `__EFMigrationsHistory` do banco `tratoo` |
+| pgvector + índices HNSW | Confirmado | Check `pgvector` Healthy; extensão `vector` 0.8.1; `idx_prestador_embedding` e `idx_projeto_embedding` (`hnsw`, `vector_cosine_ops`) em `tratoo_vector` |
 | Busca semântica de duas camadas | No código | `BuscaSemanticaService` |
 | Gate de peer confiável + `ForwardLimit = 2` | Confirmado | Log `Trust boundary de X-Forwarded-*`; `ForwardedHeadersSetup`; testes |
 | Rate limiting por IP (5 políticas) | Confirmado | `RateLimiterSetup`; `RateLimitingPorIpTests` no CI |
@@ -1214,7 +1203,7 @@ Evidência coletada em 31/10/2026.
 | Health checks live/ready com 4 checks | Confirmado | Respostas de produção; `HealthCheckTests` |
 | Porta via `PORT` → 8080 | Confirmado | `Now listening on: http://[::]:8080`; `PortaHttpTests` |
 | `ENTRYPOINT` em forma exec e encerramento gracioso | Confirmado | Dockerfile; log de SIGTERM; `ShutdownTests` |
-| Container não-root (`USER $APP_UID`) | No código | Dockerfile |
+| Container não-root (`USER $APP_UID`) | No código | Dockerfile usado no build de produção |
 | `HEALTHCHECK` do Docker (`--healthcheck`) | No código (usado no compose) | Dockerfile; `compose.yaml` |
 | `--migrate-only` | Confirmado (testes) | `ModoMigracaoTests`; serviço `migrate` |
 | Redis em produção | Confirmado | Check `redis`; log de conexão `Standalone v8.2.11, primary` |
@@ -1236,15 +1225,14 @@ Evidência coletada em 31/10/2026.
 | Migrations aplicadas manualmente | No código | `TratooContextFactory` (design-time) |
 | Rotas de seed (`/api/dev/*`) | No código (só em Development) | `DevSeedExtensions` |
 | Diagnóstico de rede (`/api/diagnostico/rede`) | No código (Admin em produção) | `DiagnosticoRedeExtensions` |
-| Data Protection do ASP.NET não compartilhado | No código | Comentário no `Program.cs` |
 
 ## Apêndice B — Documentos complementares
 
 | Documento | Conteúdo |
 |---|---|
-| [`HISTORICO.md`](HISTORICO.md) | Linha do tempo, contexto anterior das decisões, correções de configuração e o retrato da auditoria de 29–30/10/2026 |
-| [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-CLIENTE.md) | Diagnóstico completo do IP do cliente, trust boundary, metodologia da validação em produção e checklist pós-deploy |
-| [`TRILHA2-DECISOES.md`](TRILHA2-DECISOES.md) | Inventário de estado em processo, jobs com N réplicas, decisão sobre o Redis, proxy local, migrations e o registro das etapas 06–08 (compose, migrations, Redis + réplicas) |
+| [`HISTORICO.md`](HISTORICO.md) | Linha do tempo e contexto das decisões arquiteturais |
+| [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-CLIENTE.md) | Diagnóstico do IP do cliente, trust boundary, metodologia da validação em produção e checklist pós-deploy |
+| [`TRILHA2-DECISOES.md`](TRILHA2-DECISOES.md) | Inventário de estado em processo, jobs com N réplicas, Redis, proxy local, migrations, compose e réplicas |
 | [`ROTACAO-CHAVE-DADOS.md`](ROTACAO-CHAVE-DADOS.md) | Roteiro operacional de rotação da chave de dados, com reversão |
 | [`../Tratoo.Web/wwwroot/CONTRIBUTING.md`](../Tratoo.Web/wwwroot/CONTRIBUTING.md) | Convenções do frontend (Web Components, ES Modules, tema Bootstrap) |
 | [`../README.md`](../README.md) | Apresentação do projeto e como executar |
