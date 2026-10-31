@@ -58,7 +58,7 @@ Os rótulos de status seguem a legenda do [§1.5](#15-como-ler-este-documento).
 
 | Área | O que existe | Status |
 |---|---|---|
-| Cadastro e identidade | Cadastro em duas etapas, com o código de e-mail guardado em estado efêmero. Onboarding obrigatório. CPF/CNPJ cifrado e validado (o CNPJ via BrasilAPI). Consentimento e auditoria (`ConsentLog`, `AuditLog`). | No código |
+| Cadastro e identidade | Cadastro em duas etapas, com o código de e-mail guardado em estado efêmero. Onboarding obrigatório. CPF/CNPJ cifrado e validado localmente pelos dígitos verificadores (`ValidadorCNPJ.Validar` para CNPJ). Consentimento e auditoria (`ConsentLog`, `AuditLog`). | No código |
 | Login | JWT (token assinado que carrega a identidade do usuário) em cookie `HttpOnly`, MFA opcional por e-mail, tempo de resposta equalizado contra enumeração de contas. | No código; o OTP de MFA é Confirmado por testes |
 | Projetos e propostas | Rascunho e publicação de projetos, busca com filtros, convites, proposta com até 10 versões de negociação, chat por polling (3 s com a aba ativa, 30 s em segundo plano). | No código |
 | Contratos | Gerados a partir da proposta aceita. Assinatura com OTP (10 min, 5 tentativas), hash SHA-256, snapshot imutável e PDF (QuestPDF) num bucket privado, com URL pré-assinada de 15 min. | No código; o OTP de assinatura é Confirmado por testes |
@@ -107,7 +107,7 @@ flowchart LR
     A -->|"HTTPS api.resend.com"| RS["Resend<br/>domínio tratoo.app.br"]
     A --> OA["OpenAI<br/>embeddings"]
     A --> R2["Cloudflare R2<br/>bucket público e privado"]
-    A --> BR["BrasilAPI (CNPJ)<br/>ViaCEP (endereço)"]
+    A --> BR["ViaCEP<br/>endereço pelo CEP"]
 ```
 
 Um único processo .NET serve **a API e o frontend estático**. Quatro dependências entram no
@@ -146,14 +146,14 @@ R2 são usados em fluxos específicos: busca/indexação e upload/download, resp
 | Projeto | Tipo | Responsabilidade |
 |---|---|---|
 | [`Tratoo.API`](../Tratoo.API) | ASP.NET Core (Minimal API) | Host HTTP. Contém `Program.cs` (composição e pipeline), 18 grupos de endpoints em `EndPoints/*Extensions.cs`, `Infrastructure/` (proxy, rate limiting, Redis, health checks, porta, encerramento, modos de linha de comando), os `BackgroundServices` e os DTOs de entrada em `Requests/`. |
-| [`Tratoo.Domain`](../Tratoo.Domain) | Class library | Regras de negócio organizadas por feature (`Features/<Feature>/{DTOs,Repositories,Services,Validators}`), entidades EF (`Domain/Models`), enums, `TratooContext`/`VectorContext` e a migration. Também contém as implementações das integrações (Asaas, R2, OpenAI, Resend, BrasilAPI) e a criptografia (`Features/Shared/DataProtector.cs`). |
+| [`Tratoo.Domain`](../Tratoo.Domain) | Class library | Regras de negócio organizadas por feature (`Features/<Feature>/{DTOs,Repositories,Services,Validators}`), entidades EF (`Domain/Models`), enums, `TratooContext`/`VectorContext` e a migration. Também contém as implementações das integrações (Asaas, R2, OpenAI, Resend) e a criptografia (`Features/Shared/DataProtector.cs`). |
 | [`Tratoo.Web`](../Tratoo.Web) | Projeto Web sem código de servidor | Só o `wwwroot` (35 HTML, 32 JS e 24 CSS fora de `vendor/`). Na imagem Docker, ele é copiado para `/Tratoo.Web/wwwroot` e servido pela API. |
 | [`Tratoo.Tests`](../Tratoo.Tests) | xUnit | 238 testes: unidade, host em memória (TestServer) e integração com Postgres e Redis reais via Docker. |
 
 Organização:
 
 - O código compartilhado fica em `Tratoo.Domain/Features/Shared/`: `DataProtector`,
-  `PasswordHasher`, `SecureHasher`, validadores de CPF e CNPJ, `PaginadoDTO` e `UsuarioFactory`.
+  `PasswordHasher`, `SecureHasher`, validadores de CPF e CNPJ (dígitos verificadores por módulo 11, rejeitando sequências repetidas), `PaginadoDTO` e `UsuarioFactory`.
 - **`Tratoo.Domain` concentra regras e integrações.** Ele depende de EF Core, Npgsql, AWS SDK, SDK
   do Resend e QuestPDF. A troca de provedor é feita por interfaces (`IAsaasGatewayService`,
   `IArquivoStorageService`, `IR2PrivateStorageService`, `IEmailService`, `IEmbeddingService`),
@@ -238,7 +238,7 @@ externos.
 - **Singleton:** `IConnectionMultiplexer` (Redis), `IEstadoEfemero`, `ProtecaoEstadoEfemero`,
   `RedeConfiavel`/`ForwardedHeadersSettings` e `EstadoChaveDados`.
 - **HttpClient tipado** via `IHttpClientFactory`: Asaas, OpenAI (com `OpenAiLoggingHandler` e
-  timeout de 30 s), BrasilAPI (`IdentidadeService`), ViaCEP (cliente nomeado) e Resend
+  timeout de 30 s), ViaCEP (cliente nomeado) e Resend
   (`AddResend`, timeout configurável).
 - **Estado estático:** o `DataProtector` é uma classe estática configurada uma vez na subida, com
   as chaves valendo para o processo inteiro. Os serviços de domínio a chamam diretamente.
@@ -1040,7 +1040,6 @@ PR → CI (build + 238 testes) + CodeQL ──► merge na main ──► Railwa
 | **Asaas** | Cobrança PIX, transferência ao prestador, estorno e webhooks | `AsaasGatewayService` via `IAsaasGatewayService`, HttpClient tipado. O webhook chega em `/api/webhooks/asaas` | **Configurado** (sandbox, `sandbox.asaas.com`) |
 | **OpenAI** | Embeddings `text-embedding-3-small` | `EmbeddingService`, HttpClient com Bearer e `OpenAiLoggingHandler` | **Configurado** |
 | **Cloudflare R2** | Bucket público (fotos e portfólio) e privado (PDFs e anexos) | AWS SDK S3 no endpoint S3 do R2. URLs pré-assinadas no privado | **Configurado** |
-| **BrasilAPI** | Validação de CNPJ (`GET /api/cnpj/v1/{cnpj}`) | `IdentidadeService`, HttpClient tipado. O CPF é validado localmente | **No código** |
 | **ViaCEP** | Endereço a partir do CEP | Proxy em `/api/cep/{cep}`, cliente nomeado `viacep` | **No código** |
 | **cdnjs** | Font Awesome (CSS e fontes) | Liberado no CSP | **Confirmado** (CSP de produção) |
 | **GitHub** | Código, PRs, CI, CodeQL e gatilho de deploy | Actions + gatilho da Railway com `checkSuites` | **Confirmado** |
