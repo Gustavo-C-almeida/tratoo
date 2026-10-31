@@ -125,8 +125,8 @@ function renderLista() {
                 <textarea id="motivo-recusa" rows="3" placeholder="Ex: Não tenho disponibilidade no momento..."></textarea>
             </div>
             <div style="display:flex;gap:var(--space-sm);justify-content:flex-end;margin-top:var(--space-lg)">
-                <button class="btn-ver-projeto" onclick="fecharModalRecusa()">Cancelar</button>
-                <button class="btn-recusar" id="btn-confirmar-recusa" onclick="confirmarRecusa()">Confirmar recusa</button>
+                <button class="btn-ver-projeto" data-acao="fechar-recusa">Cancelar</button>
+                <button class="btn-recusar" id="btn-confirmar-recusa" data-acao="confirmar-recusa">Confirmar recusa</button>
             </div>
         </div>
     </div>`;
@@ -205,8 +205,8 @@ function renderCard(c) {
         <div class="convite-card-acoes">
             <a href="../projetos/detalhe.html?id=${c.projetoId}" class="btn-ver-projeto">Ver projeto</a>
             ${isPendente ? `
-                <button class="btn-convidar" onclick="aceitarConvite('${c.id}')">Aceitar convite</button>
-                <button class="btn-recusar" onclick="abrirModalRecusa('${c.id}')">Recusar</button>
+                <button class="btn-convidar" data-acao="aceitar" data-id="${esc(c.id)}">Aceitar convite</button>
+                <button class="btn-recusar" data-acao="abrir-recusa" data-id="${esc(c.id)}">Recusar</button>
             ` : ''}
         </div>
     </div>`;
@@ -214,13 +214,10 @@ function renderCard(c) {
 
 // ── Aceitar convite ──────────────────────────────────────────────────────────
 
-async function aceitarConvite(conviteId) {
-    const card = document.querySelector(`[data-convite-id="${conviteId}"]`);
-    const btnAceitar = card?.querySelector('.btn-convidar');
-    if (btnAceitar) {
-        btnAceitar.disabled = true;
-        btnAceitar.textContent = 'Aceitando...';
-    }
+async function aceitarConvite(btnAceitar) {
+    const conviteId = btnAceitar.dataset.id;
+    btnAceitar.disabled = true;
+    btnAceitar.textContent = 'Aceitando...';
 
     try {
         const atualizado = await api.put(`/api/convites/${conviteId}/aceitar`);
@@ -233,10 +230,8 @@ async function aceitarConvite(conviteId) {
     } catch (err) {
         const msg = err?.data?.mensagem || 'Erro ao aceitar convite.';
         alert(msg);
-        if (btnAceitar) {
-            btnAceitar.disabled = false;
-            btnAceitar.textContent = 'Aceitar convite';
-        }
+        btnAceitar.disabled = false;
+        btnAceitar.textContent = 'Aceitar convite';
     }
 }
 
@@ -252,14 +247,14 @@ function abrirModalRecusa(conviteId) {
 
 function fecharModalRecusa() {
     _conviteRecusaId = null;
-    document.getElementById('modal-recusa').style.display = 'none';
+    const modal = document.getElementById('modal-recusa');
+    if (modal) modal.style.display = 'none';
 }
 
-async function confirmarRecusa() {
+async function confirmarRecusa(btn) {
     if (!_conviteRecusaId) return;
 
     const motivo = document.getElementById('motivo-recusa').value.trim();
-    const btn = document.getElementById('btn-confirmar-recusa');
     btn.disabled = true;
     btn.textContent = 'Recusando...';
 
@@ -281,6 +276,24 @@ async function confirmarRecusa() {
         btn.textContent = 'Confirmar recusa';
     }
 }
+
+// ── Delegação de eventos ─────────────────────────────────────────────────────
+// O módulo não expõe funções em window: os botões gerados no render levam
+// data-acao (+ data-id do convite) e um único listener no #convites-root
+// despacha o clique. O root sobrevive aos re-renders (só o innerHTML muda).
+
+const ACOES = {
+    'aceitar': (btn) => aceitarConvite(btn),
+    'abrir-recusa': (btn) => abrirModalRecusa(btn.dataset.id),
+    'fechar-recusa': () => fecharModalRecusa(),
+    'confirmar-recusa': (btn) => confirmarRecusa(btn),
+};
+
+root().addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-acao]');
+    if (!btn || btn.disabled) return;
+    ACOES[btn.dataset.acao]?.(btn);
+});
 
 // Fechar modal ao clicar fora
 document.addEventListener('click', (e) => {
