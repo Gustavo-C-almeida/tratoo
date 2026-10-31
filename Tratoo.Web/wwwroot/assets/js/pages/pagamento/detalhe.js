@@ -1,9 +1,10 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
+import { guidDaUrl } from '/assets/js/utils/url.js';
 // Página: /pages/pagamento/detalhe.html?id={guid}
 // Exibe detalhes do pagamento PIX com escrow, QR Code, ledger e disputas.
 
-const params = new URLSearchParams(location.search);
-const pagamentoId = params.get('id');
+const pagamentoId = guidDaUrl('id');
 const root = document.getElementById('pag-root');
 
 let pagamentoAtual = null;
@@ -89,7 +90,7 @@ async function init() {
         if (err?.status === 401) {
             location.href = '/pages/auth/login.html';
         } else {
-            root.innerHTML = `<p class="erro-msg">${err?.data?.mensagem || 'Erro ao carregar pagamento.'}</p>`;
+            root.replaceChildren(el('p', { class: 'erro-msg' }, err?.data?.mensagem || 'Erro ao carregar pagamento.'));
         }
     }
 }

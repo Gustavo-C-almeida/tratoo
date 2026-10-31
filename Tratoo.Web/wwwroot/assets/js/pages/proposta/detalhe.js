@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { guidDaUrl } from '/assets/js/utils/url.js';
 // ── Detalhe e negociação de proposta (v3 - Melhorada) ───────────────────────
 
 const root = () => document.getElementById('proposta-root');
@@ -131,7 +132,7 @@ function setLoading(button, isLoading) {
 // CARREGAMENTO INICIAL
 // ────────────────────────────────────────────────────────────────────────────
 async function carregar() {
-    const id = new URLSearchParams(window.location.search).get('id');
+    const id = guidDaUrl('id');
     if (!id) {
         root().innerHTML = '<p class="msg-centro erro">ID da proposta não informado.</p>';
         return;
@@ -415,17 +416,17 @@ function render() {
                 <div class="form-step" data-step="1">
                     <div class="campo">
                         <label>Objetivo da proposta <span class="obr">*</span></label>
-                        <input id="c-objetivo" type="text" value="${esc(v?.objetivo || '')}" required>
+                        <input id="c-objetivo" type="text" required>
                         <div class="validation-message"></div>
                     </div>
                     <div class="campo">
                         <label>Escopo detalhado <span class="obr">*</span></label>
-                        <textarea id="c-escopo" rows="4" required>${esc(v?.escopo || '')}</textarea>
+                        <textarea id="c-escopo" rows="4" required></textarea>
                         <div class="validation-message"></div>
                     </div>
                     <div class="campo">
                         <label>Exclusões (opcional)</label>
-                        <input id="c-exclusoes" type="text" value="${esc(v?.exclusoes || '')}">
+                        <input id="c-exclusoes" type="text">
                     </div>
                 </div>
 
@@ -455,7 +456,7 @@ function render() {
                     </div>
                     <div class="campo">
                         <label>Observações adicionais</label>
-                        <textarea id="c-obs" rows="2">${esc(v?.observacoes || '')}</textarea>
+                        <textarea id="c-obs" rows="2"></textarea>
                     </div>
                 </div>
 
@@ -492,6 +493,12 @@ function render() {
             </form>
         </div>
     </div>`;
+
+    // Textos da versão ativa entram por .value, nunca pela template string acima.
+    document.getElementById('c-objetivo').value = v?.objetivo || '';
+    document.getElementById('c-escopo').value = v?.escopo || '';
+    document.getElementById('c-exclusoes').value = v?.exclusoes || '';
+    document.getElementById('c-obs').value = v?.observacoes || '';
 
     // Eventos
     document.getElementById('form-contra').addEventListener('submit', enviarContraproposta);

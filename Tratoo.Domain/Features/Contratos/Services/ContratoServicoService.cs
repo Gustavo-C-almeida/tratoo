@@ -560,9 +560,10 @@ namespace Tratoo.Domain.Features.Contratos
 
             await _repo.SaveChangesAsync();
 
+            // O motivo é texto livre do usuário: fica no contrato (MotivoCancelamento), não no log.
             _logger.LogInformation(
-                "Contrato {ContratoId} cancelado por usuário {UsuarioId}. Motivo: {Motivo}",
-                contratoId, usuarioId, motivo ?? "(sem motivo)");
+                "Contrato {ContratoId} cancelado por usuário {UsuarioId}. Motivo informado: {MotivoInformado}",
+                contratoId, usuarioId, !string.IsNullOrWhiteSpace(motivo));
         }
 
         // ─────────────────────────────────────────────────────────────────────────

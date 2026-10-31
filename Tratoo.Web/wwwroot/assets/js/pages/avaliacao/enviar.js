@@ -1,9 +1,10 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
+import { guidDaUrl } from '/assets/js/utils/url.js';
 // Página: /pages/avaliacao/enviar.html?id={guid}
 // Exibe o formulário de avaliação (nota + comentário + privacidade) para um slot pendente.
 
-const params   = new URLSearchParams(location.search);
-const avaliacaoId = params.get('id');
+const avaliacaoId = guidDaUrl('id');
 const root     = document.getElementById('av-root');
 
 let notaSelecionada = 0;
@@ -41,7 +42,7 @@ async function init() {
         if (err?.status === 401) {
             location.href = '/pages/auth/login.html';
         } else {
-            root.innerHTML = `<p class="erro-msg">${err?.data?.mensagem || 'Erro ao carregar avaliação.'}</p>`;
+            root.replaceChildren(el('p', { class: 'erro-msg' }, err?.data?.mensagem || 'Erro ao carregar avaliação.'));
         }
     }
 }

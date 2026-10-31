@@ -38,11 +38,17 @@ namespace Tratoo.API.Infrastructure
                 else
                 {
                     var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
-                    logger.LogError(ex, "Erro não tratado em {Method} {Path}", ctx.Request.Method, ctx.Request.Path);
+                    logger.LogError(ex, "Erro não tratado em {Method} {Path}",
+                        SemQuebrasDeLinha(ctx.Request.Method), SemQuebrasDeLinha(ctx.Request.Path.Value));
 
                     ctx.Response.StatusCode = 500;
                     await ctx.Response.WriteAsJsonAsync(new { mensagem = "Erro interno. Tente novamente mais tarde." });
                 }
             }));
+
+        // Método e path vêm do cliente; o path já chega decodificado (%0A vira quebra de
+        // linha). Sem CR/LF, ninguém forja uma linha extra no log.
+        private static string SemQuebrasDeLinha(string? valor) =>
+            (valor ?? string.Empty).Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
