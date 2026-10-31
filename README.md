@@ -116,7 +116,8 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
 > A Railway não lê mais o `railway.toml` (o Config as Code foi depreciado). O health check e o
 > *draining* de 30 s ficam nas configurações do serviço, e o arquivo continua no repositório como
 > referência. A auditoria de 29/10 descobriu que eles nunca tinham sido aplicados, e a correção
-> entrou em 30/10. Detalhes em [ARQUITETURA.md §4.3](Docs/ARQUITETURA.md#43-railwaytoml--configuração-efetiva).
+> entrou em 30/10. Detalhes em [ARQUITETURA.md §4.4](Docs/ARQUITETURA.md#44-configuração-de-deploy) e
+> [HISTORICO.md §3.1](Docs/HISTORICO.md#31-railwaytoml--configuração-efetiva-auditoria-de-3010).
 
 ---
 
