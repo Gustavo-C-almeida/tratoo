@@ -351,7 +351,7 @@ Observações:
 
 ## 7. Achados fora do escopo (registrados para não se perderem)
 
-### 7.1 Chave AES fixa no código-fonte — **grave** (chave retirada do código em 2026-10-13; rotação pendente)
+### 7.1 Chave AES fixa no código-fonte — **grave** (chave retirada do código em 2026-10-13; rotação concluída em 24/10/2026)
 
 `Tratoo.Domain/Features/Shared/DataProtector.cs` tinha a chave AES-256 **fixa no código** — um
 texto literal com cara de placeholder, mas que era a chave real de produção. Essa classe cifra

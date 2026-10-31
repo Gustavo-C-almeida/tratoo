@@ -122,3 +122,6 @@ $RECYCLE.BIN/
 **/Properties/PublishProfiles/
 **/Properties/ServiceDependencies/
 Docs/*.rar
+
+# Node (nenhum código do projeto usa npm; o SDK railway foi versionado por engano)
+node_modules/

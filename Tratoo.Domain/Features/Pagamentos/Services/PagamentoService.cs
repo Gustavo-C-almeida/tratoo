@@ -1458,7 +1458,7 @@ namespace Tratoo.Domain.Features.Pagamentos
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // ESTORNO POR CANCELAMENTO DE CONTRATO (taxa de 5%)
+        // ESTORNO POR CANCELAMENTO DE CONTRATO (integral)
         // ─────────────────────────────────────────────────────────────────────────
         public async Task EstornarCancelamentoContratoAsync(Guid contratoServicoId, int usuarioId)
         {

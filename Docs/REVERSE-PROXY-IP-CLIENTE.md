@@ -385,20 +385,21 @@ própria borda do Railway, não algo que passa pelo `X-Forwarded-For`.
 
 **Metodologia:** uma requisição de navegador comum foi capturada nos logs; em seguida,
 uma segunda requisição com `X-Forwarded-For: 8.8.8.8, 9.9.9.9` forjado foi enviada de
-propósito à mesma URL pública para testar resistência a spoofing.
+propósito à mesma URL pública para testar resistência a spoofing. Os IPs de cliente e de borda
+abaixo foram trocados por endereços de documentação (RFC 5737); a estrutura é a real.
 
 **Achado 1 — a borda do Railway encadeia DOIS saltos antes do Kestrel, não um.**
 Toda requisição chegou ao middleware com dois valores em `X-Forwarded-For`, por exemplo:
 
 ```
-X-Forwarded-For: 201.81.0.58, 46.151.194.129
+X-Forwarded-For: 203.0.113.10, 198.51.100.129
 RemoteIp (peer cru, pré-middleware): ::ffff:100.64.0.1   ← CGNAT interno do Railway
 ```
 
 O primeiro valor bate exatamente com o `srcIp` que o próprio `railway logs --http`
 registra para a mesma requisição — ou seja, é o Railway quem diz que esse é o cliente
 real, de forma independente do header. O segundo valor variou entre pelo menos dois
-IPs (`46.151.194.129` e `46.151.194.130`) em requisições consecutivas — consistente com
+IPs (`198.51.100.129` e `198.51.100.130`) em requisições consecutivas — consistente com
 um **pool** de nós de borda do Railway, não com um proxy externo de IP fixo.
 
 **Consequência prática:** com `ForwardLimit=1` (o valor original desta correção), a
@@ -414,7 +415,7 @@ comportamento agora bate com o `srcIp` autoritativo do Railway — coberto por
 **Achado 2 — o Railway REGENERA `X-Forwarded-For` do zero a cada requisição.**
 O valor forjado (`8.8.8.8, 9.9.9.9`) não apareceu em nenhuma linha de log — em nenhuma
 posição, nenhuma vez. Toda requisição, forjada ou não, chegou ao Kestrel com o par real
-(`201.81.0.58, 46.151.194.1{29,30}`). Isso indica que a borda do Railway não repassa nem
+(`203.0.113.10, 198.51.100.1{29,30}`). Isso indica que a borda do Railway não repassa nem
 anexa ao que o cliente envia — ela descarta e escreve o header do zero. Não há caminho
 de spoofing por `X-Forwarded-For` contra esta aplicação, independente do `ForwardLimit`
 configurado (contanto que ele não exceda o número real de saltos — ver 6.2).

@@ -178,8 +178,8 @@ builder.Services.AddResend(o =>
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<IVerificacaoMFAService, VerificacaoMFAService>();
 // Estado efêmero de fluxo (OTP, tentativas, cadastro pendente) e contador do rate
-// limiting: memória do processo sem Redis (produção hoje, 1 réplica); Redis quando
-// Redis:ConnectionString existe (várias réplicas). Ver EstadoEfemeroSetup.
+// limiting: memória do processo sem Redis (dev local, testes); Redis quando
+// Redis:ConnectionString existe (produção desde 29/10/2026). Ver EstadoEfemeroSetup.
 builder.Services.AddTratooEstadoEfemero(builder.Configuration);
 
 // Data Protection NÃO é compartilhado entre réplicas, de propósito: nada no Tratoo o

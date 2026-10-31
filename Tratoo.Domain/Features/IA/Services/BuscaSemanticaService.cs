@@ -16,8 +16,8 @@ namespace Tratoo.Domain.Features.IA
     ///   2. C# — filtra por regras de negócio e aplica score composto.
     ///
     /// Score (soma = 1.00):
-    ///   Semântica 35% | Habilidades exatas 15% | Reputação 15% | Perfil 10%
-    ///   Contratos 10% | Verificação 10% | Disponibilidade 5%
+    ///   Semântica 42% | Stack (habilidades exatas) 22% | Comprovação 12% | Completude 9%
+    ///   Avaliação 8% | Contratos 4% | Verificação 3%
     /// </summary>
     public class BuscaSemanticaService
     {
