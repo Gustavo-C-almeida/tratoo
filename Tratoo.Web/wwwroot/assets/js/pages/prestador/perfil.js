@@ -3,6 +3,9 @@ import { api } from '/assets/js/services/api.js';
 
 const root = () => document.getElementById('perfil-root');
 
+// Dados do perfil carregado, usados pelas mutações (editar, vincular...)
+let perfilDados = null;
+
 function nivelLabel(n) {
     const m = { 1: 'Básico', 3: 'Intermediário', 4: 'Avançado', 5: 'Especialista' };
     return m[n] ?? `Nível ${n}`;
@@ -139,7 +142,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Competências
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormCompetencia()">Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" data-acao="abrir-competencia">Adicionar</button>` : ''}
             </h2>
             <div id="competencia-form-wrap"></div>
             <div id="competencia-lista" class="competencia-lista">
@@ -151,7 +154,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Portfólio
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormPortfolio()">Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" data-acao="abrir-portfolio">Adicionar</button>` : ''}
             </h2>
             <div id="portfolio-form-wrap"></div>
             <div id="portfolio-grid" class="portfolio-grid">
@@ -163,7 +166,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Experiência Profissional
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormExperiencia()">Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" data-acao="abrir-experiencia">Adicionar</button>` : ''}
             </h2>
             <div id="experiencia-form-wrap"></div>
             <div id="experiencia-lista">
@@ -175,7 +178,7 @@ function renderizarPerfil(d, ehProprietario) {
         <div class="perfil-secao">
             <h2 class="perfil-secao__titulo">
                 Certificações
-                ${ehProprietario ? `<button class="perfil-secao__add" onclick="abrirFormCertificacao()">Adicionar</button>` : ''}
+                ${ehProprietario ? `<button class="perfil-secao__add" data-acao="abrir-certificacao">Adicionar</button>` : ''}
             </h2>
             <div id="certificacao-form-wrap"></div>
             <div id="certificacao-lista">
@@ -192,8 +195,7 @@ function renderizarPerfil(d, ehProprietario) {
     </div>`;
 
     // Guarda dados em memória para mutações
-    window._perfilDados = d;
-    window._ehProprietario = ehProprietario;
+    perfilDados = d;
 
     // Carrega reputação assincronamente (usa userId do prestador)
     if (d.id) carregarReputacao(d.id);
@@ -296,7 +298,7 @@ function renderizarCompetencias(lista, ehProprietario) {
             ${escHtml(c.nome)}
             <span class="competencia-nivel nivel-${c.nivel}">${nivelLabel(c.nivel)}</span>
             ${ehProprietario ? `
-                <button class="btn-icon btn-icon--danger" onclick="removerCompetencia(${c.id})" title="Remover"><i class="fa-solid fa-trash"></i></button>
+                <button class="btn-icon btn-icon--danger" data-acao="remover-competencia" data-id="${c.id}" title="Remover"><i class="fa-solid fa-trash"></i></button>
             ` : ''}
         </div>
     `).join('');
@@ -336,9 +338,9 @@ function renderizarPortfolio(lista, ehProprietario) {
                 <div id="comp-mgr-port-${p.id}"></div>
                 ${ehProprietario ? `
                     <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-                        <button class="btn-icon" onclick="editarPortfolioItem(${p.id})">Editar</button>
-                        <button class="btn-icon btn-icon--secondary" onclick="toggleGerenciarCompetencias('port', ${p.id})">Competências</button>
-                        <button class="btn-icon btn-icon--danger" onclick="removerPortfolioItem(${p.id})">Remover</button>
+                        <button class="btn-icon" data-acao="editar-portfolio" data-id="${p.id}">Editar</button>
+                        <button class="btn-icon btn-icon--secondary" data-acao="toggle-competencias" data-tipo="port" data-item="${p.id}">Competências</button>
+                        <button class="btn-icon btn-icon--danger" data-acao="remover-portfolio" data-id="${p.id}">Remover</button>
                     </div>` : ''}
             </div>
         </div>
@@ -362,9 +364,9 @@ function renderizarExperiencias(lista, ehProprietario) {
             </div>
             ${ehProprietario ? `
                 <div class="timeline-item__actions">
-                    <button class="btn-icon" onclick="editarExperiencia(${e.id})">Editar</button>
-                    <button class="btn-icon btn-icon--secondary" onclick="toggleGerenciarCompetencias('exp', ${e.id})">Competências</button>
-                    <button class="btn-icon btn-icon--danger" onclick="removerExperiencia(${e.id})">Remover</button>
+                    <button class="btn-icon" data-acao="editar-experiencia" data-id="${e.id}">Editar</button>
+                    <button class="btn-icon btn-icon--secondary" data-acao="toggle-competencias" data-tipo="exp" data-item="${e.id}">Competências</button>
+                    <button class="btn-icon btn-icon--danger" data-acao="remover-experiencia" data-id="${e.id}">Remover</button>
                 </div>` : ''}
         </div>`;
     }).join('');
@@ -388,9 +390,9 @@ function renderizarCertificacoes(lista, ehProprietario) {
             </div>
             ${ehProprietario ? `
                 <div class="timeline-item__actions">
-                    <button class="btn-icon" onclick="editarCertificacao(${c.id})">Editar</button>
-                    <button class="btn-icon btn-icon--secondary" onclick="toggleGerenciarCompetencias('cert', ${c.id})">Competências</button>
-                    <button class="btn-icon btn-icon--danger" onclick="removerCertificacao(${c.id})">Remover</button>
+                    <button class="btn-icon" data-acao="editar-certificacao" data-id="${c.id}">Editar</button>
+                    <button class="btn-icon btn-icon--secondary" data-acao="toggle-competencias" data-tipo="cert" data-item="${c.id}">Competências</button>
+                    <button class="btn-icon btn-icon--danger" data-acao="remover-certificacao" data-id="${c.id}">Remover</button>
                 </div>` : ''}
         </div>
     `).join('');
@@ -431,8 +433,8 @@ function abrirFormCompetencia() {
             </div>
             <p id="comp-erro" class="form-erro" hidden></p>
             <div class="form-acoes">
-                <button class="btn-cancelar" onclick="fecharFormCompetencia()">Cancelar</button>
-                <button class="btn-salvar" id="btn-salvar-comp" onclick="salvarCompetencia()">Salvar</button>
+                <button class="btn-cancelar" data-acao="fechar-competencia">Cancelar</button>
+                <button class="btn-salvar" id="btn-salvar-comp" data-acao="salvar-competencia">Salvar</button>
             </div>
         </div>`;
 }
@@ -450,7 +452,7 @@ async function salvarCompetencia() {
 
     if (!nome) { erro.textContent = 'Informe o nome da competência.'; erro.hidden = false; return; }
 
-    const prestadorId = window._perfilDados?.id;
+    const prestadorId = perfilDados?.id;
     btn.disabled = true; btn.textContent = 'Salvando...';
 
     try {
@@ -466,7 +468,7 @@ async function salvarCompetencia() {
 
 async function removerCompetencia(id) {
     if (!confirm('Remover esta competência?\n\nATENÇÃO: Esta competência será removida de todas as experiências, certificações e portfólios onde estiver vinculada.')) return;
-    const prestadorId = window._perfilDados?.id;
+    const prestadorId = perfilDados?.id;
     try {
         // A API já deve remover automaticamente os relacionamentos
         await api.delete(`/prestadores/${prestadorId}/competencias/${id}`);
@@ -504,8 +506,8 @@ function abrirFormPortfolio(item) {
             </div>
             <p id="port-erro" class="form-erro" hidden></p>
             <div class="form-acoes">
-                <button class="btn-cancelar" onclick="fecharFormPortfolio()">Cancelar</button>
-                <button class="btn-salvar" id="btn-salvar-port" onclick="salvarPortfolio(${edit ? item.id : 'null'}, ${edit ? `'${item.arquivoUrl ?? ''}'` : 'null'})">Salvar</button>
+                <button class="btn-cancelar" data-acao="fechar-portfolio">Cancelar</button>
+                <button class="btn-salvar" id="btn-salvar-port" data-acao="salvar-portfolio" ${edit ? `data-id="${item.id}"` : ''}>Salvar</button>
             </div>
         </div>`;
 
@@ -523,16 +525,17 @@ function fecharFormPortfolio() {
 }
 
 function editarPortfolioItem(id) {
-    const item = window._perfilDados?.portfolio?.find(p => p.id === id);
+    const item = perfilDados?.portfolio?.find(p => p.id === id);
     if (item) abrirFormPortfolio(item);
 }
 
-async function salvarPortfolio(portfolioId, arquivoUrlExistente) {
+async function salvarPortfolio(btn) {
+    const portfolioId = parseInt(btn.dataset.id) || null;
+    const arquivoUrlExistente = perfilDados?.portfolio?.find(p => p.id === portfolioId)?.arquivoUrl ?? null;
     const titulo = document.getElementById('port-titulo').value.trim();
     const descricao = document.getElementById('port-desc').value.trim();
     const linkExterno = document.getElementById('port-link').value.trim();
     const arquivo = document.getElementById('port-arquivo').files[0];
-    const btn = document.getElementById('btn-salvar-port');
     const erro = document.getElementById('port-erro');
     erro.hidden = true;
 
@@ -626,7 +629,7 @@ function abrirFormExperiencia(item) {
             </div>
             <div class="form-group">
                 <label style="flex-direction:row;align-items:center;gap:6px">
-                    <input type="checkbox" id="exp-atual" ${item?.empregoAtual ? 'checked' : ''} onchange="toggleEmpregoAtual()">
+                    <input type="checkbox" id="exp-atual" ${item?.empregoAtual ? 'checked' : ''}>
                     Emprego atual
                 </label>
             </div>
@@ -650,10 +653,12 @@ function abrirFormExperiencia(item) {
             </div>
             <p id="exp-erro" class="form-erro" hidden></p>
             <div class="form-acoes">
-                <button class="btn-cancelar" onclick="fecharFormExperiencia()">Cancelar</button>
-                <button class="btn-salvar" id="btn-salvar-exp" onclick="salvarExperiencia(${edit ? item.id : 'null'})">Salvar</button>
+                <button class="btn-cancelar" data-acao="fechar-experiencia">Cancelar</button>
+                <button class="btn-salvar" id="btn-salvar-exp" data-acao="salvar-experiencia" ${edit ? `data-id="${item.id}"` : ''}>Salvar</button>
             </div>
         </div>`;
+
+    document.getElementById('exp-atual').addEventListener('change', toggleEmpregoAtual);
 }
 
 function fecharFormExperiencia() {
@@ -668,11 +673,12 @@ function toggleEmpregoAtual() {
 }
 
 function editarExperiencia(id) {
-    const item = window._perfilDados?.experiencias?.find(e => e.id === id);
+    const item = perfilDados?.experiencias?.find(e => e.id === id);
     if (item) abrirFormExperiencia(item);
 }
 
-async function salvarExperiencia(expId) {
+async function salvarExperiencia(btn) {
+    const expId = parseInt(btn.dataset.id) || null;
     const cargo = document.getElementById('exp-cargo').value.trim();
     const empresa = document.getElementById('exp-empresa').value.trim();
     const dataInicio = document.getElementById('exp-inicio').value;
@@ -681,7 +687,6 @@ async function salvarExperiencia(expId) {
     const local = document.getElementById('exp-local').value.trim();
     const tipoContrato = document.getElementById('exp-contrato').value || null;
     const atividades = document.getElementById('exp-atividades').value.trim();
-    const btn = document.getElementById('btn-salvar-exp');
     const erro = document.getElementById('exp-erro');
     erro.hidden = true;
 
@@ -755,8 +760,8 @@ function abrirFormCertificacao(item) {
             </div>
             <p id="cert-erro" class="form-erro" hidden></p>
             <div class="form-acoes">
-                <button class="btn-cancelar" onclick="fecharFormCertificacao()">Cancelar</button>
-                <button class="btn-salvar" id="btn-salvar-cert" onclick="salvarCertificacao(${edit ? item.id : 'null'}, ${edit ? `'${item.arquivoUrl ?? ''}'` : 'null'})">Salvar</button>
+                <button class="btn-cancelar" data-acao="fechar-certificacao">Cancelar</button>
+                <button class="btn-salvar" id="btn-salvar-cert" data-acao="salvar-certificacao" ${edit ? `data-id="${item.id}"` : ''}>Salvar</button>
             </div>
         </div>`;
 }
@@ -766,18 +771,19 @@ function fecharFormCertificacao() {
 }
 
 function editarCertificacao(id) {
-    const item = window._perfilDados?.certificacoes?.find(c => c.id === id);
+    const item = perfilDados?.certificacoes?.find(c => c.id === id);
     if (item) abrirFormCertificacao(item);
 }
 
-async function salvarCertificacao(certId, arquivoUrlExistente) {
+async function salvarCertificacao(btn) {
+    const certId = parseInt(btn.dataset.id) || null;
+    const arquivoUrlExistente = perfilDados?.certificacoes?.find(c => c.id === certId)?.arquivoUrl ?? null;
     const nome = document.getElementById('cert-nome').value.trim();
     const instituicao = document.getElementById('cert-instituicao').value.trim();
     const dataEmissao = document.getElementById('cert-emissao').value;
     const dataValidade = document.getElementById('cert-validade').value || '';
     const linkVerificacao = document.getElementById('cert-link').value.trim() || '';
     const arquivo = document.getElementById('cert-arquivo').files[0];
-    const btn = document.getElementById('btn-salvar-cert');
     const erro = document.getElementById('cert-erro');
     erro.hidden = true;
 
@@ -842,9 +848,9 @@ const _COMP_MGR_ROTAS = {
 };
 
 const _COMP_MGR_FONTE = {
-    exp: id => window._perfilDados?.experiencias?.find(e => e.id === id),
-    cert: id => window._perfilDados?.certificacoes?.find(c => c.id === id),
-    port: id => window._perfilDados?.portfolio?.find(p => p.id === id),
+    exp: id => perfilDados?.experiencias?.find(e => e.id === id),
+    cert: id => perfilDados?.certificacoes?.find(c => c.id === id),
+    port: id => perfilDados?.portfolio?.find(p => p.id === id),
 };
 
 // ── Competências Avançadas - Gerenciamento com UX Melhorado ───────────────────
@@ -887,7 +893,7 @@ function renderizarPainelCompetencias(tipo, itemId) {
         return;
     }
 
-    const todasComps = window._perfilDados?.competencias ?? [];
+    const todasComps = perfilDados?.competencias ?? [];
     const vinculadas = item.competencias ?? [];
     const vinculadasIds = new Set(vinculadas.map(c => c.id));
     const disponiveisParaAdicionar = todasComps.filter(c => !vinculadasIds.has(c.id));
@@ -904,7 +910,7 @@ function renderizarPainelCompetencias(tipo, itemId) {
                         ${escHtml(c.nome)}
                         <span class="comp-nivel-tag">${nivelLabel(c.nivel)}</span>
                     </span>
-                    <button class="btn-desvincular" onclick="desassociarCompetencia('${tipo}', ${itemId}, ${c.id}, this)"
+                    <button class="btn-desvincular" data-acao="desassociar-competencia" data-tipo="${tipo}" data-item="${itemId}" data-comp="${c.id}"
                         title="Desvincular competência">
                         <i class="fa-solid fa-trash"></i>
                     </button>
@@ -924,7 +930,7 @@ function renderizarPainelCompetencias(tipo, itemId) {
                         </option>
                     `).join('')}
                 </select>
-                <button class="btn-associar" onclick="associarCompetencia('${tipo}', ${itemId})">
+                <button class="btn-associar" data-acao="associar-competencia" data-tipo="${tipo}" data-item="${itemId}">
                     <i class="fa-solid fa-circle-plus"></i> Vincular
                 </button>
             </div>
@@ -936,7 +942,7 @@ function renderizarPainelCompetencias(tipo, itemId) {
             <div class="comp-mgr-header">
                 <i class="fa-solid fa-link"></i>
                 <span>Vincular Competências</span>
-                <button class="btn-fechar-painel" onclick="toggleGerenciarCompetencias('${tipo}', ${itemId})">
+                <button class="btn-fechar-painel" data-acao="toggle-competencias" data-tipo="${tipo}" data-item="${itemId}">
                     <i class="fa-solid fa-x"></i>
                 </button>
             </div>
@@ -969,7 +975,7 @@ function renderizarPainelCompetencias(tipo, itemId) {
     }, 10);
 }
 
-async function associarCompetencia(tipo, itemId) {
+async function associarCompetencia(tipo, itemId, btn) {
     const sel = document.getElementById(`comp-add-select-${tipo}-${itemId}`);
     const compId = parseInt(sel?.value);
     const erroEl = document.getElementById(`comp-mgr-erro-${tipo}-${itemId}`);
@@ -984,11 +990,8 @@ async function associarCompetencia(tipo, itemId) {
     }
 
     // Feedback visual no botão
-    const btn = document.querySelector(`#comp-add-select-${tipo}-${itemId}`)?.parentElement?.querySelector('.btn-associar');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vinculando...';
-    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vinculando...';
 
     const rota = _COMP_MGR_ROTAS[tipo]?.(itemId, compId);
     if (!rota) return;
@@ -998,7 +1001,7 @@ async function associarCompetencia(tipo, itemId) {
 
         // Atualiza dados locais
         const item = _COMP_MGR_FONTE[tipo]?.(itemId);
-        const compOrigem = window._perfilDados?.competencias?.find(c => c.id === compId);
+        const compOrigem = perfilDados?.competencias?.find(c => c.id === compId);
 
         if (item && compOrigem) {
             if (!item.competencias) item.competencias = [];
@@ -1022,10 +1025,8 @@ async function associarCompetencia(tipo, itemId) {
 
     } catch (e) {
         mostrarMensagem(erroEl, e?.data?.mensagem ?? 'Erro ao vincular competência.', 'error');
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-plus"></i> Vincular';
-        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-circle-plus"></i> Vincular';
     }
 }
 
@@ -1128,11 +1129,16 @@ function _atualizarBadgesNaView(tipo, itemId) {
     const cardEl = document.getElementById(`${prefixo}-${itemId}`);
     if (!cardEl) return;
 
-    // Atualiza os badges com animação
-    const badgesContainer = cardEl.querySelector('.comp-badges');
+    // Atualiza os badges com animação. O painel de gerenciamento também tem um
+    // .comp-badges (vinculadas-grid) dentro do card: ele não é o alvo.
+    const mgr = document.getElementById(`comp-mgr-${tipo}-${itemId}`);
+    const badgesContainer = [...cardEl.querySelectorAll('.comp-badges')].find(b => !mgr?.contains(b));
     const novoHtml = renderizarBadgesCompetencias(item.competencias ?? []);
 
-    if (badgesContainer) {
+    if (!badgesContainer) {
+        // Item ainda sem badges: insere logo antes do painel
+        if (novoHtml && mgr) mgr.insertAdjacentHTML('beforebegin', novoHtml);
+    } else {
         badgesContainer.style.opacity = '0';
         setTimeout(() => {
             const tmp = document.createElement('div');
@@ -1150,11 +1156,6 @@ function _atualizarBadgesNaView(tipo, itemId) {
         }, 150);
     }
 }
-
-// ── Export/Disponibilizar funções globais ────────────────────────────────────
-window.toggleGerenciarCompetencias = toggleGerenciarCompetencias;
-window.associarCompetencia = associarCompetencia;
-window.desassociarCompetencia = desassociarCompetencia;
 
 // ── Reputação ─────────────────────────────────────────────────────────────────
 
@@ -1261,6 +1262,49 @@ async function recarregar() {
     const prestadorId = obterPrestadorId();
     await carregarPerfil(prestadorId);
 }
+
+// ── Delegação de eventos ──────────────────────────────────────────────────────
+// O módulo não expõe funções em window: os botões gerados no render levam
+// data-acao (+ data-id / data-tipo / data-item / data-comp) e um único listener
+// no #perfil-root despacha o clique. O root sobrevive aos re-renders (só o
+// innerHTML muda), então o listener é registrado uma vez.
+
+const idDe = (btn, campo = 'id') => parseInt(btn.dataset[campo]);
+
+const ACOES = {
+    'abrir-competencia': () => abrirFormCompetencia(),
+    'fechar-competencia': () => fecharFormCompetencia(),
+    'salvar-competencia': () => salvarCompetencia(),
+    'remover-competencia': (btn) => removerCompetencia(idDe(btn)),
+
+    'abrir-portfolio': () => abrirFormPortfolio(),
+    'fechar-portfolio': () => fecharFormPortfolio(),
+    'editar-portfolio': (btn) => editarPortfolioItem(idDe(btn)),
+    'salvar-portfolio': (btn) => salvarPortfolio(btn),
+    'remover-portfolio': (btn) => removerPortfolioItem(idDe(btn)),
+
+    'abrir-experiencia': () => abrirFormExperiencia(),
+    'fechar-experiencia': () => fecharFormExperiencia(),
+    'editar-experiencia': (btn) => editarExperiencia(idDe(btn)),
+    'salvar-experiencia': (btn) => salvarExperiencia(btn),
+    'remover-experiencia': (btn) => removerExperiencia(idDe(btn)),
+
+    'abrir-certificacao': () => abrirFormCertificacao(),
+    'fechar-certificacao': () => fecharFormCertificacao(),
+    'editar-certificacao': (btn) => editarCertificacao(idDe(btn)),
+    'salvar-certificacao': (btn) => salvarCertificacao(btn),
+    'remover-certificacao': (btn) => removerCertificacao(idDe(btn)),
+
+    'toggle-competencias': (btn) => toggleGerenciarCompetencias(btn.dataset.tipo, idDe(btn, 'item')),
+    'associar-competencia': (btn) => associarCompetencia(btn.dataset.tipo, idDe(btn, 'item'), btn),
+    'desassociar-competencia': (btn) => desassociarCompetencia(btn.dataset.tipo, idDe(btn, 'item'), idDe(btn, 'comp'), btn),
+};
+
+root().addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-acao]');
+    if (!btn || btn.disabled) return;
+    ACOES[btn.dataset.acao]?.(btn);
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 carregarPerfil(obterPrestadorId());

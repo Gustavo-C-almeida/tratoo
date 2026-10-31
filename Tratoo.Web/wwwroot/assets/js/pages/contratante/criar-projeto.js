@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
 // ── Criar / publicar projeto (US-04) ─────────────────────────────────────────
 
 const root = () => document.getElementById('criar-projeto-root');
@@ -229,11 +230,11 @@ function adicionarHabilidade() {
 function renderHabilidades() {
     const container = document.getElementById('habilidades-tags');
     if (!container) return;
-    container.innerHTML = habilidades.map((h, i) => `
-        <span class="habilidade-tag">
-            ${escHtml(h)}
-            <button type="button" onclick="removerHabilidade(${i})" aria-label="Remover ${escHtml(h)}"><i class="fa-solid fa-x"></i></button>
-        </span>`).join('');
+    container.replaceChildren(...habilidades.map((h, i) =>
+        el('span', { class: 'habilidade-tag' },
+            h,
+            el('button', { type: 'button', 'data-acao': 'remover-habilidade', 'data-indice': i, 'aria-label': `Remover ${h}` },
+                el('i', { class: 'fa-solid fa-x' })))));
 }
 
 function removerHabilidade(idx) {
@@ -307,8 +308,19 @@ async function submeter(publicar) {
     }
 }
 
-// Expõe para onclick inline do HTML
-window.removerHabilidade = removerHabilidade;
+// ── Delegação de eventos ──────────────────────────────────────────────────────
+// O módulo não expõe funções em window: os botões gerados levam data-acao e um
+// único listener no #criar-projeto-root despacha o clique.
+
+const ACOES = {
+    'remover-habilidade': (btn) => removerHabilidade(parseInt(btn.dataset.indice)),
+};
+
+root().addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-acao]');
+    if (!btn || btn.disabled) return;
+    ACOES[btn.dataset.acao]?.(btn);
+});
 
 // Inicia
 renderPagina();

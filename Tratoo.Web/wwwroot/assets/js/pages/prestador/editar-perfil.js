@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { el } from '/assets/js/utils/dom.js';
 // ── Editar Perfil Prestador ───────────────────────────────────────────────────
 // Carrega os dados do próprio perfil e permite edição em seções.
 
@@ -45,7 +46,7 @@ function renderizarFormulario(d) {
                     <input type="file" id="input-foto" accept=".jpg,.jpeg,.png,.webp" style="margin-bottom:6px">
                     <p style="font-size:12px;color:#64748b">JPG, PNG ou WebP. Máximo 5 MB.</p>
                     <p id="foto-erro" class="form-erro" hidden></p>
-                    <button class="btn-salvar" id="btn-foto" onclick="salvarFoto()" style="margin-top:8px;padding:8px 16px;font-size:13px">Salvar foto</button>
+                    <button class="btn-salvar" id="btn-foto" data-acao="salvar-foto" style="margin-top:8px;padding:8px 16px;font-size:13px">Salvar foto</button>
                 </div>
             </div>
         </div>
@@ -99,7 +100,7 @@ function renderizarFormulario(d) {
                     <div id="links-extras-wrap">
                         ${renderizarLinksExtrasForm(d.outrosLinks)}
                     </div>
-                    <button type="button" class="btn-cancelar" onclick="adicionarLinkExtra()" style="margin-top:6px;font-size:12px">
+                    <button type="button" class="btn-cancelar" data-acao="adicionar-link" style="margin-top:6px;font-size:12px">
                         + Adicionar link
                     </button>
                 </div>
@@ -377,46 +378,36 @@ function renderizarLinksExtrasForm(json) {
     let links = [];
     try { links = json ? JSON.parse(json) : []; } catch { }
 
-    return links.map((l, i) => `
-        <div class="form-row" id="link-extra-${i}" style="margin-bottom:6px">
+    return links.map(l => `
+        <div class="form-row" style="margin-bottom:6px">
             <div class="form-group" style="flex:0 0 160px">
                 <input type="text" placeholder="Título" value="${escHtml(l.titulo ?? '')}" class="link-titulo">
             </div>
             <div class="form-group">
                 <input type="url" placeholder="URL" value="${escHtml(l.url ?? '')}" class="link-url">
             </div>
-            <button type="button" class="btn-icon btn-icon--danger" onclick="removerLinkExtra(${i})"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" class="btn-icon btn-icon--danger" data-acao="remover-link" aria-label="Remover link"><i class="fa-solid fa-xmark"></i></button>
         </div>
     `).join('');
 }
 
 function adicionarLinkExtra() {
     const wrap = document.getElementById('links-extras-wrap');
-    const atual = wrap.querySelectorAll('[id^="link-extra-"]').length;
-    if (atual >= 3) { alert('Máximo de 3 links extras.'); return; }
-    const i = atual;
-    const div = document.createElement('div');
-    div.className = 'form-row';
-    div.id = `link-extra-${i}`;
-    div.style.marginBottom = '6px';
-    div.innerHTML = `
-        <div class="form-group" style="flex:0 0 160px">
-            <input type="text" placeholder="Título" class="link-titulo">
-        </div>
-        <div class="form-group">
-            <input type="url" placeholder="URL" class="link-url">
-        </div>
-        <button type="button" class="btn-icon btn-icon--danger" onclick="removerLinkExtra(${i})"><i class="fa-solid fa-xmark"></i></button>
-    `;
-    wrap.appendChild(div);
+    if (wrap.children.length >= 3) { alert('Máximo de 3 links extras.'); return; }
+    wrap.append(
+        el('div', { class: 'form-row', style: 'margin-bottom:6px' },
+            el('div', { class: 'form-group', style: 'flex:0 0 160px' },
+                el('input', { type: 'text', placeholder: 'Título', class: 'link-titulo' })),
+            el('div', { class: 'form-group' },
+                el('input', { type: 'url', placeholder: 'URL', class: 'link-url' })),
+            el('button', { type: 'button', class: 'btn-icon btn-icon--danger', 'data-acao': 'remover-link', 'aria-label': 'Remover link' },
+                el('i', { class: 'fa-solid fa-xmark' })))
+    );
 }
 
-function removerLinkExtra(i) {
-    document.getElementById(`link-extra-${i}`)?.remove();
-    // Reindexar
-    document.querySelectorAll('#links-extras-wrap > div').forEach((el, idx) => {
-        el.id = `link-extra-${idx}`;
-    });
+// Remove a linha do link extra que contém o botão clicado.
+function removerLinkExtra(btn) {
+    btn.closest('#links-extras-wrap > div')?.remove();
 }
 
 function coletarLinksExtras() {
@@ -430,9 +421,8 @@ function coletarLinksExtras() {
     return links.length ? JSON.stringify(links) : null;
 }
 
-async function salvarFoto() {
+async function salvarFoto(btn) {
     const input = document.getElementById('input-foto');
-    const btn   = document.getElementById('btn-foto');
     const erro  = document.getElementById('foto-erro');
     erro.hidden = true;
 
@@ -518,6 +508,23 @@ async function salvarPrivacidade() {
         btn.disabled = false; btn.textContent = 'Salvar preferência';
     }
 }
+
+// ── Delegação de eventos ──────────────────────────────────────────────────────
+// O módulo não expõe funções em window: os botões gerados no render levam
+// data-acao e um único listener no #editar-root despacha o clique. O root
+// sobrevive aos re-renders (só o innerHTML muda), então é registrado uma vez.
+
+const ACOES = {
+    'salvar-foto': (btn) => salvarFoto(btn),
+    'adicionar-link': () => adicionarLinkExtra(),
+    'remover-link': (btn) => removerLinkExtra(btn),
+};
+
+root().addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-acao]');
+    if (!btn || btn.disabled) return;
+    ACOES[btn.dataset.acao]?.(btn);
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 carregarEEditar();
