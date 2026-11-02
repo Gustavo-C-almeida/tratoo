@@ -97,8 +97,8 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
 ## Infraestrutura e deploy
 
 - **Produção na Railway:**
-  - uma réplica da API, gerada a partir do `Dockerfile` da raiz, na região `sfo`;
-  - um serviço Redis acessível só pela rede privada;
+  - uma réplica da API, gerada a partir do `Dockerfile` da raiz, na região `us-east4-eqdc4a`;
+  - um serviço Redis acessível só pela rede privada, na mesma região da API;
   - o banco no Neon, fora da Railway, na região `us-east-2`.
 - **Deploy contínuo:** todo push na `main` gera um deploy, mas a Railway só faz o build depois que
   os checks do GitHub (CI e CodeQL) passam. A versão nova só recebe tráfego depois de passar no
@@ -145,9 +145,11 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
 
 ## CI e testes automatizados
 
-O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em todo PR e em todo push na
-`main`. Ele faz restore, build em Release e roda os testes. A branch `main` exige que esse check
-passe; a regra não se aplica a administradores.
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda nos PRs e pushes de
+`staging` e `main`. Ele faz restore, build em Release e roda os testes. As duas branches exigem que
+esse check passe; a regra não se aplica a administradores. O fluxo
+`main → feature/fix → staging → main`, com retirada de funcionalidades e hotfix, está em
+[Docs/CICD.md](Docs/CICD.md).
 
 - **238 testes** com xUnit: 206 de unidade e de host em memória (TestServer) e 32 de integração
   contra Postgres (pgvector) e Redis reais, iniciados via Docker.
