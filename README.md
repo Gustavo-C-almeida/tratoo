@@ -97,8 +97,8 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
 ## Infraestrutura e deploy
 
 - **Produção na Railway:**
-  - uma réplica da API, gerada a partir do `Dockerfile` da raiz, na região `sfo`;
-  - um serviço Redis acessível só pela rede privada;
+  - uma réplica da API, gerada a partir do `Dockerfile` da raiz, na região `us-east4-eqdc4a`;
+  - um serviço Redis acessível só pela rede privada, na mesma região da API;
   - o banco no Neon, fora da Railway, na região `us-east-2`.
 - **Deploy contínuo:** todo push na `main` gera um deploy, mas a Railway só faz o build depois que
   os checks do GitHub (CI e CodeQL) passam. A versão nova só recebe tráfego depois de passar no

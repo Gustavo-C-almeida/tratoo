@@ -42,6 +42,11 @@
 | 30/10 | — (configurações da Railway) | Health check `/health/ready` e `drainingSeconds = 30` passam a valer pelas configurações do serviço; deploy `b40f6558` | Confirmado |
 | 30/10 | `9a9ec34` | Limpeza pós-auditoria: `node_modules/`, `package.json` e `Azure.Storage.Blobs` removidos; comentários de pesos da busca, de "produção sem Redis" e da taxa de 5% corrigidos | — |
 | 30–31/10 | PRs #16 a #21 | Reconstrução das docs, higiene do repositório, ajustes do `railway.toml`, alertas do CodeQL e remoção de handlers inline no frontend | Em 31/10: 0 alertas abertos do CodeQL; deploy `ebf57cde` (commit `b134922`) |
+| 01/11 | — (DNS) | Zona do `tratoo.app.br` migrada do registro.br para a Cloudflare, em **DNS only**. O domínio raiz passou a atender, por *CNAME flattening* | Confirmado em 02/11: NS da Cloudflare, raiz com registro A e HTTP 200, DKIM e SPF do Resend presentes na zona nova |
+| 02/11 | — (configurações da Railway) | Aplicação movida de `sfo` para `us-east4-eqdc4a`, para ficar perto do Neon (`us-east-2`) | Confirmado. O ganho esperado **não** apareceu nas sondas: ver a entrada seguinte |
+| 02/11 | — (configurações da Railway) | O serviço Redis ficou para trás em `sfo` na mudança de região, e o check `redis` saiu de ~1 ms para **60 ms**. Detectado pelo `/health/ready`, que reporta a duração por dependência. Redis movido para `us-east4-eqdc4a` com volume novo; o antigo foi apagado | Confirmado: check `redis` de volta a 1 ms. Os cadastros pendentes do RDB antigo se perderam |
+| 02/11 | — (medição) | Ficou demonstrado que a duração dos checks de banco é dominada pelo *cold start* do Neon, não pela distância: com o banco já acordado, `postgres` e `pgvector` deram 128 ms e 20 ms | Confirmado ([`ARQUITETURA.md` §3.1](ARQUITETURA.md#31-topologia)) |
+| 02/11 | — (limpeza) | Projeto `impartial-renewal`, da tentativa de rodar SQL Server em container na Railway (21/07), esvaziado: serviço, volume e proxy TCP removidos. Nunca teve um deploy | Confirmado: ambiente sem serviços nem volumes |
 
 Antes de agosto, o histórico tem a base funcional do produto (cadastro com LGPD, perfis, projetos,
 propostas, contratos, escrow, avaliações, cancelamentos e busca semântica). Ela começa com um
