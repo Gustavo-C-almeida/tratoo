@@ -145,9 +145,10 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
 
 ## CI e testes automatizados
 
-O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em todo PR e em todo push na
-`main`. Ele faz restore, build em Release e roda os testes. A branch `main` exige que esse check
-passe; a regra não se aplica a administradores.
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda nos PRs e pushes de
+`developer`, `staging` e `main`. Ele faz restore, build em Release e roda os testes. As três
+branches exigem que esse check passe; a regra não se aplica a administradores. O fluxo
+`feature → developer → staging → main → developer` está em [Docs/CICD.md](Docs/CICD.md).
 
 - **238 testes** com xUnit: 206 de unidade e de host em memória (TestServer) e 32 de integração
   contra Postgres (pgvector) e Redis reais, iniciados via Docker.

@@ -1,25 +1,55 @@
-# CI do Tratoo — etapa 1: build + testes em todo PR e em todo push na main.
+# CI do Tratoo: build + testes nos PRs e nos pushes de developer, staging e main.
+# Fluxo completo em Docs/CICD.md.
 #
 # Sem segredos de propósito: a suíte usa chave de dados própria (ConfiguracaoDosTestes)
 # e o appsettings.json não está no git, então nada aqui alcança o Neon de produção.
 # Os testes de integração sobem Postgres (pgvector) e Redis reais via `docker run` —
 # o runner ubuntu-latest já tem Docker.
+#
+# As duas execuções não são redundantes: a de PR testa o resultado do merge, e a de push
+# é o check do commit que a Railway espera antes de publicar staging e main. Branches de
+# feature não têm push aqui; rodam pelo PR.
+#
+# Sem filtro de paths: um check obrigatório que não roda deixa o PR preso em "Expected".
 name: CI
 
 on:
   pull_request:
+    branches: [developer, staging, main]
   push:
-    branches: [main]
+    branches: [developer, staging, main]
 
 permissions:
   contents: read
 
-# Um push novo no mesmo PR cancela a execução anterior.
+# Um push novo no mesmo PR cancela a execução anterior. Em push nas branches longas não
+# cancela: o check cancelado de um commit impediria a Railway de publicá-lo.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Só staging promove para main. O GitHub não tem regra nativa de branch de origem,
+  # então este job só bloqueia depois de virar check obrigatório da main (Docs/CICD.md).
+  origem-da-promocao:
+    name: Origem da promoção
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      # Via env, nunca interpolado no script: o nome da branch é entrada não confiável.
+      - name: Conferir a branch de origem
+        env:
+          BRANCH_ORIGEM: ${{ github.head_ref }}
+          REPO_ORIGEM: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$BRANCH_ORIGEM" != "staging" ] || [ "$REPO_ORIGEM" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::PR para a main só pode sair da branch staging deste repositório (Docs/CICD.md)."
+            exit 1
+          fi
+
+
   build-e-testes:
     name: Build e testes
     runs-on: ubuntu-latest
