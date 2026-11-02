@@ -7,6 +7,13 @@
 > deploy `ebf57cde` da Railway. **Verificação:** 31/10/2026, só com leituras (código, Git, GitHub,
 > CLI e API da Railway, DNS, endpoints públicos, API do Resend e consultas SQL somente leitura no
 > Neon). A legenda e as fontes estão no [§1.5](#15-como-ler-este-documento).
+>
+> **Atualização de 02/11/2026:** a infraestrutura mudou em 01–02/11. O DNS saiu do registro.br
+> para a Cloudflare e o domínio raiz passou a atender; a aplicação saiu de `sfo` para US East; o
+> serviço Redis foi para a mesma região, com volume novo. As seções
+> [§3.1](#31-topologia), [§4.1](#41-produção-na-railway), [§4.2](#42-domínio-e-dns),
+> [§4.4](#44-configuração-de-deploy), [§9](#9-decisões-arquiteturais) e o Apêndice A refletem a
+> verificação dessa data; o resto do documento continua com a verificação de 31/10.
 
 ---
 
@@ -296,9 +303,21 @@ PostgreSQL 18). As duas connection strings apontam para o **endpoint pooler** (P
 *transaction*) em `*.c-5.us-east-2.aws.neon.tech`, com `sslmode=Require`. Isso foi verificado
 pelo host das connection strings e pela API do Neon, sem exibir valores.
 
-A aplicação roda na região `sfo` da Railway, e o banco em `us-east-2`. Na chamada ao
-`/health/ready` de 31/10, os checks `postgres` e `pgvector` levaram 1136 ms e 1196 ms, contra 1 ms
-do Redis na rede privada.
+A aplicação roda na região `us-east4-eqdc4a` da Railway (Virgínia) desde 02/11, e o banco em
+`us-east-2` (Ohio). Até 01/11 a aplicação ficava em `sfo` (Califórnia).
+
+**A duração dos checks de banco não mede distância de rede.** Ela é dominada pelo religamento da
+computação do Neon, que o plano gratuito suspende quando o banco fica ocioso (*scale to zero*).
+As medições do `/health/ready` deixam isso claro:
+
+| Momento | `postgres` | `pgvector` |
+|---|---|---|
+| 31/10, aplicação em `sfo` | 1136 ms | 1196 ms |
+| 02/11, aplicação em US East, primeira chamada | 745 ms | 1309 ms |
+| 02/11, aplicação em US East, banco já acordado | **128 ms** | **20 ms** |
+
+Ou seja: a aproximação das regiões não produziu um ganho isolável nessas sondas, e os valores
+acima de um segundo vinham do *cold start* do Neon, não da distância entre Califórnia e Ohio.
 
 **Por que dois bancos e não um?** O compose reproduz exatamente a mesma topologia e expõe erros
 que um banco único esconderia, como uma consulta no contexto errado ou uma extensão criada no
@@ -396,13 +415,13 @@ erDiagram
 
 | Item | Valor | Fonte |
 |---|---|---|
-| Projeto e ambiente | Um ambiente, `production`, com os serviços `tratoo` e `Redis` | API da Railway (`list-services`) |
-| Serviço `tratoo` | Origem GitHub `Gustavo-C-almeida/tratoo`, branch `main`, região `sfo`, **1 réplica**. O build usa o `Dockerfile` da raiz | Configurações do serviço; log de build (`load build definition from Dockerfile`) |
+| Projeto e ambiente | Um ambiente, `production`, com os serviços `tratoo` e `Redis`, mais um serviço de homologação com Redis próprio, publicado da branch `staging` ([CICD.md](CICD.md#homologação-e-produção-na-railway)) | API da Railway (`list-services`) |
+| Serviço `tratoo` | Origem GitHub `Gustavo-C-almeida/tratoo`, branch `main`, região `us-east4-eqdc4a`, **1 réplica**. O build usa o `Dockerfile` da raiz | Configurações do serviço (02/11); log de build (`load build definition from Dockerfile`) |
 | Gatilho de deploy | Push na `main`, com `checkSuites: true`: a Railway espera os checks do GitHub passarem | Configurações do serviço |
-| Deploy ativo | `ebf57cde` (31/10, 15:40 UTC), SUCCESS, commit `b134922` (PR #21) | `railway deployment list`; API da Railway |
+| Deploy ativo | `ab6682ea` (02/11, 03:01 UTC), SUCCESS. O deploy `ebf57cde` (31/10, commit `b134922`) é o citado nos logs deste documento | API da Railway (`describe-service`) |
 | Configuração de deploy | `healthcheckPath = /health/ready` e `drainingSeconds = 30`, nas **configurações do serviço** | Configurações do serviço; log de build |
 | Domínios | `www.tratoo.app.br` (custom) e `tratoo-production.up.railway.app`, ambos na porta 8080 | `railway domain list` |
-| Serviço `Redis` | Imagem `redis:8.2`, 1 réplica em `sfo`, senha obrigatória (`--requirepass`), snapshot RDB `--save 60 1`, volume `redis-volume` de 5 GB em `/data`, endpoint só na rede privada (sem domínio nem TCP proxy) | Configurações do serviço `Redis` |
+| Serviço `Redis` | Imagem `redis:8.2`, 1 réplica em `us-east4-eqdc4a`, senha obrigatória (`--requirepass`), snapshot RDB `--save 60 1`, volume `redis-volume-us-east4` de 5 GB em `/data`, endpoint só na rede privada (sem domínio nem TCP proxy) | Configurações do serviço `Redis` (02/11) |
 | Banco | Neon, fora da Railway: projeto `tratoo` em `aws-us-east-2`, endpoint pooler, bancos `tratoo` e `tratoo_vector` | Host das connection strings; API do Neon |
 | Ambiente .NET | `ASPNETCORE_ENVIRONMENT` não está definido entre as variáveis, então vale Production | Nomes de variáveis |
 
@@ -415,7 +434,7 @@ flowchart TB
     subgraph Railway["Railway — ambiente production"]
         EDGE["Borda: TLS, HTTP/2,<br/>2 saltos de proxy, regenera X-Forwarded-For"]
         subgraph Privada["Rede privada (railway.internal)"]
-            API["tratoo<br/>1 réplica, sfo<br/>porta 8080"]
+            API["tratoo<br/>1 réplica, us-east4<br/>porta 8080"]
             RED[("Redis 8.2<br/>volume /data")]
         end
     end
@@ -430,11 +449,28 @@ flowchart TB
 
 | Registro | Valor | Status |
 |---|---|---|
-| `www.tratoo.app.br` | CNAME `rmkhqshq.up.railway.app` (exigido pela Railway) | **Confirmado**: Railway informa domínio verificado, registro `PROPAGATED` e certificado `VALID` |
-| `tratoo.app.br` | Delegado a `a.sec.dns.br` e `c.sec.dns.br` | **Confirmado** (DNS). O site é servido em `www` |
-| `resend._domainkey.tratoo.app.br` | TXT DKIM (chave pública RSA) | **Confirmado**: igual ao exigido pelo Resend |
-| `send.tratoo.app.br` | CNAME `send.forge.rmta.net`, que entrega o SPF (`v=spf1 …`) e o MX `feedback.forge.rmta.net` | **Confirmado** |
-| `rsend.tratoo.app.br` | CNAME `rsend.forge.rmta.net` | **Confirmado** |
+A zona é servida pela **Cloudflare** desde 01/11, em modo **DNS only** (sem o proxy HTTP). Até
+então ficava no registro.br, onde só o `www` atendia.
+
+| Registro | Valor | Status |
+|---|---|---|
+| Servidores de nome | `heidi.ns.cloudflare.com` e `kareem.ns.cloudflare.com` | **Confirmado** (02/11, resolvido contra `1.1.1.1`) |
+| `tratoo.app.br` (raiz) | Registro A `69.46.46.15`, por *CNAME flattening* da Cloudflare | **Confirmado** (02/11): resolve e responde HTTP 200 |
+| `www.tratoo.app.br` | CNAME `rmkhqshq.up.railway.app` (exigido pela Railway) | **Confirmado** (02/11). Os dois domínios estão anexados ao serviço `tratoo` na porta 8080 |
+| `resend._domainkey.tratoo.app.br` | TXT DKIM (chave pública RSA) | **Confirmado** (02/11): presente na zona nova |
+| `send.tratoo.app.br` | CNAME `send.forge.rmta.net`, que entrega o SPF (`v=spf1 …`) e o MX `feedback.forge.rmta.net` | **Confirmado** (02/11) |
+| `rsend.tratoo.app.br` | CNAME `rsend.forge.rmta.net` | **Confirmado** em 31/10; não reverificado na zona nova |
+
+**Por que a raiz passou a funcionar.** A Railway exige um CNAME, e o DNS não permite CNAME no
+domínio raiz. A Cloudflare contorna isso com *CNAME flattening*: ela resolve o CNAME e entrega o
+resultado como registro A. Era essa limitação que mantinha o site só no `www`.
+
+**Por que o modo DNS only importa.** Com o proxy HTTP da Cloudflare ligado, ela passaria a ser
+quem abre a conexão com a Railway, e o `X-Forwarded-For` regenerado pela Railway traria o IP da
+borda da Cloudflare no lugar do IP do usuário — desfazendo em silêncio o que a
+[§5.2](#52-ip-real-do-cliente-e-trust-boundary) garante. Em DNS only a cadeia de proxy continua
+a mesma. Verificado em 02/11 pelo `/api/diagnostico/rede`, que devolveu o IP público real do
+cliente.
 
 A borda da Railway responde `301` de `http://` para `https://` e envia
 `Strict-Transport-Security: max-age=2592000` (emitido pela aplicação).
@@ -469,7 +505,7 @@ A configuração de deploy do serviço `tratoo` fica nas **configurações do se
 |---|---|---|
 | `healthcheckPath` | `/health/ready` | A nova versão só recebe tráfego depois de responder 2xx, com janela de até 5 min. Uma versão sem banco, sem Redis ou com a chave de dados errada não é promovida, e a anterior continua no ar |
 | `drainingSeconds` | `30` | Tempo entre o SIGTERM e o SIGKILL da versão anterior. Cobre o `ShutdownTimeout` de 25 s do host |
-| Réplicas | 1 (`sfo`) | — |
+| Réplicas | 1 (`us-east4-eqdc4a`) | — |
 
 O [`railway.toml`](../railway.toml) do repositório registra os mesmos valores como referência
 versionada, e o `ShutdownTests` lê o `drainingSeconds` dele para conferir a coerência com o
@@ -987,15 +1023,19 @@ Este diagrama mostra o caminho principal. A enum `StatusPagamento` tem também `
 
 O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e testes`:
 
-- **Disparo:** todo PR e todo push na `main`. A `concurrency` cancela a execução anterior do
-  mesmo ref. As permissões são `contents: read`, e há timeout de 20 min.
+- **Disparo:** PRs e pushes em `staging` e `main`. A `concurrency` cancela a execução
+  anterior só em PRs, para não cancelar o check de que a Railway depende. As permissões são
+  `contents: read`, e há timeout de 20 min.
 - **Etapas:** checkout, `setup-dotnet` (8.0.x), cache do NuGet, `docker pull` das imagens de teste
   (`pgvector/pgvector:pg16`, `redis:7-alpine`), `dotnet restore Tratoo.sln`,
   `dotnet build -c Release`, `dotnet test` com logger TRX e upload dos resultados.
 - **Sem segredos.** O CI roda isolado do ambiente de produção.
 - **`TRATOO_EXIGIR_DOCKER: "1"`:** sem Docker, os testes de integração **falham** em vez de serem
   ignorados. Assim o pipeline só fica verde depois de rodá-los.
-- **Proteção da `main`:** exige o check `Build e testes`.
+- **Proteção de `staging` e `main`:** exigem o check `Build e testes`.
+- **Origem do PR:** um job recusa PR para a `main` que não venha de `staging` ou `hotfix/*`, e PR
+  para a `staging` que não venha de `feature/*`, `fix/*`, `hotfix/*` ou `revert-*`. O bloqueio
+  depende de torná-lo check obrigatório ([CICD.md](CICD.md#configuração-manual)).
 - **Última execução na `main`** (31/10): run `41215952551`, commit `b134922`, **sucesso**, com
   **238 testes, 238 aprovados**, em cerca de 1 min.
 
@@ -1028,6 +1068,10 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 PR → CI (build + 238 testes) + CodeQL ──► merge na main ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
 ```
 
+A `main` recebe código pelo PR `staging` → `main` ou, em urgências, por um PR de `hotfix/*`, com a
+mesma sequência publicando a `staging` em homologação. O fluxo completo e as configurações manuais
+estão em [CICD.md](CICD.md).
+
 ---
 
 ## 8. Integrações externas
@@ -1059,7 +1103,9 @@ Cada decisão registra o que é e por que é assim. O contexto de cada uma está
 - **Por quê:** um só motor para operar, testar (o compose usa uma imagem só) e documentar; o
   pgvector já exige PostgreSQL. Os bancos ficam separados porque um banco único esconderia defeitos
   de contexto e de extensão ([§3.1](#31-topologia)).
-- **Consequência:** o banco fica em `us-east-2`, e a aplicação em `sfo`.
+- **Consequência:** o banco fica em `us-east-2` (Ohio) e a aplicação em `us-east4-eqdc4a`
+  (Virgínia), regiões vizinhas desde 02/11. A aproximação não produziu ganho isolável nas sondas:
+  o que pesava era o *cold start* do Neon ([§3.1](#31-topologia)).
 - **Evidência:** health checks `postgres`/`pgvector` Healthy; API do Neon; `__EFMigrationsHistory`
   com `InitPostgres`.
 
@@ -1186,7 +1232,9 @@ Evidência coletada em 31/10/2026.
 | Deploy automático da `main` após os checks | Confirmado | `checkSuites: true` nas configurações; deploy e CI criados no mesmo push |
 | Health check de deploy `/health/ready` | Confirmado | Configurações do serviço; log de build `Healthcheck succeeded!` |
 | `drainingSeconds = 30` | Confirmado | Configurações do serviço; SIGTERM → encerramento em 6 ms |
-| 1 réplica em `sfo` | Confirmado | `multiRegionConfig.sfo.numReplicas = 1` |
+| 1 réplica em `us-east4-eqdc4a` | Confirmado (02/11) | `multiRegionConfig["us-east4-eqdc4a"].numReplicas = 1` nos serviços `tratoo` e `Redis` |
+| Zona DNS na Cloudflare, em DNS only, com a raiz atendendo | Confirmado (02/11) | NS `*.ns.cloudflare.com`; raiz com registro A e HTTP 200; IP real do cliente preservado no `/api/diagnostico/rede` |
+| Redis na mesma região da API | Confirmado (02/11) | Check `redis` em 1 ms, contra 60 ms enquanto o serviço ficou em `sfo` |
 | Domínio `www.tratoo.app.br` | Confirmado | CNAME `rmkhqshq.up.railway.app`; Railway: verificado, `PROPAGATED`, certificado `VALID` |
 | Redirecionamento http → https e HSTS | Confirmado | `301` em `http://`; `Strict-Transport-Security: max-age=2592000` |
 | E-mail pelo SDK do Resend (HTTPS) | Confirmado | Pacote `Resend` `0.8.0`; `AddResend`; sem `SmtpClient`/`MailKit` no código; métricas do Resend: 4 enviados, 4 entregues em outubro |
