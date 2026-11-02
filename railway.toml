@@ -8,7 +8,8 @@
 #
 # Os valores abaixo estão aplicados nas SETTINGS do serviço (Railway → tratoo →
 # production → Settings → Deploy), definidas em 30/10/2026 via
-# `serviceInstanceUpdate`. Este arquivo virou a documentação versionada desses
+# `serviceInstanceUpdate`. O serviço de homologação também não lê este arquivo e tem
+# os mesmos valores nas settings dele (Docs/CICD.md). Este arquivo virou a documentação versionada desses
 # valores: o ShutdownTests lê drainingSeconds daqui. Se mudar um valor, mude nos
 # dois lugares. Para conferir o que vale de fato, consulte
 # deployment(id){ meta } → meta.serviceManifest.deploy na API da Railway.
