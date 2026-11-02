@@ -147,7 +147,7 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
 
 O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda nos PRs e pushes de
 `staging` e `main`. Ele faz restore, build em Release e roda os testes. As duas branches exigem que
-esse check passe; a regra não se aplica a administradores. O fluxo
+esse check passe, inclusive para administradores. O fluxo
 `main → feature/fix → staging → main`, com retirada de funcionalidades e hotfix, está em
 [Docs/CICD.md](Docs/CICD.md).
 
