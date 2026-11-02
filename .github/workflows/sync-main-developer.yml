@@ -1,0 +1,84 @@
+# Depois de um CI verde na main, abre (ou mantém aberto) um PR main → developer.
+# Fluxo completo e procedimento de conflito em Docs/CICD.md.
+#
+# Só abre o PR: nunca faz merge, nunca escreve em branch. A cabeça do PR é a própria main,
+# então não existe branch auxiliar, o PR acompanha novos pushes sozinho e o check
+# "Build e testes" que o protege é o do push na main.
+#
+# Não faz checkout de propósito: nenhum código do repositório roda com este token.
+#
+# Requer "Allow GitHub Actions to create and approve pull requests" nas configurações
+# do repositório. O workflow_run só dispara a partir da versão deste arquivo na main.
+name: Sincronizar main → developer
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Duas execuções seguidas não podem ver "sem PR" ao mesmo tempo e abrir dois.
+concurrency:
+  group: sync-main-developer
+  cancel-in-progress: false
+
+jobs:
+  abrir-pr:
+    name: Abrir PR main → developer
+    # event == push exclui PRs de fork cuja branch também se chame main.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Abrir ou conferir o PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          pendentes=$(gh api "repos/$GH_REPO/compare/developer...main" --jq '.ahead_by')
+          if [ "$pendentes" = "0" ]; then
+            echo "developer já contém a main. Nada a fazer."
+            exit 0
+          fi
+
+          pr=$(gh pr list --base developer --head main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            echo "PR #$pr já está aberto e acompanha a main."
+          else
+            url=$(gh pr create --base developer --head main \
+              --title "chore(sync): main → developer" \
+              --body "Sincronização automática depois de um CI verde na \`main\`. Use **merge commit**: squash ou rebase fariam as branches divergirem. Procedimento em \`Docs/CICD.md\`.")
+            pr="${url##*/}"
+            echo "PR #$pr aberto: $url"
+          fi
+
+          # O GitHub calcula o mergeable em segundo plano; UNKNOWN significa "ainda não sei".
+          estado="UNKNOWN"
+          for _ in 1 2 3 4 5 6; do
+            estado=$(gh pr view "$pr" --json mergeable --jq '.mergeable')
+            [ "$estado" != "UNKNOWN" ] && break
+            sleep 10
+          done
+          echo "Estado do merge: $estado"
+
+          if [ "$estado" = "CONFLICTING" ]; then
+            echo "::warning::O PR #$pr tem conflitos com a developer e precisa de resolução manual (Docs/CICD.md)."
+            # O marcador evita repetir o aviso a cada novo push na main.
+            ja_avisou=$(gh pr view "$pr" --json comments --jq '[.comments[].body | select(contains("<!-- sync-main-developer:conflito -->"))] | length')
+            if [ "$ja_avisou" = "0" ]; then
+              gh pr comment "$pr" --body "<!-- sync-main-developer:conflito -->
+          Este PR tem conflitos com a \`developer\`. Nada foi alterado automaticamente. Resolva em uma branch própria, seguindo a seção de conflitos de \`Docs/CICD.md\`. Não edite a \`main\`."
+            fi
+          fi

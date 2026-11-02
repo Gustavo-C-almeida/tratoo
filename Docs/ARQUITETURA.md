@@ -396,7 +396,7 @@ erDiagram
 
 | Item | Valor | Fonte |
 |---|---|---|
-| Projeto e ambiente | Um ambiente, `production`, com os serviços `tratoo` e `Redis` | API da Railway (`list-services`) |
+| Projeto e ambiente | Um ambiente, `production`, com os serviços `tratoo` e `Redis`, mais um serviço de homologação com Redis próprio, publicado da branch `staging` ([CICD.md](CICD.md#homologação-e-produção-na-railway)) | API da Railway (`list-services`) |
 | Serviço `tratoo` | Origem GitHub `Gustavo-C-almeida/tratoo`, branch `main`, região `sfo`, **1 réplica**. O build usa o `Dockerfile` da raiz | Configurações do serviço; log de build (`load build definition from Dockerfile`) |
 | Gatilho de deploy | Push na `main`, com `checkSuites: true`: a Railway espera os checks do GitHub passarem | Configurações do serviço |
 | Deploy ativo | `ebf57cde` (31/10, 15:40 UTC), SUCCESS, commit `b134922` (PR #21) | `railway deployment list`; API da Railway |
@@ -987,15 +987,18 @@ Este diagrama mostra o caminho principal. A enum `StatusPagamento` tem também `
 
 O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e testes`:
 
-- **Disparo:** todo PR e todo push na `main`. A `concurrency` cancela a execução anterior do
-  mesmo ref. As permissões são `contents: read`, e há timeout de 20 min.
+- **Disparo:** PRs e pushes em `developer`, `staging` e `main`. A `concurrency` cancela a execução
+  anterior só em PRs, para não cancelar o check de que a Railway depende. As permissões são
+  `contents: read`, e há timeout de 20 min.
 - **Etapas:** checkout, `setup-dotnet` (8.0.x), cache do NuGet, `docker pull` das imagens de teste
   (`pgvector/pgvector:pg16`, `redis:7-alpine`), `dotnet restore Tratoo.sln`,
   `dotnet build -c Release`, `dotnet test` com logger TRX e upload dos resultados.
 - **Sem segredos.** O CI roda isolado do ambiente de produção.
 - **`TRATOO_EXIGIR_DOCKER: "1"`:** sem Docker, os testes de integração **falham** em vez de serem
   ignorados. Assim o pipeline só fica verde depois de rodá-los.
-- **Proteção da `main`:** exige o check `Build e testes`.
+- **Proteção de `developer`, `staging` e `main`:** exigem o check `Build e testes`.
+- **Origem da promoção:** nos PRs para a `main`, um job recusa qualquer origem que não seja a
+  `staging`. O bloqueio depende de torná-lo check obrigatório ([CICD.md](CICD.md#configuração-manual)).
 - **Última execução na `main`** (31/10): run `41215952551`, commit `b134922`, **sucesso**, com
   **238 testes, 238 aprovados**, em cerca de 1 min.
 
@@ -1027,6 +1030,10 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 ```
 PR → CI (build + 238 testes) + CodeQL ──► merge na main ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
 ```
+
+A `main` recebe código pelo PR `staging` → `main`, com a mesma sequência publicando a `staging` em
+homologação. Depois de um CI verde na `main`, o workflow `sync-main-developer.yml` abre o PR
+`main` → `developer`. O fluxo completo e as configurações manuais estão em [CICD.md](CICD.md).
 
 ---
 
