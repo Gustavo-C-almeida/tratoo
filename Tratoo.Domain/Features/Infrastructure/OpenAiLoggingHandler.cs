@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace Tratoo.Domain.Features.Infrastructure
@@ -9,6 +10,9 @@ namespace Tratoo.Domain.Features.Infrastructure
     /// </summary>
     public class OpenAiLoggingHandler : DelegatingHandler
     {
+        // O erro 401 da OpenAI repete um trecho da chave no corpo ("sk-abc***xyz").
+        private static readonly Regex PadraoChave = new(@"\bsk-[A-Za-z0-9_*\-]+", RegexOptions.Compiled);
+
         private readonly ILogger<OpenAiLoggingHandler> _logger;
 
         public OpenAiLoggingHandler(ILogger<OpenAiLoggingHandler> logger)
@@ -28,11 +32,11 @@ namespace Tratoo.Domain.Features.Infrastructure
                 request.Content = new StringContent(requestContent, Encoding.UTF8, "application/json");
             }
 
+            // Os headers ficam de fora: o Authorization carrega a chave da API.
             _logger.LogInformation(
-                "OpenAI Request: {Method} {Uri}\nHeaders: {Headers}\nBody: {Body}",
+                "OpenAI Request: {Method} {Uri}\nBody: {Body}",
                 request.Method,
                 request.RequestUri,
-                string.Join(", ", request.Headers.Select(h => $"{h.Key}: {h.Value.FirstOrDefault()}")),
                 requestContent);
 
             // Envia a requisição
@@ -47,7 +51,7 @@ namespace Tratoo.Domain.Features.Infrastructure
                 response.StatusCode,
                 response.ReasonPhrase,
                 contentLength,
-                responseContent);
+                PadraoChave.Replace(responseContent, "[REDACTED]"));
 
             // Recria o content para que a aplicação consiga ler
             response.Content = new StringContent(responseContent, Encoding.UTF8, "application/json");

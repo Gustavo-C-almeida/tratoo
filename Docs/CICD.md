@@ -24,16 +24,19 @@ flowchart LR
     M[main] -->|"nova branch"| F["feature/* ou fix/*"]
     F -->|"PR + CI, squash"| S[staging]
     S -->|"PR + CI + aprovação humana, merge commit"| M
+    M -->|"antes da promoção: fix/*, merge commit"| S
     S -.->|"Railway, depois dos checks"| H[(Homologação)]
     M -.->|"Railway, depois dos checks"| P[(Produção)]
 ```
 
 1. Crie a branch a partir da `main` atualizada.
-2. Abra o PR para a `staging` e espere o CI.
+2. Abra o PR para a `staging` e espere o CI. Se o GitHub indicar que a branch está desatualizada,
+   use **Update branch**.
 3. Faça o merge com **squash**. A Railway publica em homologação depois dos checks.
 4. Homologue. Retire da `staging` o que for reprovado.
-5. Abra o PR `staging` → `main` e espere o CI.
-6. Faça o merge com **merge commit**. A Railway publica em produção depois dos checks.
+5. [Leve a `main` para a `staging`](#levar-a-main-para-a-staging).
+6. Abra o PR `staging` → `main` e espere o CI.
+7. Faça o merge com **merge commit**. A Railway publica em produção depois dos checks.
 
 Nenhum merge é automático. Produção só recebe código quando uma pessoa faz o merge de um PR.
 
@@ -43,10 +46,39 @@ Nenhum merge é automático. Produção só recebe código quando uma pessoa faz
 |---|---|---|
 | `feature/*`, `fix/*` e `revert-*` → `staging` | **Squash** | Cada entrega vira um commit, fácil de reverter. A branch preservada continua apta a um novo PR depois da retirada |
 | `staging` → `main` | **Merge commit** | Registra o que já foi promovido. Com squash, a próxima promoção tentaria aplicar tudo de novo |
+| `fix/*` que leva a `main` para a `staging` | **Merge commit** | A regra de branch atualizada olha o histórico. Com squash, a `staging` continua desatualizada |
 | `hotfix/*` → `main` e `staging` | **Squash** | O mesmo commit de correção entra nas duas, e a promoção seguinte não gera conflito |
 
 O GitHub não permite escolher o método por branch, então isso é uma regra de processo. Por isso
-também `Require linear history` e `Require branches to be up to date` devem ficar desligados.
+também `Require linear history` deve ficar desligado.
+
+### Levar a `main` para a `staging`
+
+`main` e `staging` exigem *Require branches to be up to date*: a origem de um PR precisa conter a
+ponta do destino. Cada promoção cria um merge commit que só existe na `main`, e o botão **Update
+branch** não resolve no PR `staging` → `main`, porque tentaria gravar direto na `staging`
+protegida. Antes de cada promoção, depois da homologação:
+
+```bash
+git fetch origin
+git switch -c fix/sincroniza-main origin/staging
+git merge origin/main
+git push -u origin fix/sincroniza-main
+gh pr create --base staging --title "chore: leva a main para a staging" --body "Preparação da promoção."
+```
+
+Faça o merge com **merge commit**. Depois dele, a Railway publica a `staging` de novo, e o PR
+`staging` → `main` pode seguir.
+
+### Efeito do Update branch
+
+**Update branch** faz o merge da `staging` na sua branch, então ela passa a conter as outras
+entregas que estavam lá. Isso não atrapalha o merge para a `staging`, mas tem duas consequências:
+
+- Se outra entrega for retirada depois, um novo PR da sua branch a trará de volta. Antes de abri-lo,
+  reverta essa entrega na sua branch.
+- Um merge na `staging` deixa os demais PRs abertos desatualizados, e cada um precisa de um novo
+  Update branch.
 
 ## Retirar uma funcionalidade reprovada
 
@@ -56,7 +88,8 @@ A promoção leva tudo o que está na `staging`, então o que foi reprovado sai 
    `revert-<número>-<nome>` e abre um PR para a `staging`.
 2. Faça o merge com **squash**. Só essa funcionalidade sai, e a Railway publica a `staging` sem ela.
 3. **Não apague a branch da funcionalidade.** Ajuste-a nela mesma e abra um novo PR para a
-   `staging` quando estiver pronta. O PR traz a funcionalidade inteira de novo.
+   `staging` quando estiver pronta. O PR traz a funcionalidade inteira de novo. Confira o
+   [efeito do Update branch](#efeito-do-update-branch) se ela já tiver recebido outras entregas.
 
 Se outra entrega tiver alterado as mesmas linhas depois, o botão Revert acusa conflito. Nesse caso,
 faça a reversão em uma branch `fix/*`, a partir da `staging`, e resolva lá.
@@ -72,17 +105,20 @@ git switch -c hotfix/descricao origin/main
 
 1. Faça o commit, envie a branch e abra o PR para a `main`. Espere o CI, faça o merge com
    **squash** e confira a produção.
-2. Abra um segundo PR da **mesma branch** para a `staging`, também com squash. Sem isso, a correção
-   não estará na homologação, e a próxima promoção pode gerar conflito.
+2. Abra um segundo PR da **mesma branch** para a `staging`, use **Update branch** e faça o merge
+   também com squash. Sem isso, a correção não estará na homologação, e a próxima promoção pode gerar
+   conflito.
+
+Siga essa ordem: depois do Update branch, a branch contém o que está na `staging` e não pode mais
+ir para a `main`.
 
 ## Conflitos
 
 - **PR de `feature/*` ou `fix/*` para a `staging`:** faça `git merge origin/staging` na sua branch,
-  resolva e envie. O conteúdo da `staging` passa a fazer parte da branch: se outra entrega for
-  retirada depois, um novo PR dessa branch a trará de volta. Nesse caso, reverta-a na própria branch.
+  resolva e envie. O resultado é o mesmo do [Update branch](#efeito-do-update-branch).
 - **PR `staging` → `main`:** não use o editor de conflitos do GitHub, que tentaria gravar na
-  `main` ou na `staging`. Crie `fix/*` a partir da `staging`, faça `git merge origin/main`, resolva
-  e abra o PR para a `staging`.
+  `main` ou na `staging`. Resolva no `git merge origin/main` de
+  [levar a `main` para a `staging`](#levar-a-main-para-a-staging).
 
 Nunca use force push em `main` ou `staging`.
 
@@ -136,15 +172,21 @@ Cada item abaixo deve ser exclusivo do serviço de homologação. Nenhum valor �
 
 ## Configuração manual
 
-Fora do repositório, portanto não versionada. Faça depois que este fluxo chegar à `main`.
+Fica fora do repositório, portanto não é versionada. Se recriar algo, use estes valores.
 
 ### GitHub
 
-1. **Exigir a origem:** em Settings → Branches, adicione `Origem do PR` aos checks obrigatórios da
-   `staging` e da `main`. Antes disso, o job só avisa.
-2. **Conferir as proteções:** `Build e testes` obrigatório nas duas branches, com force push e
-   exclusão bloqueados.
-3. **Desativar rebase:** em Settings → General, desmarque *Allow rebase merging*.
+Proteção de `main` e `staging`:
+
+| Regra | Valor |
+|---|---|
+| Checks obrigatórios | `Build e testes` e `Origem do PR` |
+| *Require branches to be up to date* | Ligado |
+| PR obrigatório | Sim, com 0 aprovações: o merge manual é a aprovação humana |
+| *Do not allow bypassing* (`enforce_admins`) | Ligado: vale também para administradores |
+| Force push e exclusão | Bloqueados |
+
+No repositório: squash e merge commit ativos, *Allow rebase merging* desmarcado.
 
 ### Railway e provedores
 
@@ -157,7 +199,8 @@ serviço de homologação.
 gh pr create --base main --head staging --title "release: staging → main" --body "Homologado em <data>."
 ```
 
-1. Confirme a versão em homologação e aplique as migrations pendentes em produção, se houver.
-2. Espere `Build e testes` e `Origem do PR`.
-3. Aprove e faça o merge com **merge commit**. A Railway publica depois dos checks da `main`.
-4. Confira `/health/ready` em produção. O rollback é feito pelo histórico de deploys da Railway.
+1. [Leve a `main` para a `staging`](#levar-a-main-para-a-staging) antes de abrir o PR.
+2. Confirme a versão em homologação e aplique as migrations pendentes em produção, se houver.
+3. Espere `Build e testes` e `Origem do PR`.
+4. Faça o merge com **merge commit**. A Railway publica depois dos checks da `main`.
+5. Confira `/health/ready` em produção. O rollback é feito pelo histórico de deploys da Railway.
