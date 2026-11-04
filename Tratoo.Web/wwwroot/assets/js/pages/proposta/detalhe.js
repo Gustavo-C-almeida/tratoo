@@ -1,5 +1,6 @@
 import { api } from '/assets/js/services/api.js';
 import { guidDaUrl } from '/assets/js/utils/url.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Detalhe e negociação de proposta (v3 - Melhorada) ───────────────────────
 
 const root = () => document.getElementById('proposta-root');
@@ -234,7 +235,7 @@ function render() {
             </div>
 
             <div class="prop-valores">
-                <div class="prazo-info"><i class="fa-solid fa-calendar-days"></i> Prazo: <strong>${v ? dataFmt(v.prazoTotal) : '—'}</strong></div>
+                <div class="prazo-info"><i class="fa-solid fa-calendar-days"></i> Prazo: <strong>${v ? formatarDiaCalendario(v.prazoTotal) : '—'}</strong></div>
                 <div class="prazo-info"><i class="fa-solid fa-credit-card"></i> Pagamento: <strong>${esc(v?.formaPagamento || 'PIX')}</strong></div>
                 <div class="prazo-info"><i class="fa-solid fa-arrows-rotate"></i> Revisões: <strong>${v?.revisoesInclusas ?? '—'}</strong></div>
             </div>
@@ -471,7 +472,7 @@ function render() {
                             </div>
                             <div class="preview-item">
                                 <div class="preview-label">Prazo</div>
-                                <div class="preview-value" id="preview-prazo">${v ? dataFmt(v.prazoTotal) : '—'}</div>
+                                <div class="preview-value" id="preview-prazo">${v ? formatarDiaCalendario(v.prazoTotal) : '—'}</div>
                             </div>
                             <div class="preview-item">
                                 <div class="preview-label">Revisões</div>
@@ -714,7 +715,7 @@ function updateLivePreview() {
         previewValor.textContent = moeda(parseFloat(valor) || 0);
     }
     if (previewPrazo) {
-        previewPrazo.textContent = prazo ? dataFmt(prazo) : '—';
+        previewPrazo.textContent = prazo ? formatarDiaCalendario(prazo) : '—';
     }
     if (previewRevisoes) {
         previewRevisoes.textContent = revisoes || '—';
@@ -739,7 +740,7 @@ function renderVersao(v, destaque = false) {
             <span><strong><i class="fa-solid fa-credit-card"></i> Pagamento:</strong> ${esc(v.formaPagamento)}</span>
         </div>
         <div class="versao-campo-row">
-            <span><strong><i class="fa-solid fa-calendar-days"></i> Prazo:</strong> ${dataFmt(v.prazoTotal)}</span>
+            <span><strong><i class="fa-solid fa-calendar-days"></i> Prazo:</strong> ${formatarDiaCalendario(v.prazoTotal)}</span>
             <span><strong><i class="fa-solid fa-arrows-rotate"></i> Revisões:</strong> ${v.revisoesInclusas}</span>
         </div>
         ${v.observacoes ? `<div class="versao-campo"><strong><i class="fa-solid fa-pen-to-square"></i> Obs:</strong> ${esc(v.observacoes)}</div>` : ''}
@@ -882,7 +883,7 @@ function abrirModalAceite() {
                         <div class="modal-grid-icon"><i class="fa-solid fa-calendar-days"></i></div>
                         <div class="modal-grid-content">
                             <div class="modal-grid-label">Prazo de Entrega</div>
-                            <div class="modal-grid-value">${dataFmt(v.prazoTotal)}</div>
+                            <div class="modal-grid-value">${formatarDiaCalendario(v.prazoTotal)}</div>
                         </div>
                     </div>
                     <div class="modal-grid-item">
@@ -976,7 +977,7 @@ function abrirModalAceitePrestador() {
             <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-secondary)">Você está aceitando a versão ${ultima.versao} enviada pelo contratante.</p>
             <p><strong><i class="fa-solid fa-bullseye"></i> Objetivo:</strong> ${esc(ultima.objetivo)}</p>
             <p><strong><i class="fa-solid fa-money-bill-wave"></i> Valor:</strong> ${moeda(ultima.valorTotal)}</p>
-            <p><strong><i class="fa-solid fa-calendar-days"></i> Prazo:</strong> ${dataFmt(ultima.prazoTotal)}</p>
+            <p><strong><i class="fa-solid fa-calendar-days"></i> Prazo:</strong> ${formatarDiaCalendario(ultima.prazoTotal)}</p>
             <p><strong><i class="fa-solid fa-arrows-rotate"></i> Revisões:</strong> ${ultima.revisoesInclusas}</p>`;
     }
 

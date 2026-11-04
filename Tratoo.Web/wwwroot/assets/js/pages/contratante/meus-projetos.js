@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Meus projetos (painel do contratante) ────────────────────────────────────
 
 const root = () => document.getElementById('meus-projetos-root');
@@ -49,7 +50,7 @@ async function carregarProjetos() {
         </div>
         <div id="msg-global"></div>
         <div id="lista-projetos">
-            <div style="padding:40px;text-align:center;color:#94a3b8">Carregando seus projetos...</div>
+            <div style="padding:40px;text-align:center;color:#64748b">Carregando seus projetos...</div>
         </div>
     </div>`;
 
@@ -76,7 +77,7 @@ async function carregarProjetos() {
     if (!projetos.length) {
         // Caso não tenha projetos: mostra apenas "Criar meu primeiro projeto"
         lista.innerHTML = `
-            <div style="text-align:center;padding:60px;color:#94a3b8">
+            <div style="text-align:center;padding:60px;color:#64748b">
                 <p style="font-size:1.1rem;margin-bottom:12px">Você ainda não tem projetos.</p>
                 <a href="criar-projeto.html" class="btn-novo-projeto">Criar meu primeiro projeto</a>
             </div>`;
@@ -126,7 +127,7 @@ function renderCard(p) {
             <h3>${escHtml(p.titulo)}</h3>
             <div class="mp-meta">
                 <span>${formatarMoeda(p.orcamentoMin)} – ${formatarMoeda(p.orcamentoMax)}</span>
-                <span>Prazo: ${formatarData(p.prazoEntrega)}</span>
+                <span>Prazo: ${formatarDiaCalendario(p.prazoEntrega)}</span>
                 <span>${p.totalPropostas} proposta${p.totalPropostas !== 1 ? 's' : ''}</span>
                 <span>Criado em ${formatarData(p.publicadoEm || p.criadoEm)}</span>
             </div>

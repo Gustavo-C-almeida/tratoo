@@ -30,7 +30,7 @@ namespace Tratoo.Domain.Models.Financeiro
         // Status
         public bool Ativa { get; set; } = true;
 
-        public DateTime CriadoEm { get; set; } = DateTime.Now;
+        public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
         public DateTime? AtualizadoEm { get; set; }
     }
 }

@@ -58,7 +58,7 @@ namespace Tratoo.Domain.Features.Mensagens
                 PrestadorId = dto.PrestadorId,
                 MensagemInicial = dto.MensagemInicial.Trim(),
                 OrcamentoSugerido = dto.OrcamentoSugerido,
-                PrazoDesejado = dto.PrazoDesejado,
+                PrazoDesejado = DatasUtc.Calendario(dto.PrazoDesejado),
                 Status = StatusConvite.Pendente,
                 CriadoEm = DateTime.UtcNow
             };

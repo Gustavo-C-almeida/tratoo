@@ -92,7 +92,7 @@ namespace Tratoo.Domain.Features.Contratos
                 ContratoServicoId = contratoId,
                 DescricaoEntrega = dto.DescricaoEntrega.Trim(),
                 Observacoes = string.IsNullOrWhiteSpace(dto.Observacoes) ? null : dto.Observacoes.Trim(),
-                DataEntrega = dto.DataEntrega == default ? DateTime.UtcNow : dto.DataEntrega,
+                DataEntrega = dto.DataEntrega == default ? DatasUtc.HojeNoBrasil() : DatasUtc.Calendario(dto.DataEntrega),
                 Status = EntregaStatus.PendenteAprovacao
             };
 

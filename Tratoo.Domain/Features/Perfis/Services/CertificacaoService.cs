@@ -21,6 +21,8 @@ namespace Tratoo.Domain.Features.Perfis
 
         public async Task AdicionarAsync(CertificacaoDTO dto)
         {
+            ValidarDatas(dto);
+
             var prestador = await _repo.GetCompletoAsync(dto.PrestadorId)
                 ?? throw new NegocioException("Prestador não encontrado");
 
@@ -29,8 +31,8 @@ namespace Tratoo.Domain.Features.Perfis
                 PrestadorId        = dto.PrestadorId,
                 Nome               = dto.Nome,
                 InstituicaoEmissora = dto.Instituicao,
-                DataEmissao        = dto.DataEmissao,
-                DataValidade       = dto.DataValidade,
+                DataEmissao        = DatasUtc.Calendario(dto.DataEmissao),
+                DataValidade       = DatasUtc.Calendario(dto.DataValidade),
                 LinkVerificacao    = dto.LinkVerificacao,
                 ArquivoUrl         = dto.ArquivoUrl
             };
@@ -44,6 +46,8 @@ namespace Tratoo.Domain.Features.Perfis
 
         public async Task EditarAsync(CertificacaoDTO dto)
         {
+            ValidarDatas(dto);
+
             var prestador = await _repo.GetCompletoAsync(dto.PrestadorId)
                 ?? throw new NegocioException("Prestador não encontrado");
 
@@ -56,8 +60,8 @@ namespace Tratoo.Domain.Features.Perfis
 
             cert.Nome               = dto.Nome;
             cert.InstituicaoEmissora = dto.Instituicao;
-            cert.DataEmissao        = dto.DataEmissao;
-            cert.DataValidade       = dto.DataValidade;
+            cert.DataEmissao        = DatasUtc.Calendario(dto.DataEmissao);
+            cert.DataValidade       = DatasUtc.Calendario(dto.DataValidade);
             cert.LinkVerificacao    = dto.LinkVerificacao;
             cert.ArquivoUrl         = dto.ArquivoUrl;
 
@@ -96,5 +100,11 @@ namespace Tratoo.Domain.Features.Perfis
             LinkVerificacao = c.LinkVerificacao,
             ArquivoUrl      = c.ArquivoUrl
         };
+
+        private static void ValidarDatas(CertificacaoDTO dto)
+        {
+            if (dto.DataEmissao == default)
+                throw new NegocioException("Informe a data de emissão da certificação.");
+        }
     }
 }

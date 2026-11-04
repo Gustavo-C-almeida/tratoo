@@ -523,8 +523,8 @@ namespace Tratoo.API.EndPoints
 
             var form = await http.Request.ReadFormAsync();
 
-            DateTime.TryParse(form["dataEmissao"].ToString(), out var dataEmissao);
-            DateTime? dataValidade = DateTime.TryParse(form["dataValidade"].ToString(), out var dv) ? dv : null;
+            DatasUtc.TentarLer(form["dataEmissao"].ToString(), out var dataEmissao);
+            DateTime? dataValidade = DatasUtc.TentarLer(form["dataValidade"].ToString(), out var dv) ? dv : null;
 
             var campos = new CertificacaoCampos(
                 form["nome"].ToString().Trim(),

@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
 const root = () => document.getElementById('perfil-root');
@@ -13,7 +14,7 @@ function nivelLabel(n) {
 
 function formatarData(iso) {
     if (!iso) return '';
-    return new Date(iso).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+    return formatarDiaCalendario(iso, { month: 'short', year: 'numeric' });
 }
 
 function iniciais(nome) {

@@ -15,7 +15,7 @@ function iniciais(nome) {
 const IDIOMAS_DISPONIVEIS = ['Português', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Italiano', 'Mandarim'];
 
 async function carregarEEditar() {
-    root().innerHTML = '<p style="text-align:center;padding:60px;color:#94a3b8">Carregando...</p>';
+    root().innerHTML = '<p style="text-align:center;padding:60px;color:#64748b">Carregando...</p>';
 
     let dados;
     try {
@@ -96,7 +96,7 @@ function renderizarFormulario(d) {
                     <label>Sobre / Bio</label>
                     <textarea id="p-bio" maxlength="1000" rows="5"
                         placeholder="Apresentação livre. Fale sobre você ou sua empresa...">${escHtml(d.descricao ?? '')}</textarea>
-                    <span id="bio-count" style="font-size:11px;color:#94a3b8">${(d.descricao ?? '').length}/1000</span>
+                    <span id="bio-count" style="font-size:11px;color:#64748b">${(d.descricao ?? '').length}/1000</span>
                 </div>
                 <div class="form-group">
                     <label>Nome da empresa</label>
@@ -129,12 +129,12 @@ function renderizarFormulario(d) {
                         placeholder="https://linkedin.com/in/seuperfil">
                 </div>
                 <div class="form-group">
-                    <label>E-mail de contato <span style="font-weight:normal;color:#9ca3af;font-size:12px">(público — exibido no perfil se preenchido)</span></label>
+                    <label>E-mail de contato <span style="font-weight:normal;color:#64748b;font-size:12px">(público — exibido no perfil se preenchido)</span></label>
                     <input type="email" id="p-email-contato" value="${escHtml(d.emailContato ?? '')}"
                         placeholder="contato@empresa.com.br">
                 </div>
                 <div class="form-group">
-                    <label>Telefone <span style="font-weight:normal;color:#9ca3af;font-size:12px">(privado — visível apenas para a plataforma)</span></label>
+                    <label>Telefone <span style="font-weight:normal;color:#64748b;font-size:12px">(privado — visível apenas para a plataforma)</span></label>
                     <input type="text" id="p-telefone" value="${escHtml(d.telefone ?? '')}"
                         placeholder="(11) 99999-0000" maxlength="15" inputmode="numeric">
                 </div>
@@ -155,7 +155,7 @@ function renderizarFormulario(d) {
             <h2 class="perfil-secao__titulo">Disponibilidade e Contexto</h2>
             <form id="form-contexto" novalidate>
                 <div class="form-group">
-                    <label>Disponibilidade <span style="font-weight:normal;color:#9ca3af;font-size:12px">(exibida no perfil público)</span></label>
+                    <label>Disponibilidade <span style="font-weight:normal;color:#64748b;font-size:12px">(exibida no perfil público)</span></label>
                     <div class="form-radio-group">
                         <label class="form-radio">
                             <input type="radio" name="disponibilidade" value="AceitandoPrestadores"
@@ -176,10 +176,10 @@ function renderizarFormulario(d) {
                     <div class="form-check-group">${idiomasHtml}</div>
                 </div>
                 <div class="form-group">
-                    <label>Por que trabalhar comigo <span style="font-weight:normal;color:#9ca3af;font-size:12px">(máx. 500 caracteres)</span></label>
+                    <label>Por que trabalhar comigo <span style="font-weight:normal;color:#64748b;font-size:12px">(máx. 500 caracteres)</span></label>
                     <textarea id="p-pq-trabalhar" maxlength="500" rows="4"
                         placeholder="Descreva seus diferenciais, como você trabalha com prestadores, o que valoriza...">${escHtml(d.porQueTrabalharComigo ?? '')}</textarea>
-                    <span id="pq-count" style="font-size:11px;color:#94a3b8">${(d.porQueTrabalharComigo ?? '').length}/500</span>
+                    <span id="pq-count" style="font-size:11px;color:#64748b">${(d.porQueTrabalharComigo ?? '').length}/500</span>
                 </div>
                 <p id="contexto-erro" class="form-erro" hidden></p>
                 <p id="contexto-sucesso" class="form-sucesso" hidden></p>
@@ -203,7 +203,7 @@ function renderizarFormulario(d) {
         </div>
 
         <!-- ZONA DE PERIGO — EXCLUSÃO DE CONTA (LGPD) -->
-        <div class="perfil-secao" style="border:1px solid #fecaca;background:#fef2f2">
+        <div class="perfil-secao" style="border:1px solid #fecaca">
             <h2 class="perfil-secao__titulo" style="color:#b91c1c">Excluir conta</h2>
             <p style="font-size:13px;color:#7f1d1d;line-height:1.6;margin-bottom:14px">
                 Esta ação é <strong>permanente</strong>. Sua conta será desativada e seus dados pessoais
