@@ -1,6 +1,7 @@
 import { api } from '/assets/js/services/api.js';
 import { el } from '/assets/js/utils/dom.js';
 import { guidDaUrl } from '/assets/js/utils/url.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // Página: /pages/contrato/detalhe.html?id={guid}
 // Design Moderno para Detalhe do Contrato
 
@@ -139,7 +140,7 @@ function renderContrato(c) {
     const prestadorParte = conteudo.prestador || {};
 
     const expiraEm = new Date(c.expiraEm).toLocaleDateString('pt-BR');
-    const dataTermino = prazo.dataTermino ? new Date(prazo.dataTermino).toLocaleDateString('pt-BR') : '—';
+    const dataTermino = formatarDiaCalendario(prazo.dataTermino);
     const valorFormatado = pagamento.valorTotal
         ? pagamento.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
         : '—';
@@ -305,7 +306,7 @@ function renderContrato(c) {
                                 <div class="timeline-marker start"></div>
                                 <div class="timeline-content">
                                     <span class="timeline-label">Início</span>
-                                    <span class="timeline-value">${prazo.dataInicio ? new Date(prazo.dataInicio).toLocaleDateString('pt-BR') : '—'}</span>
+                                    <span class="timeline-value">${formatarDiaCalendario(prazo.dataInicio)}</span>
                                 </div>
                             </div>
                             <div class="timeline-connector"></div>
@@ -327,7 +328,7 @@ function renderContrato(c) {
                                         <div class="marco-details">
                                             <div class="marco-desc">${escapeHtml(m.descricao || '')}</div>
                                             <div class="marco-meta">
-                                                <span><i class="fa-solid fa-calendar-days"></i> ${m.prazo ? new Date(m.prazo).toLocaleDateString('pt-BR') : '—'}</span>
+                                                <span><i class="fa-solid fa-calendar-days"></i> ${formatarDiaCalendario(m.prazo)}</span>
                                                 <span><i class="fa-solid fa-money-bill-wave"></i> ${m.valor?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || '—'}</span>
                                             </div>
                                         </div>
@@ -720,7 +721,9 @@ async function registrarEntrega() {
     const form = new FormData();
     form.append('descricaoEntrega', descricao);
     form.append('observacoes', document.getElementById('entrega-observacoes').value.trim());
-    form.append('dataEntrega', document.getElementById('entrega-data').value || new Date().toISOString());
+    // Sem data escolhida, a API usa o dia atual.
+    const dataEntrega = document.getElementById('entrega-data').value;
+    if (dataEntrega) form.append('dataEntrega', dataEntrega);
     form.append('links', JSON.stringify(links));
     arquivos.forEach(f => form.append('files', f));
 
@@ -784,7 +787,7 @@ async function carregarSecaoEntrega(c) {
             <div class="card-content">
                 <p class="entrega-descricao-txt">${escapeHtml(entrega.descricaoEntrega)}</p>
                 ${entrega.observacoes ? `<p class="entrega-obs"><strong>Observações:</strong> ${escapeHtml(entrega.observacoes)}</p>` : ''}
-                <p class="entrega-meta">Entregue em ${new Date(entrega.dataEntrega).toLocaleDateString('pt-BR')}</p>
+                <p class="entrega-meta">Entregue em ${formatarDiaCalendario(entrega.dataEntrega)}</p>
 
                 ${anexos ? `<div class="entrega-bloco"><h4>Anexos</h4><ul class="entrega-anexos">${anexos}</ul></div>` : ''}
                 ${links ? `<div class="entrega-bloco"><h4>Links</h4><ul class="entrega-links">${links}</ul></div>` : ''}

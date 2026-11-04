@@ -213,7 +213,7 @@
 
 .security-item span:first-child {
     background: var(--success-light);
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
     width: 36px;
     height: 36px;
     border-radius: var(--radius-md);
@@ -369,9 +369,10 @@ tratoo-footer {
 }
 
 .site-footer {
-    background: var(--primary);
-    color: var(--text-muted);
+    background: var(--surface);
+    color: var(--text-secondary);
     padding: var(--space-3xl) var(--space-lg) var(--space-xl);
+    border-top: 1px solid var(--border);
 }
 
 .site-footer .footer-inner {

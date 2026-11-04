@@ -24,7 +24,8 @@ namespace Tratoo.Domain.Features.Pagamentos
             StatusDisputa? status, DateTime? de, DateTime? ate,
             int? contratanteId, int? prestadorId, int? projetoId)
         {
-            var disputas = await _repo.GetTodasDisputasAsync(status, de, ate, contratanteId, prestadorId, projetoId);
+            var disputas = await _repo.GetTodasDisputasAsync(
+                status, DatasUtc.Instante(de), DatasUtc.Instante(ate), contratanteId, prestadorId, projetoId);
             return disputas.Select(MapResumo).ToList();
         }
 

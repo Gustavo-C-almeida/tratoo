@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Perfil Contratante ────────────────────────────────────────────────────────
 // Público por ID (?id=123) ou próprio perfil quando autenticado como contratante.
 
@@ -40,7 +41,7 @@ function obterContratanteId() {
 // ── Carrega perfil ────────────────────────────────────────────────────────────
 
 async function carregarPerfil() {
-    root().innerHTML = '<p style="text-align:center;padding:60px;color:#94a3b8">Carregando perfil...</p>';
+    root().innerHTML = '<p style="text-align:center;padding:60px;color:#64748b">Carregando perfil...</p>';
 
     const contratanteId = obterContratanteId();
 
@@ -367,7 +368,7 @@ function renderizarProjetos(lista) {
             ${desc ? `<p class="projeto-card__desc">${desc}</p>` : ''}
             <div class="projeto-card__meta">
                 ${orcamento ? `<span><i class="fa-solid fa-money-bill-wave"></i> ${orcamento}</span>` : ''}
-                <span><i class="fa-solid fa-calendar-days"></i> Prazo: ${formatarDataCurta(p.prazoEntrega)}</span>
+                <span><i class="fa-solid fa-calendar-days"></i> Prazo: ${formatarDiaCalendario(p.prazoEntrega, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                 <span><i class="fa-solid fa-envelope-open-text"></i> ${p.totalPropostas} proposta${p.totalPropostas !== 1 ? 's' : ''}</span>
                 ${diasDecisao}
             </div>

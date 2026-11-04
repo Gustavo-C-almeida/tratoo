@@ -11,7 +11,7 @@ function escHtml(str) {
 }
 
 async function carregarEEditar() {
-    root().innerHTML = '<p style="text-align:center;padding:60px;color:#94a3b8">Carregando...</p>';
+    root().innerHTML = '<p style="text-align:center;padding:60px;color:#64748b">Carregando...</p>';
 
     let dados;
     try {
@@ -64,7 +64,7 @@ function renderizarFormulario(d) {
                     <label>Bio (mínimo 100 caracteres para pontuar)</label>
                     <textarea id="p-bio" maxlength="1000" rows="5"
                         placeholder="Fale sobre você, sua trajetória e o que você oferece...">${escHtml(d.descricao ?? '')}</textarea>
-                    <span id="bio-count" style="font-size:11px;color:#94a3b8">${(d.descricao ?? '').length}/1000</span>
+                    <span id="bio-count" style="font-size:11px;color:#64748b">${(d.descricao ?? '').length}/1000</span>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -136,12 +136,12 @@ function renderizarFormulario(d) {
                 exige confirmação por um código enviado ao seu e-mail.
             </p>
             <div id="dados-bancarios-container">
-                <p style="font-size:13px;color:#94a3b8">Carregando...</p>
+                <p style="font-size:13px;color:#64748b">Carregando...</p>
             </div>
         </div>
 
         <!-- ZONA DE PERIGO — EXCLUSÃO DE CONTA (LGPD) -->
-        <div class="perfil-secao" style="border:1px solid #fecaca;background:#fef2f2">
+        <div class="perfil-secao" style="border:1px solid #fecaca">
             <h2 class="perfil-secao__titulo" style="color:#b91c1c">Excluir conta</h2>
             <p style="font-size:13px;color:#7f1d1d;line-height:1.6;margin-bottom:14px">
                 Esta ação é <strong>permanente</strong>. Sua conta será desativada e seus dados pessoais
@@ -233,7 +233,7 @@ function renderDadosBancariosView(d) {
                 <div class="banc-linha"><span>Tipo de chave</span><strong>${bancEsc(tipoLabel[d.tipoPix] || d.tipoPix)}</strong></div>
                 <div class="banc-linha"><span>Chave PIX</span><strong>${bancEsc(d.chavePixMascarada)}</strong></div>
             </div>
-            <p style="font-size:12px;color:#94a3b8;margin-top:8px">
+            <p style="font-size:12px;color:#64748b;margin-top:8px">
                 Atualizado em ${d.atualizadoEm ? new Date(d.atualizadoEm).toLocaleDateString('pt-BR') : '—'}
             </p>
             <button type="button" class="btn-salvar" id="btn-banc-alterar" style="margin-top:12px">Alterar dados bancários</button>`;

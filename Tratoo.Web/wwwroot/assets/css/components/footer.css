@@ -1,22 +1,20 @@
 /* ============================================================================
    TRATOO — Footer
-   Rodapé escuro, montado com o grid do Bootstrap (ver components/footer.html).
+   Rodapé claro, montado com o grid do Bootstrap (ver components/footer.html).
    Carregado depois de global.css em main.css, então vence os estilos legados
    de .site-footer que ainda existem lá.
    ============================================================================ */
 
 .site-footer {
-    background: var(--primary);
-    color: var(--text-muted);
+    background: var(--surface);
+    color: var(--text-secondary);
     padding: var(--space-2xl) 0 var(--space-xl);
+    border-top: 1px solid var(--border);
 }
 
 .site-footer__logo {
     height: 28px;
     width: auto;
-    /* Logo colorida sobre fundo escuro: converte para branco translúcido */
-    filter: brightness(0) invert(1);
-    opacity: 0.65;
 }
 
 /* Centraliza a logo no mobile (o grid já alinha à esquerda no desktop) */
@@ -33,10 +31,10 @@
 
 .site-footer__link:hover,
 .site-footer__link:focus {
-    color: var(--white);
+    color: var(--primary);
 }
 
 .site-footer__copy {
     font-size: var(--text-xs);
-    color: var(--gray-600);
+    color: var(--text-secondary);
 }
