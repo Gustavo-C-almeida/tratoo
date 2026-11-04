@@ -1032,10 +1032,10 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 - **Sem segredos.** O CI roda isolado do ambiente de produção.
 - **`TRATOO_EXIGIR_DOCKER: "1"`:** sem Docker, os testes de integração **falham** em vez de serem
   ignorados. Assim o pipeline só fica verde depois de rodá-los.
-- **Proteção de `staging` e `main`:** exigem o check `Build e testes`.
+- **Proteção de `staging` e `main`:** exigem os checks `Build e testes` e `Origem do PR`, branch
+  atualizada e PR, inclusive para administradores ([CICD.md](CICD.md#configuração-manual)).
 - **Origem do PR:** um job recusa PR para a `main` que não venha de `staging` ou `hotfix/*`, e PR
-  para a `staging` que não venha de `feature/*`, `fix/*`, `hotfix/*` ou `revert-*`. O bloqueio
-  depende de torná-lo check obrigatório ([CICD.md](CICD.md#configuração-manual)).
+  para a `staging` que não venha de `feature/*`, `fix/*`, `hotfix/*` ou `revert-*`.
 - **Última execução na `main`** (31/10): run `41215952551`, commit `b134922`, **sucesso**, com
   **238 testes, 238 aprovados**, em cerca de 1 min.
 
@@ -1060,7 +1060,7 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 | Recurso | Estado em 31/10 |
 |---|---|
 | CodeQL | *Default setup* (Actions, C#, JS/TS); análises do commit `b134922` com sucesso; 0 alertas abertos |
-| Check obrigatório na `main` | `Build e testes` |
+| Checks obrigatórios em `main` e `staging` (02/11) | `Build e testes` e `Origem do PR` |
 
 ### 7.4 Fluxo automatizado
 
@@ -1265,7 +1265,7 @@ Evidência coletada em 31/10/2026.
 | CSP e headers de segurança | Confirmado | Headers da resposta de produção |
 | CodeQL (default setup) | Confirmado | Análises do commit `b134922` com sucesso; 0 alertas abertos |
 | CI de build e testes com Docker obrigatório | Confirmado | `ci.yml`; run `41215952551`: 238/238 |
-| Check obrigatório na `main` | Configurado | Proteção da branch: `Build e testes` |
+| Checks obrigatórios em `main` e `staging` | Configurado (02/11) | Proteção das branches: `Build e testes` e `Origem do PR`, com `enforce_admins` |
 | Compose: api, postgres, redis, migrate, nginx; rede `interna`; volume `pgdata` | No código | `compose.yaml` |
 | Pagamentos Asaas | Configurado (sandbox) | `Asaas__BaseUrl` → `sandbox.asaas.com` |
 | OpenAI e R2 | Configurado | Variáveis `OpenAI__*`, `CloudflareR2*__*` |
