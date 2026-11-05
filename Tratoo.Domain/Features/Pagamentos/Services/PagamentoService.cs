@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Models.Financeiro;
@@ -282,23 +284,32 @@ namespace Tratoo.Domain.Features.Pagamentos
 
             // ── Idempotência: verifica se já foi processado ────────────────────
             var chaveIdempotencia = $"{tipoEvento}_{asaasId}";
-            if (await _repo.WebhookJaProcessadoAsync(chaveIdempotencia))
+            var webhookLog = await _repo.GetWebhookLogAsync(chaveIdempotencia);
+            if (webhookLog?.ProcessadoComSucesso == true)
             {
                 _logger.LogInformation("Webhook {Chave} já processado — ignorado (idempotência).", chaveIdempotencia);
                 return;
             }
 
             // ── Registra o webhook recebido ────────────────────────────────────
-            var webhookLog = new WebhookLog
+            // A chave é única: um reenvio depois de falha retoma o registro existente.
+            if (webhookLog is null)
             {
-                ChaveIdempotencia = chaveIdempotencia,
-                TipoEvento = tipoEvento,
-                AsaasCobrancaId = asaasId,
-                PayloadJson = payloadJson,
-                RecebidoEm = DateTime.UtcNow
-            };
+                webhookLog = new WebhookLog
+                {
+                    ChaveIdempotencia = chaveIdempotencia,
+                    TipoEvento = tipoEvento,
+                    AsaasCobrancaId = asaasId,
+                    PayloadJson = payloadJson,
+                    RecebidoEm = DateTime.UtcNow
+                };
 
-            await _repo.AddWebhookLogAsync(webhookLog);
+                await _repo.AddWebhookLogAsync(webhookLog);
+            }
+            else
+            {
+                webhookLog.PayloadJson = payloadJson;
+            }
 
             // ── Localiza o pagamento no sistema ───────────────────────────────
             // Transferências são localizadas pelo AsaasTransferenciaId; cobranças pelo GatewayPagamentoId.
@@ -332,7 +343,19 @@ namespace Tratoo.Domain.Features.Pagamentos
             webhookLog.ErroMensagem = erro;
             webhookLog.ProcessadoEm = DateTime.UtcNow;
 
-            await _repo.SaveChangesAsync();
+            try
+            {
+                await _repo.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "IX_WebhookLogs_ChaveIdempotencia"
+            })
+            {
+                // O mesmo evento chegou em paralelo e o outro processo gravou primeiro.
+                _logger.LogInformation("Webhook {Chave} processado em paralelo por outra requisição — ignorado.", chaveIdempotencia);
+            }
         }
 
         private async Task ProcessarEventoAsync(string tipoEvento, Pagamento pagamento, string payloadJson)
@@ -417,30 +440,47 @@ namespace Tratoo.Domain.Features.Pagamentos
                 return;
             }
 
-            pagamento.Status = StatusPagamento.Retido;
-            pagamento.PagoEm = DateTime.UtcNow;
-            pagamento.StatusGateway = "RECEIVED";
-
-            // Registra no ledger
-            await _repo.AddLedgerAsync(new LedgerFinanceiro
+            // A confirmação chega por vários caminhos (dois eventos do Asaas, polling, simulação),
+            // e cada um pode ter lido o status antes de o outro gravar. A checagem acima não basta:
+            // só quem vence a transição no banco registra o ledger, na mesma transação.
+            await using (var transacao = await _repo.IniciarTransacaoAsync())
             {
-                PagamentoId = pagamento.Id,
-                Tipo = TipoEntradaLedger.CobrancaPaga,
-                Valor = pagamento.ValorBruto,
-                Descricao = $"Pagamento PIX confirmado. Valor bruto: R$ {pagamento.ValorBruto:F2}",
-                ReferenciaExterna = pagamento.GatewayPagamentoId,
-                CriadoPorId = 0
-            });
+                if (!await _repo.TryMarcarRetidoAsync(pagamento.Id))
+                {
+                    await transacao.RollbackAsync();
+                    await _repo.RecarregarAsync(pagamento);
+                    _logger.LogInformation("Pagamento {PagamentoId} confirmado em paralelo por outra requisição — ignorado.", pagamento.Id);
+                    return;
+                }
 
-            await _repo.AddLedgerAsync(new LedgerFinanceiro
-            {
-                PagamentoId = pagamento.Id,
-                Tipo = TipoEntradaLedger.EscrowRetido,
-                Valor = pagamento.ValorBruto,
-                Descricao = $"Valor retido em escrow. Prestador receberá R$ {pagamento.ValorBruto:F2} integralmente.",
-                ReferenciaExterna = pagamento.GatewayPagamentoId,
-                CriadoPorId = 0
-            });
+                pagamento.Status = StatusPagamento.Retido;
+                pagamento.PagoEm = DateTime.UtcNow;
+                pagamento.StatusGateway = "RECEIVED";
+
+                // Registra no ledger
+                await _repo.AddLedgerAsync(new LedgerFinanceiro
+                {
+                    PagamentoId = pagamento.Id,
+                    Tipo = TipoEntradaLedger.CobrancaPaga,
+                    Valor = pagamento.ValorBruto,
+                    Descricao = $"Pagamento PIX confirmado. Valor bruto: R$ {pagamento.ValorBruto:F2}",
+                    ReferenciaExterna = pagamento.GatewayPagamentoId,
+                    CriadoPorId = 0
+                });
+
+                await _repo.AddLedgerAsync(new LedgerFinanceiro
+                {
+                    PagamentoId = pagamento.Id,
+                    Tipo = TipoEntradaLedger.EscrowRetido,
+                    Valor = pagamento.ValorBruto,
+                    Descricao = $"Valor retido em escrow. Prestador receberá R$ {pagamento.ValorBruto:F2} integralmente.",
+                    ReferenciaExterna = pagamento.GatewayPagamentoId,
+                    CriadoPorId = 0
+                });
+
+                await _repo.SaveChangesAsync();
+                await transacao.CommitAsync();
+            }
 
             _logger.LogInformation(
                 "Pagamento {PagamentoId} confirmado. Valor bruto: R$ {Bruto}",
@@ -1269,7 +1309,7 @@ namespace Tratoo.Domain.Features.Pagamentos
                 {
                     if (prazo.TryGetProperty("dataTermino", out var dt) ||
                         prazo.TryGetProperty("DataTermino", out dt))
-                        return dt.GetDateTime();
+                        return DatasUtc.Instante(dt.GetDateTime());
                 }
             }
             catch { }

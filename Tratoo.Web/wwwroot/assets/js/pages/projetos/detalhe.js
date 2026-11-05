@@ -1,5 +1,6 @@
 import { api } from '/assets/js/services/api.js';
 import { el } from '/assets/js/utils/dom.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Detalhe do projeto + proposta v2 + convites ─────────────────────────────
 
 const root = () => document.getElementById('detalhe-root');
@@ -117,7 +118,7 @@ function renderDetalhe(p, ehContratante) {
 
         <aside class="proposta-panel" ${ehContratante ? 'style="display:none"' : ''}>
             <div class="orcamento-range">${moeda(p.orcamentoMin)} – ${moeda(p.orcamentoMax)}</div>
-            <div class="prazo-info">Prazo: <strong>${dataFmt(p.prazoEntrega)}</strong></div>
+            <div class="prazo-info">Prazo: <strong>${formatarDiaCalendario(p.prazoEntrega)}</strong></div>
             <div class="propostas-count">${p.totalPropostas} proposta${p.totalPropostas !== 1 ? 's' : ''} recebida${p.totalPropostas !== 1 ? 's' : ''}</div>
 
             <hr class="divider">
@@ -203,7 +204,7 @@ function renderPropostaExistente(area, proposta) {
     <h3>Sua proposta</h3>
     <div class="status-badge status-${proposta.status.toLowerCase()}">${badges[proposta.status] || proposta.status}</div>
     <div class="prazo-info" style="margin-top:8px">Valor: <strong>${moeda(proposta.valorTotal)}</strong></div>
-    <div class="prazo-info">Prazo: <strong>${dataFmt(proposta.prazoTotal)}</strong></div>
+    <div class="prazo-info">Prazo: <strong>${formatarDiaCalendario(proposta.prazoTotal)}</strong></div>
     <a href="../../pages/proposta/detalhe.html?id=${proposta.id}" class="btn-enviar" style="display:block;text-align:center;margin-top:16px;text-decoration:none">
         Ver proposta completa
     </a>`;
@@ -359,7 +360,7 @@ function abrirPreview(projetoId) {
         itemPreview('Escopo', escopo.substring(0, 200) + (escopo.length > 200 ? '...' : '')),
         itemPreview('Valor', moeda(valor)),
         entrada > 0 && itemPreview('Entrada', `${moeda(entrada)} — Restante: ${moeda(restante)}`),
-        itemPreview('Prazo', dataFmt(prazo)),
+        itemPreview('Prazo', formatarDiaCalendario(prazo)),
         itemPreview('Revisões', revisoes),
         itemPreview('Pagamento', pagamento),
     ].filter(Boolean));

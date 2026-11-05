@@ -49,7 +49,11 @@ namespace Tratoo.Domain.Features.Projetos
                 query = query.Where(p => p.OrcamentoMin <= filtros.OrcamentoMax.Value);
 
             if (filtros.PrazoAte.HasValue)
-                query = query.Where(p => p.PrazoEntrega >= filtros.PrazoAte.Value);
+            {
+                // Inclui o dia escolhido inteiro: há projetos com horário gravado no prazo.
+                var diaSeguinte = DatasUtc.Calendario(filtros.PrazoAte.Value).AddDays(1);
+                query = query.Where(p => p.PrazoEntrega < diaSeguinte);
+            }
 
             // Filtro por habilidades: projeto contém todas as habilidades informadas
             if (filtros.Habilidades != null && filtros.Habilidades.Any())

@@ -126,6 +126,29 @@ namespace Tratoo.Tests
             Assert.DoesNotContain("pgvector", corpo);
         }
 
+        [Theory]
+        [InlineData(HealthCheckSetup.RotaLive)]
+        [InlineData(HealthCheckSetup.RotaReady)]
+        public async Task Sondas_InformamQualInstanciaRespondeu(string rota)
+        {
+            await using var app = CriarHost();
+            await app.StartAsync();
+
+            var corpo = await app.GetTestClient().GetStringAsync(rota);
+
+            using var json = System.Text.Json.JsonDocument.Parse(corpo);
+            Assert.Equal(IdentificacaoInstancia.Atual, json.RootElement.GetProperty("instancia").GetString());
+        }
+
+        [Theory]
+        [InlineData("7f3c9a10-1111-2222-3333-444455556666", "maquina", "7f3c9a10")] // Railway: nunca o id inteiro
+        [InlineData(null, "abcdef123456", "abcdef12")]                              // compose: id do container
+        [InlineData("   ", "curta", "curta")]                                       // variável vazia não conta
+        public void Instancia_UsaOIdDaPlataformaEExpoeSoOComeco(string? id, string maquina, string esperado)
+        {
+            Assert.Equal(esperado, IdentificacaoInstancia.Resolver(id, maquina));
+        }
+
         /// <summary>
         /// O ponto central da separação: banco fora do ar não pode deixar
         /// /health/live vermelho — senão o Docker reinicia o processo à toa.

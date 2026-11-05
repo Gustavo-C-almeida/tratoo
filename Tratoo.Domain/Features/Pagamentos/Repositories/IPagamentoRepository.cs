@@ -1,4 +1,5 @@
-﻿using Tratoo.Domain.Models;
+﻿using Microsoft.EntityFrameworkCore.Storage;
+using Tratoo.Domain.Models;
 using Tratoo.Domain.Models.Financeiro;
 
 namespace Tratoo.Domain.Features.Pagamentos
@@ -32,7 +33,18 @@ namespace Tratoo.Domain.Features.Pagamentos
         Task AddLedgerAsync(LedgerFinanceiro entrada);
         Task AddDisputaAsync(DisputaPagamento disputa);
         Task AddWebhookLogAsync(WebhookLog log);
-        Task<bool> WebhookJaProcessadoAsync(string chaveIdempotencia);
+        Task<WebhookLog?> GetWebhookLogAsync(string chaveIdempotencia);
+
+        /// <summary>
+        /// Transição atômica para Retido, a partir de Aguardando ou Processando. Devolve false
+        /// se outro processo já confirmou o pagamento.
+        /// </summary>
+        Task<bool> TryMarcarRetidoAsync(Guid pagamentoId);
+
+        Task<IDbContextTransaction> IniciarTransacaoAsync();
+
+        /// <summary>Descarta o estado em memória do pagamento e o relê do banco.</summary>
+        Task RecarregarAsync(Pagamento pagamento);
         Task<DisputaPagamento?> GetDisputaAtivaAsync(Guid pagamentoId);
 
         /// <summary>Registra uma entrada de auditoria no histórico do contrato.</summary>

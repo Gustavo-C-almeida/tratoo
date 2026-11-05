@@ -102,6 +102,7 @@ namespace Tratoo.API.Infrastructure
             var payload = new
             {
                 status = relatorio.Status.ToString(),
+                instancia = IdentificacaoInstancia.Atual,
                 duracaoMs = (int)relatorio.TotalDuration.TotalMilliseconds,
                 checks = relatorio.Entries.Select(entrada => new
                 {

@@ -96,9 +96,10 @@
     padding: 10px 12px;
     border-bottom: 1px solid #f1f5f9;
 }
-.admin-tabela th { background: #f8fafc; color: #475569; font-weight: 600; }
+.admin-tabela th { background: var(--surface);
+color: #475569; font-weight: 600; }
 .admin-tabela tr:last-child td { border-bottom: none; }
-.admin-id { color: #94a3b8; font-size: 0.75rem; }
+.admin-id { color: #64748B; font-size: 0.75rem; }
 .admin-link { color: #2563eb; text-decoration: none; font-weight: 600; white-space: nowrap; }
 .admin-link:hover { text-decoration: underline; }
 
@@ -138,9 +139,9 @@
     border-bottom: 1px solid #f1f5f9;
 }
 .admin-card p { font-size: 0.88rem; color: #334155; margin: 4px 0; line-height: 1.5; }
-.admin-muted { color: #94a3b8; }
+.admin-muted { color: #64748B; }
 .admin-card--resolvida { border-color: #bbf7d0; background: #f0fdf4; }
-.admin-card--acao { border-color: #fde68a; background: #fffbeb; }
+.admin-card--acao { border-color: #fde68a; background: var(--surface); }
 
 .admin-evid { margin: 0; padding-left: 18px; }
 .admin-evid li { font-size: 0.85rem; color: #334155; margin: 3px 0; word-break: break-all; }

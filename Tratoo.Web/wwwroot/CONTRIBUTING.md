@@ -195,3 +195,17 @@ usam Bootstrap. As demais mantêm o CSS artesanal e continuam funcionando — a
 cascata foi montada para que convivam. Migre uma página por vez, **validando a
 tela no browser** antes de remover as classes antigas. O maior ofensor pendente
 é `pages/proposta/detalhe.css` (~3.900 linhas, com regras duplicadas).
+
+### Fundo e tema
+
+O Tratoo tem um único tema, claro. Páginas, seções, cards, formulários, modais e rodapé têm fundo
+branco (`--bg` e `--surface`); a hierarquia vem de bordas e sombras. Não adicione regras de
+`prefers-color-scheme: dark`. Fundo colorido fica reservado a botões, badges, chips, alertas e
+estados de hover, foco e seleção. Para texto colorido, use os tokens `--secondary-text`,
+`--error-text`, `--warning-text` e `--info-text`, que têm contraste adequado sobre branco.
+
+### Datas de calendário
+
+Prazo de entrega, início de experiência e afins são um dia, sem horário: a API os guarda à
+meia-noite UTC. Exiba esses campos com `formatarDiaCalendario` (`utils/datas.js`), senão o
+navegador mostra o dia anterior no Brasil. Instantes como `criadoEm` usam o fuso do navegador.

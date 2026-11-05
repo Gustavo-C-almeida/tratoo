@@ -12,6 +12,9 @@
    ============================================================================ */
 
 :root {
+    /* O Tratoo tem um único tema, claro: o navegador não deve escurecer os controles nativos. */
+    color-scheme: light;
+
     /* ── Cores da marca ──────────────────────────────────────────────────────── */
     --primary:          #0F172A;
     --primary-dark:     #020617;
@@ -20,28 +23,33 @@
     --secondary:        #22C55E;
     --secondary-dark:   #16A34A;
     --secondary-light:  #4ADE80;
+    /* Verde para TEXTO: #22C55E tem contraste 2.3:1 sobre branco e reprova WCAG AA. */
+    --secondary-text:   #15803D;
 
     /* ── Superficies ─────────────────────────────────────────────────────────── */
-    --bg:               #F8FAFC;
+    --bg:               #FFFFFF;
     --surface:          #FFFFFF;
     --surface-hover:    #F1F5F9;
 
     /* ── Texto ───────────────────────────────────────────────────────────────── */
     --text:             #1E293B;
-    --text-secondary:   #64748B;
-    --text-muted:       #94A3B8;
+    --text-secondary:   #475569;
+    --text-muted:       #64748B;
     --text-light:       #CBD5E1;
     --white:            #FFFFFF;
 
     /* ── Estados ─────────────────────────────────────────────────────────────── */
     --error:            #EF4444;
     --error-light:      #FEE2E2;
+    --error-text:       #B91C1C;
     --warning:          #F59E0B;
     --warning-light:    #FEF3C7;
+    --warning-text:     #92400E;
     --success:          #22C55E;
     --success-light:    #DCFCE7;
     --info:             #3B82F6;
     --info-light:       #DBEAFE;
+    --info-text:        #1D4ED8;
 
     /* ── Bordas ──────────────────────────────────────────────────────────────── */
     --border:           #E2E8F0;
