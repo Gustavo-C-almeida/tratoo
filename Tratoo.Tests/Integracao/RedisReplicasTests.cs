@@ -307,7 +307,7 @@ namespace Tratoo.Tests.Integracao
             // Nenhuma comparação é um desfecho seguro; o que importa é o teto.
             Assert.InRange(observados.Sum(o => o.LeiturasComValor), 0, VerificacaoMFAService.MaxTentativas);
             Assert.DoesNotContain("OK", resultados);
-            Assert.Equal("Código expirado ou inválido", await Otp.Resultado(() => mfas[0].ValidarAsync(email, codigo, "login")));
+            Otp.ConfirmarRecusa(await Otp.Resultado(() => mfas[0].ValidarAsync(email, codigo, "login")));
         }
 
         [FactComDocker]
