@@ -566,6 +566,17 @@ string (exit 2); mutação que desliga o desvio no `Program.cs` derruba os dois 
    Nginx e a conexão esperava o `proxy_connect_timeout` (5 s) antes do failover. Agora 1 s
    (e `valid=5s`): pior caso medido 1,03 s, mediana 25 ms.
 
+## 8.4 Status: 2 réplicas em produção desde 05/11/2026
+
+As recomendações acima refletem o momento em que foram escritas. O Redis entrou em produção em
+29/10 (decisão D1, contra a recomendação da seção 3.4), e a produção passou a 2 réplicas em 05/11.
+O que foi medido e os limites estão em
+[ARQUITETURA.md §6.6](ARQUITETURA.md#66-duas-réplicas-em-produção).
+
+O ensaio em homologação mostrou algo que os testes não mostravam: uma réplica encerrada de forma
+limpa não voltava, porque o encerramento gracioso sai com sucesso. A correção foi
+`restartPolicyType = ALWAYS` nas configurações dos serviços.
+
 ## 9. Evidências e método
 
 - **Código:** varredura de `IMemoryCache`, `ICacheTempService`, estado estático, Data

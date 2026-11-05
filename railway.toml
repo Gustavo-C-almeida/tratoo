@@ -44,6 +44,11 @@ healthcheckPath = "/health/ready"
 # ShutdownTests falha se o host deixar de caber dentro deste prazo.
 drainingSeconds = 30
 
+# O encerramento gracioso sai com sucesso, e sem isto a réplica ficava fora até o
+# próximo deploy (ensaio de 05/11/2026). O número de réplicas (2 em produção, 1 em
+# homologação) fica só nas settings, em multiRegionConfig.
+restartPolicyType = "ALWAYS"
+
 # ── Migrations no deploy (PREPARADO, NÃO ATIVO) ──────────────────────────────────
 # Roda em um container SEPARADO, com a mesma imagem e as variáveis do serviço, ANTES
 # de a nova versão receber tráfego. Se falhar, o deploy para e a versão atual segue no
