@@ -10,7 +10,7 @@ namespace Tratoo.API.Infrastructure
     ///
     ///  • SEM <c>Redis:ConnectionString</c> (dev local e testes, 1 réplica): memória do processo —
     ///    exatamente o comportamento anterior. Nada novo é exigido.
-    ///  • COM <c>Redis:ConnectionString</c> (produção desde 29/10/2026, 1 réplica; compose com 2): Redis, protegido por
+    ///  • COM <c>Redis:ConnectionString</c> (produção e compose, com 2 réplicas): Redis, protegido por
     ///    <c>Redis:ChaveProtecao</c> (obrigatória; a subida falha sem ela), com health check
     ///    de readiness.
     /// </summary>

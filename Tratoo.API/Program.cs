@@ -83,7 +83,9 @@ builder.Host.UseSerilog((ctx, config) =>
 {
     config
         .MinimumLevel.Information()
-        .WriteTo.Console();
+        .Enrich.WithProperty("Instancia", IdentificacaoInstancia.Atual)
+        .WriteTo.Console(outputTemplate:
+            "[{Timestamp:HH:mm:ss} {Level:u3}] [{Instancia}] {Message:lj}{NewLine}{Exception}");
 
     // Arquivo é opcional: ligado por padrão (produção inalterada), desligado no
     // docker-compose, onde o destino é o stdout. Ver LogArquivoSetup.
