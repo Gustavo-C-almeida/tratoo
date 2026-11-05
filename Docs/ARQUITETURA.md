@@ -14,6 +14,14 @@
 > [§3.1](#31-topologia), [§4.1](#41-produção-na-railway), [§4.2](#42-domínio-e-dns),
 > [§4.4](#44-configuração-de-deploy), [§9](#9-decisões-arquiteturais) e o Apêndice A refletem a
 > verificação dessa data; o resto do documento continua com a verificação de 31/10.
+>
+> **Atualização de 05/11/2026:** a produção passou a rodar com **2 réplicas** (commit `5905ef4`,
+> deploy `b1716275`). O que mudou, o que foi medido e os limites estão no
+> [§6.6](#66-duas-réplicas-em-produção). As seções [§1.4](#14-visão-geral-da-arquitetura),
+> [§4.1](#41-produção-na-railway), [§4.4](#44-configuração-de-deploy),
+> [§4.5](#45-fluxo-de-deploy-cd-e-rollback), [§4.6](#46-health-checks), [§5.3](#53-rate-limiting),
+> [§6](#6-concorrência-e-escalabilidade), [§7](#7-cicd-e-qualidade), [§9](#9-decisões-arquiteturais)
+> e o Apêndice A foram atualizadas nessa data.
 
 ---
 
@@ -104,8 +112,8 @@ versão 18.
 
 ```mermaid
 flowchart LR
-    U["Navegador<br/>HTML + ES Modules"] -->|"HTTPS www.tratoo.app.br"| E["Borda da Railway<br/>TLS, HTTP/2, 301 http→https"]
-    E -->|"HTTP :8080 + X-Forwarded-For/Proto"| A["Container tratoo<br/>Tratoo.API (.NET 8)<br/>+ wwwroot do Tratoo.Web"]
+    U["Navegador<br/>HTML + ES Modules"] -->|"HTTPS www.tratoo.app.br"| E["Borda da Railway<br/>TLS, HTTP/2, 301 http→https<br/>balanceia entre as réplicas"]
+    E -->|"HTTP :8080 + X-Forwarded-For/Proto"| A["Serviço tratoo: 2 réplicas iguais<br/>Tratoo.API (.NET 8)<br/>+ wwwroot do Tratoo.Web"]
     A -->|"Npgsql, pooler, SSL"| N1[("Neon PostgreSQL<br/>banco tratoo")]
     A -->|"pgvector"| N2[("Neon PostgreSQL<br/>banco tratoo_vector")]
     A -->|"rede privada, redis.railway.internal:6379"| R[("Redis 8.2<br/>serviço Railway + volume")]
@@ -117,7 +125,8 @@ flowchart LR
     A --> BR["ViaCEP<br/>endereço pelo CEP"]
 ```
 
-Um único processo .NET serve **a API e o frontend estático**. Quatro dependências entram no
+Cada réplica é o mesmo processo .NET, que serve **a API e o frontend estático**. O estado
+compartilhado fica fora delas ([§6.6](#66-duas-réplicas-em-produção)). Quatro dependências entram no
 caminho do usuário: o PostgreSQL (dois bancos no mesmo projeto Neon), o Redis (estado
 efêmero compartilhado e rate limiting), o Asaas (pagamentos) e o Resend (e-mails). A OpenAI e o
 R2 são usados em fluxos específicos: busca/indexação e upload/download, respectivamente.
@@ -155,7 +164,7 @@ R2 são usados em fluxos específicos: busca/indexação e upload/download, resp
 | [`Tratoo.API`](../Tratoo.API) | ASP.NET Core (Minimal API) | Host HTTP. Contém `Program.cs` (composição e pipeline), 18 grupos de endpoints em `EndPoints/*Extensions.cs`, `Infrastructure/` (proxy, rate limiting, Redis, health checks, porta, encerramento, modos de linha de comando), os `BackgroundServices` e os DTOs de entrada em `Requests/`. |
 | [`Tratoo.Domain`](../Tratoo.Domain) | Class library | Regras de negócio organizadas por feature (`Features/<Feature>/{DTOs,Repositories,Services,Validators}`), entidades EF (`Domain/Models`), enums, `TratooContext`/`VectorContext` e a migration. Também contém as implementações das integrações (Asaas, R2, OpenAI, Resend) e a criptografia (`Features/Shared/DataProtector.cs`). |
 | [`Tratoo.Web`](../Tratoo.Web) | Projeto Web sem código de servidor | Só o `wwwroot` (35 HTML, 32 JS e 24 CSS fora de `vendor/`). Na imagem Docker, ele é copiado para `/Tratoo.Web/wwwroot` e servido pela API. |
-| [`Tratoo.Tests`](../Tratoo.Tests) | xUnit | 238 testes: unidade, host em memória (TestServer) e integração com Postgres e Redis reais via Docker. |
+| [`Tratoo.Tests`](../Tratoo.Tests) | xUnit | 288 testes: unidade, host em memória (TestServer) e integração com Postgres e Redis reais via Docker. |
 
 Organização:
 
@@ -416,7 +425,7 @@ erDiagram
 | Item | Valor | Fonte |
 |---|---|---|
 | Projeto e ambiente | Um ambiente, `production`, com os serviços `tratoo` e `Redis`, mais um serviço de homologação com Redis próprio, publicado da branch `staging` ([CICD.md](CICD.md#homologação-e-produção-na-railway)) | API da Railway (`list-services`) |
-| Serviço `tratoo` | Origem GitHub `Gustavo-C-almeida/tratoo`, branch `main`, região `us-east4-eqdc4a`, **1 réplica**. O build usa o `Dockerfile` da raiz | Configurações do serviço (02/11); log de build (`load build definition from Dockerfile`) |
+| Serviço `tratoo` | Origem GitHub `Gustavo-C-almeida/tratoo`, branch `main`, região `us-east4-eqdc4a`, **2 réplicas**. O build usa o `Dockerfile` da raiz | Configurações do serviço (05/11); log de build (`load build definition from Dockerfile`) |
 | Gatilho de deploy | Push na `main`, com `checkSuites: true`: a Railway espera os checks do GitHub passarem | Configurações do serviço |
 | Deploy ativo | `ab6682ea` (02/11, 03:01 UTC), SUCCESS. O deploy `ebf57cde` (31/10, commit `b134922`) é o citado nos logs deste documento | API da Railway (`describe-service`) |
 | Configuração de deploy | `healthcheckPath = /health/ready` e `drainingSeconds = 30`, nas **configurações do serviço** | Configurações do serviço; log de build |
@@ -432,17 +441,22 @@ flowchart TB
         DNS["DNS tratoo.app.br<br/>www → CNAME Railway"]
     end
     subgraph Railway["Railway — ambiente production"]
-        EDGE["Borda: TLS, HTTP/2,<br/>2 saltos de proxy, regenera X-Forwarded-For"]
+        EDGE["Borda: balanceador, TLS, HTTP/2,<br/>2 saltos de proxy, regenera X-Forwarded-For"]
         subgraph Privada["Rede privada (railway.internal)"]
-            API["tratoo<br/>1 réplica, us-east4<br/>porta 8080"]
+            API1["tratoo: réplica 1<br/>us-east4, porta 8080"]
+            API2["tratoo: réplica 2<br/>us-east4, porta 8080"]
             RED[("Redis 8.2<br/>volume /data")]
         end
     end
     NEON[("Neon PostgreSQL 18<br/>us-east-2, pooler")]
     C --> DNS
-    C -->|HTTPS| EDGE --> API
-    API --> RED
-    API -->|"internet + SSL"| NEON
+    C -->|HTTPS| EDGE
+    EDGE --> API1
+    EDGE --> API2
+    API1 --> RED
+    API2 --> RED
+    API1 -->|"internet + SSL"| NEON
+    API2 -->|"internet + SSL"| NEON
 ```
 
 ### 4.2 Domínio e DNS
@@ -505,7 +519,8 @@ A configuração de deploy do serviço `tratoo` fica nas **configurações do se
 |---|---|---|
 | `healthcheckPath` | `/health/ready` | A nova versão só recebe tráfego depois de responder 2xx, com janela de até 5 min. Uma versão sem banco, sem Redis ou com a chave de dados errada não é promovida, e a anterior continua no ar |
 | `drainingSeconds` | `30` | Tempo entre o SIGTERM e o SIGKILL da versão anterior. Cobre o `ShutdownTimeout` de 25 s do host |
-| Réplicas | 1 (`us-east4-eqdc4a`) | — |
+| Réplicas | 2 (`us-east4-eqdc4a`) | A borda reparte o tráfego entre as duas ([§6.6](#66-duas-réplicas-em-produção)) |
+| `restartPolicyType` | `ALWAYS` | Uma réplica que sai, mesmo com sucesso, volta sozinha. Sem isso, uma réplica encerrada de forma limpa ficava fora até o próximo deploy |
 
 O [`railway.toml`](../railway.toml) do repositório registra os mesmos valores como referência
 versionada, e o `ShutdownTests` lê o `drainingSeconds` dele para conferir a coerência com o
@@ -539,6 +554,11 @@ registra `Starting Healthcheck`, `Path: /health/ready` às 15:42:28 e `Healthche
 - **Migrations:** aplicadas manualmente ([§3.2](#32-migrations)).
 - **Rollback:** pelo histórico de deploys da Railway, que guarda as imagens anteriores
   (`canRollback: true`). Uma versão que não passa no `/health/ready` não é promovida.
+- **CI vermelho bloqueia o deploy:** em 05/11, um teste instável falhou no commit `5905ef4` da
+  `main` e a Railway marcou o deploy como `SKIPPED`, sem tocar na versão no ar.
+- **Repetir um deploy:** use `railway redeploy --from-source`. Em 05/11, duas repetições feitas sem
+  essa opção falharam na etapa de build (`Railpack failed to prepare the build`) no serviço de
+  homologação. A causa não foi identificada. A versão anterior continuou no ar nas duas vezes.
 
 ### 4.6 Health checks
 
@@ -554,6 +574,11 @@ Decisões em [`HealthCheckSetup`](../Tratoo.API/Infrastructure/HealthCheckSetup.
   a sonda pendurada.
 - O corpo da resposta detalha cada check (nome, status, descrição e duração), **sem mensagens de
   exceção**. Assim a rota anônima não expõe host nem credencial.
+- O campo `instancia` mostra qual réplica respondeu: os 8 primeiros caracteres de
+  `RAILWAY_REPLICA_ID` ([`IdentificacaoInstancia`](../Tratoo.API/Infrastructure/IdentificacaoInstancia.cs)).
+  O mesmo nome aparece em cada linha do log do console.
+- A Railway só chama o health check **no início do deploy**, sem monitoramento contínuo. Ver os
+  limites no [§6.6](#66-duas-réplicas-em-produção).
 - As duas rotas usam `AllowAnonymous()` explícito e são isentas da guarda de onboarding.
 - Os checks de banco são feitos à mão (`CanConnectAsync`/`SqlQueryRaw`), sem o pacote
   `HealthChecks.EntityFrameworkCore`, para não acrescentar mais um pacote da família EF.
@@ -764,6 +789,9 @@ Diagnóstico e metodologia em [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-C
   máximo. Bloquear todo login porque o Redis caiu seria uma negação de serviço autoinfligida.
 - **Testes:** `RateLimitingPorIpTests` (inclusive
   `Resposta429_TrazRetryAfterDeSessentaSegundos`) e `RedisReplicasTests`.
+- **Medição em produção (05/11), com 2 réplicas:** de 16 logins com uma conta inexistente, 10
+  passaram pelo limite (7 numa réplica, 3 na outra) e 6 receberam 429 (5 e 1). As duas contam no
+  mesmo balde. Fonte: `railway logs --http`.
 
 ### 5.4 OTP, MFA e estado efêmero
 
@@ -970,14 +998,25 @@ conexão dedicada enquanto a rodada roda em outro escopo:
   não passa a depender do Redis.
 - **E se o processo morrer?** A transação é desfeita e a trava cai sozinha.
 
-**Status:** **Confirmado** por testes (`JobsConcorrenciaTests`, com Postgres real). Em produção
-roda com 1 réplica.
+Cada réplica acorda os próprios jobs. Nos logs de produção de 05/11 (deploy `b1716275`), as duas
+rodaram as varreduras de propostas e de contratos no mesmo segundo, cada uma identificada pelo
+nome, e nenhuma encontrou o que expirar. Uma reindexação repetida logo depois da primeira não paga a
+OpenAI em dobro: o lote pula o que foi indexado nos últimos 7 dias.
+
+**Status:** **Confirmado** por testes (`JobsConcorrenciaTests`, com Postgres real). Em produção, as
+rodadas das duas réplicas foram **observadas** nos logs, mas ainda sem um item real a expirar ou
+liberar ao mesmo tempo.
 
 ### 6.4 Idempotência financeira
 
 - **Cobrança:** `Pagamento.IdempotencyKey` único. O cliente Asaas é reutilizado por
   `externalReference`.
-- **Webhook:** `WebhookLog.ChaveIdempotencia` único. O mesmo evento não é processado duas vezes.
+- **Webhook:** `WebhookLog.ChaveIdempotencia` único. O mesmo evento não é processado duas vezes, e
+  um reenvio depois de falha retoma o registro existente.
+- **Confirmação:** a transição para `Retido` é um `UPDATE … WHERE` condicional, na mesma transação
+  das entradas do ledger (`ProcessarPagamentoPagoAsync`). Ela vale para os caminhos que confirmam
+  um pagamento: os eventos do Asaas, a sincronização e a simulação em sandbox. Teste:
+  `WebhookConcorrenciaTests`, com Postgres real.
 - **Liberação:** `UPDATE Pagamentos SET Status='TransferenciaEmProgresso' WHERE Id=@id AND Status='Retido'`
   (`ExecuteUpdate`). Só um processo vence; o outro registra "liberação concorrente" e sai. Se a
   transferência falhar, o status volta para `Retido` de forma condicional. Isso fica em
@@ -1013,7 +1052,76 @@ Este diagrama mostra o caminho principal. A enum `StatusPagamento` tem também `
 | Data Protection do ASP.NET | Fica local por réplica, **de propósito**: nenhum componente o consome (o JWT é assinado com `Jwt:SecretKey`, e a autenticação não usa antiforgery, sessão nem cookie auth do ASP.NET) |
 | Cache de perfil | Local por réplica, com TTL de 2 min |
 | Duas réplicas | No compose (`API_REPLICAS=2` atrás do Nginx) e nos `RedisReplicasTests` com Redis real |
-| Produção | **1 réplica** |
+| Produção | **2 réplicas** desde 05/11 |
+
+### 6.6 Duas réplicas em produção
+
+**Por que duas.** Por disponibilidade, não por carga. Na semana anterior, a aplicação usou em média
+0,005 vCPU e 0,27 GB de memória. O objetivo é que a queda de um processo deixe de ser a queda do
+site, e provar com o sistema real o que até então só estava provado em testes e no compose.
+
+```mermaid
+flowchart TB
+    C["Navegador ou Asaas"] -->|HTTPS| E["Borda da Railway<br/>balanceador, sem sessão fixa"]
+    E --> R1["Réplica 1<br/>sem estado próprio"]
+    E --> R2["Réplica 2<br/>sem estado próprio"]
+    R1 --> RD[("Redis<br/>OTP, tentativas, cadastro pendente,<br/>contador do rate limit")]
+    R2 --> RD
+    R1 --> PG[("Neon PostgreSQL<br/>fonte da verdade e travas dos jobs")]
+    R2 --> PG
+    R1 --> S3[("Cloudflare R2<br/>arquivos")]
+    R2 --> S3
+```
+
+O caminho de uma requisição não depende da réplica. O cookie JWT é validado por qualquer uma com o
+mesmo `Jwt:SecretKey`, e o que precisa ser visto pelas duas está no Redis, no Postgres ou no R2.
+
+| Tema | Onde vive | Com 2 réplicas | Status |
+|---|---|---|---|
+| Sessão e autenticação | Cookie JWT, sem sessão no servidor | Qualquer réplica valida o token | **Confirmado** no compose: login numa réplica, 20 requisições autenticadas alternando e 20 depois de `docker kill` em uma delas, todas 200 |
+| Rate limiting | Redis | Um contador para a aplicação | **Confirmado** em produção ([§5.3](#53-rate-limiting)) |
+| OTP e cadastro pendente | Redis | Gerado numa réplica, vale na outra, uma única vez | **Confirmado** por testes (`RedisReplicasTests`). Não exercitado em produção, para não enviar e-mail real |
+| Jobs agendados | Postgres | Trava de transação ou escrita condicional ([§6.3](#63-backgroundservices)) | **Confirmado** por testes; rodadas observadas em produção |
+| Confirmação de pagamento | Postgres | Reivindicação atômica ([§6.4](#64-idempotência-financeira)) | **Confirmado** por testes |
+| Uploads e PDFs | Cloudflare R2 | Nenhum arquivo de negócio em disco. O único arquivo local é log | **No código** |
+| Tempo real | Não existe | Sem WebSocket, SSE, SignalR ou pub/sub. O problema não se aplica | **No código** |
+| Cache de perfil público | `IMemoryCache` de cada réplica | Depois de uma edição, o perfil público pode alternar entre a versão nova e a antiga por até 2 min. O `/me/perfil` não usa cache | **No código**, aceito como trade-off |
+
+#### O que foi medido
+
+| Ambiente | Teste | Resultado |
+|---|---|---|
+| Produção | 720 requisições a `/health/live`, com conexão nova a cada uma | 720 respostas 200, 346 de uma réplica e 374 da outra. Na amostra de 500 dos logs da borda: mediana de 2 ms, máximo de 9 ms e nenhum erro de upstream |
+| Produção | 16 logins com conta inexistente | 10 aceitos pelo limite e 6 com 429, atendidos pelas duas réplicas |
+| Homologação | SIGTERM em uma réplica, **sem** política de reinício explícita | Encerramento limpo e a réplica **não voltou** (1/2 online). Nenhuma requisição se perdeu: 12 de 12 respostas 200 com o cliente esperando até 60 s. Mas as que caíam na réplica morta levavam cerca de 5 s, até a borda desistir (`connection dial timeout`) e refazer na outra |
+| Homologação | SIGTERM em uma réplica, **com** `restartPolicyType = ALWAYS` | Volta em cerca de 2 s entre o `SIGTERM` e o `Now listening`, 2/2 online e 48 de 48 respostas 200 |
+| Compose | `docker kill` (SIGKILL) em uma réplica | 20 de 20 requisições autenticadas com 200 logo depois, atendidas pela outra |
+| Produção | Queda de uma réplica | **Não executada.** A validação em produção cobriu só o que não derruba nada. O comando está em [`CICD.md`](CICD.md#validar-as-duas-réplicas) |
+
+#### Decisões e trade-offs
+
+- **Balanceador da plataforma, sem Nginx na frente.** A borda já termina o TLS e reparte o tráfego.
+  Outro proxy acrescentaria um salto e mudaria a contagem do
+  [§5.2](#52-ip-real-do-cliente-e-trust-boundary). A documentação da Railway diz que não há sessão
+  fixa por padrão, e por isso nada de sessão pode morar em memória.
+- **`ALWAYS` em vez do reinício só por falha.** O encerramento gracioso sai com sucesso, e uma
+  política baseada em falha o trata como fim normal. O efeito de uma réplica ausente é discreto: nenhum
+  erro, só requisições 5 s mais lentas. Por isso, sem reinício, poderia passar despercebido.
+- **Custo.** O uso de memória e CPU do serviço dobra, sem ganho de capacidade que hoje faça falta.
+- **Cache local mantido.** Levar o cache de perfil para o Redis trocaria uma ida à rede por outra,
+  para reduzir uma defasagem de no máximo 2 min em dados públicos.
+
+#### O que duas réplicas não resolvem
+
+- **Redis:** continua uma instância só. Sem ele, os OTPs respondem 503 e o rate limit volta a contar
+  por réplica, o que dobra o limite efetivo. Um deploy também não passa no `/health/ready`.
+- **Neon e região:** o banco é uma dependência única, e as duas réplicas estão na mesma região.
+- **Réplica travada:** a Railway não usa o health check depois do deploy. Uma réplica viva, mas sem
+  responder, pode continuar recebendo tráfego. **Não testado.**
+- **Queda abrupta na Railway:** SIGKILL só foi testado no compose. Dentro do container, `SIGSEGV` e
+  `SIGABRT` não geraram evidência de queda. Requisições em andamento numa queda abrupta podem
+  falhar, e esse número não foi medido.
+- **Carga:** nenhum teste de carga foi feito. Duas réplicas não são prova de escalabilidade.
 
 ---
 
@@ -1036,8 +1144,9 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
   atualizada e PR, inclusive para administradores ([CICD.md](CICD.md#configuração-manual)).
 - **Origem do PR:** um job recusa PR para a `main` que não venha de `staging` ou `hotfix/*`, e PR
   para a `staging` que não venha de `feature/*`, `fix/*`, `hotfix/*` ou `revert-*`.
-- **Última execução na `main`** (31/10): run `41215952551`, commit `b134922`, **sucesso**, com
-  **238 testes, 238 aprovados**, em cerca de 1 min.
+- **Execução na `main`** (05/11): run `41950621509`, commit `5905ef4`, com **288 testes**. A
+  primeira tentativa falhou em um teste instável de OTP, cuja asserção era estrita demais, e a segunda
+  passou. A asserção foi corrigida em seguida.
 
 ### 7.2 Testes
 
@@ -1047,7 +1156,7 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 | Health checks e runtime | `HealthCheckTests`, `PortaHttpTests`, `ShutdownTests`, `LogArquivoSetupTests`, `ModoMigracaoTests` |
 | Estado efêmero e OTP | `EstadoEfemeroTests`, `OtpConcorrenciaTests` |
 | Criptografia | `DataProtectorTests`, `RotacaoChaveDadosTests`, `ChaveDeDadosNaSubidaTests` |
-| **Integração (Docker)** | `RedisReplicasTests`, `JobsConcorrenciaTests`, `DadosCifradosHealthCheckTests`, `RecifragemTests` |
+| **Integração (Docker)** | `RedisReplicasTests`, `JobsConcorrenciaTests`, `WebhookConcorrenciaTests`, `DatasPersistenciaTests`, `DadosCifradosHealthCheckTests`, `RecifragemTests` |
 
 - **Como a integração roda:** os testes chamam a **CLI do Docker** diretamente
   (`Integracao/Docker.cs`) e marcam os containers com o rótulo `tratoo-testes=1`. O atributo
@@ -1065,7 +1174,7 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 ### 7.4 Fluxo automatizado
 
 ```
-PR → CI (build + 238 testes) + CodeQL ──► merge na main ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
+PR → CI (build + 288 testes) + CodeQL ──► merge na main ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
 ```
 
 A `main` recebe código pelo PR `staging` → `main` ou, em urgências, por um PR de `hotfix/*`, com a
@@ -1219,6 +1328,15 @@ Cada decisão registra o que é e por que é assim. O contexto de cada uma está
   possível rodar só os testes de unidade.
 - **Evidência:** `ci.yml` (`TRATOO_EXIGIR_DOCKER: "1"`); run `41215952551` com 238/238.
 
+#### D14 — Duas réplicas atrás da borda da plataforma
+
+- **O que é:** 2 réplicas do serviço `tratoo` na mesma região, com `restartPolicyType = ALWAYS`, sem
+  balanceador próprio.
+- **Por quê:** disponibilidade, e prova com o sistema real de que o estado compartilhado funciona.
+  Não é necessidade de carga.
+- **Consequência:** o uso de recursos dobra. Redis e banco seguem como dependências únicas.
+- **Evidência:** [§6.6](#66-duas-réplicas-em-produção).
+
 ---
 
 ## Apêndice A — Matriz de rastreabilidade
@@ -1232,7 +1350,12 @@ Evidência coletada em 31/10/2026.
 | Deploy automático da `main` após os checks | Confirmado | `checkSuites: true` nas configurações; deploy e CI criados no mesmo push |
 | Health check de deploy `/health/ready` | Confirmado | Configurações do serviço; log de build `Healthcheck succeeded!` |
 | `drainingSeconds = 30` | Confirmado | Configurações do serviço; SIGTERM → encerramento em 6 ms |
-| 1 réplica em `us-east4-eqdc4a` | Confirmado (02/11) | `multiRegionConfig["us-east4-eqdc4a"].numReplicas = 1` nos serviços `tratoo` e `Redis` |
+| 2 réplicas da API em `us-east4-eqdc4a`, 1 do Redis | Confirmado (05/11) | `multiRegionConfig["us-east4-eqdc4a"].numReplicas`: 2 no `tratoo`, 1 no `Redis`; `replicaStatus` 2/2 |
+| Tráfego repartido entre as réplicas | Confirmado (05/11) | 720 requisições, 346 e 374 por réplica; campo `instancia` e `deploymentInstanceId` nos logs da borda |
+| Rate limit somado entre as réplicas | Confirmado (05/11) | 16 logins em produção: 10 aceitos, 6 com 429, nas duas réplicas |
+| Réplica encerrada volta sozinha (`ALWAYS`) | Confirmado em homologação (05/11) | `SIGTERM` e `Now listening` a cerca de 2 s de distância; configuração aplicada na produção |
+| Queda de uma réplica em produção | Planejado | Não executada; ver [§6.6](#66-duas-réplicas-em-produção) |
+| Confirmação de pagamento atômica | Confirmado (testes) | `WebhookConcorrenciaTests` |
 | Zona DNS na Cloudflare, em DNS only, com a raiz atendendo | Confirmado (02/11) | NS `*.ns.cloudflare.com`; raiz com registro A e HTTP 200; IP real do cliente preservado no `/api/diagnostico/rede` |
 | Redis na mesma região da API | Confirmado (02/11) | Check `redis` em 1 ms, contra 60 ms enquanto o serviço ficou em `sfo` |
 | Domínio `www.tratoo.app.br` | Confirmado | CNAME `rmkhqshq.up.railway.app`; Railway: verificado, `PROPAGATED`, certificado `VALID` |
@@ -1264,7 +1387,7 @@ Evidência coletada em 31/10/2026.
 | Rotação de chave (`--recifrar-dados`) | Confirmado (testes) | `RotacaoChaveDadosTests`, `RecifragemTests` |
 | CSP e headers de segurança | Confirmado | Headers da resposta de produção |
 | CodeQL (default setup) | Confirmado | Análises do commit `b134922` com sucesso; 0 alertas abertos |
-| CI de build e testes com Docker obrigatório | Confirmado | `ci.yml`; run `41215952551`: 238/238 |
+| CI de build e testes com Docker obrigatório | Confirmado | `ci.yml`; run `41950621509`: 288 testes |
 | Checks obrigatórios em `main` e `staging` | Configurado (02/11) | Proteção das branches: `Build e testes` e `Origem do PR`, com `enforce_admins` |
 | Compose: api, postgres, redis, migrate, nginx; rede `interna`; volume `pgdata` | No código | `compose.yaml` |
 | Pagamentos Asaas | Configurado (sandbox) | `Asaas__BaseUrl` → `sandbox.asaas.com` |

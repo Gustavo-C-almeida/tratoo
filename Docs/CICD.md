@@ -155,6 +155,34 @@ deploys automáticos de PR estão desligados.
   ```
 
   O serviço é informado de propósito: sem `--service`, a CLI usa o serviço vinculado à pasta.
+- **Réplicas:** produção com 2 e homologação com 1, a não ser durante um ensaio. Os dois serviços
+  usam `restartPolicyType = ALWAYS`. Altere com `railway scale --service <servico> us-east4-eqdc4a=<n>`.
+- **Repetir um deploy:** use `railway redeploy --from-source`. Sem a opção, a repetição falhou duas
+  vezes na etapa de build em homologação.
+
+### Validar as duas réplicas
+
+Veja as respostas alternando:
+
+```bash
+for i in $(seq 1 12); do curl -s https://www.tratoo.app.br/health/live | grep -o '"instancia":"[^"]*"'; done
+```
+
+Para ensaiar a queda de uma réplica, descubra os identificadores no campo `deploymentInstanceId`:
+
+```bash
+railway logs --service tratoo --environment production --http --path /health/live --lines 20 --json
+```
+
+Encerre uma réplica, mantendo o tráfego no ar. O comando só funciona pelo PowerShell, no Windows:
+
+```bash
+railway ssh --service tratoo --environment production --deployment-instance <id> -- sh -c "kill -TERM 1"
+```
+
+O esperado é o log mostrar `SIGTERM recebido` e depois `Now listening` para a mesma réplica, em
+poucos segundos, e o serviço voltar a 2/2 online. Confira requisições lentas ou com erro em
+`railway logs --http`, no campo `upstreamErrors`.
 
 ### Isolamento exigido em homologação
 
