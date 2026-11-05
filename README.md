@@ -87,7 +87,7 @@ flowchart LR
 | `Tratoo.API` | Host HTTP: `Program.cs`, endpoints Minimal API, middlewares, health checks, background services e infraestrutura (proxy, rate limiting, Redis, encerramento) |
 | `Tratoo.Domain` | Regras de negócio organizadas por feature, entidades e `DbContext` do EF Core, além das implementações das integrações externas |
 | `Tratoo.Web` | Frontend estático (`wwwroot`), servido pela própria API |
-| `Tratoo.Tests` | 238 testes: unidade, host em memória e integração com Postgres e Redis reais via Docker |
+| `Tratoo.Tests` | 288 testes: unidade, host em memória e integração com Postgres e Redis reais via Docker |
 
 O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda do Docker),
 `--migrate-only` (aplica migrations e sai) e `--recifrar-dados` (rotação da chave de criptografia).
@@ -97,7 +97,8 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
 ## Infraestrutura e deploy
 
 - **Produção na Railway:**
-  - uma réplica da API, gerada a partir do `Dockerfile` da raiz, na região `us-east4-eqdc4a`;
+  - duas réplicas da API, geradas a partir do `Dockerfile` da raiz, na região `us-east4-eqdc4a`,
+    com a borda da Railway como balanceador;
   - um serviço Redis acessível só pela rede privada, na mesma região da API;
   - o banco no Neon, fora da Railway, na região `us-east-2`.
 - **Deploy contínuo:** todo push na `main` gera um deploy, mas a Railway só faz o build depois que
@@ -112,6 +113,30 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
   ele que a Railway usa para decidir se promove uma versão.
 - **Ambiente local:** o `compose.yaml` reproduz a topologia de produção com Nginx (TLS), duas
   réplicas da API, Postgres com pgvector, Redis e um serviço de migrations.
+
+### Duas réplicas em produção
+
+```mermaid
+flowchart LR
+    U["Navegador"] -->|HTTPS| E["Borda da Railway<br/>balanceador"]
+    E --> R1["Réplica 1"]
+    E --> R2["Réplica 2"]
+    R1 --> RD[("Redis<br/>OTP e rate limit")]
+    R2 --> RD
+    R1 --> PG[("Neon PostgreSQL<br/>fonte da verdade")]
+    R2 --> PG
+```
+
+As réplicas não guardam nada que a outra precise ver: a sessão é um JWT em cookie, o estado
+temporário fica no Redis, os dados no Postgres e os arquivos no R2. Em produção, em 05/11:
+
+- 720 requisições foram repartidas em 346 e 374 entre as réplicas, todas com 200.
+- O limite de 10 logins por minuto valeu para as duas juntas: 10 aceitos e 6 recusados com 429.
+
+O ensaio de queda foi feito em homologação. Com `restartPolicyType = ALWAYS`, a réplica voltou em
+cerca de 2 s, sem nenhuma requisição perdida. Duas réplicas resolvem a queda de uma réplica: Redis e
+banco continuam como dependências únicas, e nenhum teste de carga foi feito. Os limites e a medição
+completa estão em [ARQUITETURA.md §6.6](Docs/ARQUITETURA.md#66-duas-réplicas-em-produção).
 
 > A Railway não lê mais o `railway.toml` (o Config as Code foi depreciado). O health check e o
 > *draining* de 30 s ficam nas configurações do serviço, e o arquivo continua no repositório como
@@ -136,8 +161,9 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
   não expor e-mails nem IPs.
 - **XSS:** CodeQL ativo no repositório e montagem de DOM segura (`utils/dom.js`). Ainda há alertas
   em aberto e uma migração em andamento, descritas na documentação técnica.
-- **Idempotência financeira:** índices únicos para cobrança e webhook, e a liberação de pagamento
-  reivindica o registro de forma atômica no banco. Duas instâncias não liberam o mesmo pagamento.
+- **Idempotência financeira:** índices únicos para cobrança e webhook, e a confirmação e a liberação
+  de pagamento reivindicam o registro de forma atômica no banco. Duas instâncias não confirmam nem
+  liberam o mesmo pagamento em dobro.
 - **Segredos:** nenhum segredo versionado. Produção usa variáveis da Railway, e o CI roda sem
   segredos.
 
@@ -151,7 +177,7 @@ esse check passe, inclusive para administradores. O fluxo
 `main → feature/fix → staging → main`, com retirada de funcionalidades e hotfix, está em
 [Docs/CICD.md](Docs/CICD.md).
 
-- **238 testes** com xUnit: 206 de unidade e de host em memória (TestServer) e 32 de integração
+- **288 testes** com xUnit: 241 de unidade e de host em memória (TestServer) e 47 de integração
   contra Postgres (pgvector) e Redis reais, iniciados via Docker.
 - **No CI, a ausência de Docker é falha** (`TRATOO_EXIGIR_DOCKER=1`). Um pipeline verde garante
   que os testes de integração rodaram.

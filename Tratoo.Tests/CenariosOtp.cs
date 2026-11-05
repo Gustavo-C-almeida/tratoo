@@ -13,6 +13,7 @@ using Tratoo.Domain.Features.Storage;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Models.Prestador;
 using Tratoo.Tests.Integracao;
+using Xunit;
 
 namespace Tratoo.Tests
 {
@@ -28,6 +29,18 @@ namespace Tratoo.Tests
             try { await validacao(); return "OK"; }
             catch (NegocioException e) { return e.Message; }
         }
+
+        /// <summary>
+        /// Depois de uma rajada de palpites, o código certo tem de ser recusado. A mensagem varia:
+        /// palpites que chegam depois da invalidação recriam o contador, que pode terminar no
+        /// limite. A próxima tentativa o ultrapassa e recebe "Muitas tentativas" em vez de
+        /// "Código expirado". Os dois desfechos são seguros, e só o escalonador decide qual ocorre.
+        /// </summary>
+        public static void ConfirmarRecusa(string resultado) =>
+            Assert.True(
+                resultado.StartsWith("Código expirado", StringComparison.Ordinal) ||
+                resultado.StartsWith("Muitas tentativas", StringComparison.Ordinal),
+                $"Esperava recusa do código, mas veio: {resultado}");
     }
 
     /// <summary>

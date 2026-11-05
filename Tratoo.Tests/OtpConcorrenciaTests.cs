@@ -112,8 +112,7 @@ namespace Tratoo.Tests
             Assert.Contains(resultados, r => r.StartsWith("Muitas tentativas", StringComparison.Ordinal));
 
             // O código morreu: nem o certo vale mais.
-            var depois = await Otp.Resultado(() => mfa.ValidarAsync(Email, codigo, "reset_senha"));
-            Assert.Equal("Código expirado ou inválido", depois);
+            Otp.ConfirmarRecusa(await Otp.Resultado(() => mfa.ValidarAsync(Email, codigo, "reset_senha")));
         }
 
         [Fact]
@@ -195,8 +194,7 @@ namespace Tratoo.Tests
 
             Assert.InRange(observado.LeiturasComValor, 0, 5); // mínimo 0: ver o teste do MFA
             Assert.DoesNotContain("OK", resultados);
-            Assert.Equal("Código expirado ou inválido. Solicite um novo código.",
-                await Otp.Resultado(() => cenario.AssinarAsync(servico, cenario.UltimoOtp!)));
+            Otp.ConfirmarRecusa(await Otp.Resultado(() => cenario.AssinarAsync(servico, cenario.UltimoOtp!)));
             Assert.Equal(0, cenario.Assinaturas);
         }
 
