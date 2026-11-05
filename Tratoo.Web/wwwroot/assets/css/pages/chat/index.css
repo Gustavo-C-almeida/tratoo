@@ -115,7 +115,7 @@
 
 .chat-card-tempo {
     font-size: 0.75rem;
-    color: #94A3B8;
+    color: #64748B;
     flex-shrink: 0;
     margin-left: 0.5rem;
 }
@@ -131,7 +131,7 @@
 
 .chat-card-preview {
     font-size: 0.85rem;
-    color: #94A3B8;
+    color: #64748B;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

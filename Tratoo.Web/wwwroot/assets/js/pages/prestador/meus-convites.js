@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Meus Convites (prestador) ────────────────────────────────────────────────
 
 const root = () => document.getElementById('convites-root');
@@ -184,7 +185,7 @@ function renderCard(c) {
             ${c.prazoDesejado ? `
             <div class="convite-info-item">
                 <div class="label">Prazo desejado</div>
-                <div class="valor">${dataFmt(c.prazoDesejado)}</div>
+                <div class="valor">${formatarDiaCalendario(c.prazoDesejado)}</div>
             </div>` : ''}
             ${c.respondidoEm ? `
             <div class="convite-info-item">

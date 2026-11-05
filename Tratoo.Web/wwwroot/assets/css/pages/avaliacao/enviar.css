@@ -104,7 +104,7 @@
 
 .estrela:hover,
 .estrela.ativa {
-    color: var(--warning);
+    color: var(--warning-text);
 }
 
 .estrela:hover {
@@ -114,7 +114,7 @@
 .av-nota-texto {
     font-size: 0.88rem;
     font-weight: 600;
-    color: var(--warning);
+    color: var(--warning-text);
     min-height: 1.2em;
     margin: 0;
 }
@@ -208,7 +208,7 @@
     border-radius: var(--radius-md);
     padding: 0.65rem 1rem;
     font-size: 0.82rem;
-    color: var(--info);
+    color: var(--info-text);
     margin-bottom: 1.25rem;
     line-height: 1.5;
 }
@@ -270,7 +270,7 @@
     width: 60px;
     height: 60px;
     background: var(--success-light);
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
     border-radius: 50%;
     font-size: 1.8rem;
     display: flex;
@@ -282,7 +282,7 @@
 .av-sucesso h2 {
     font-size: 1.2rem;
     font-weight: 700;
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
     margin: 0 0 0.75rem;
 }
 
@@ -299,4 +299,4 @@
     font-size: 0.95rem;
 }
 
-.obrigatorio { color: var(--error); }
+.obrigatorio { color: var(--error-text); }

@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Listagem pública de projetos (US-05) — com busca semântica IA ────────────
 
 const root = () => document.getElementById('projetos-root');
@@ -364,7 +365,7 @@ function renderCard(p, fromIA) {
                         : escHtml(p.contratanteNome))
                     : ''}
             </span>
-            <span>Prazo: ${formatarData(p.prazoEntrega)}</span>
+            <span>Prazo: ${formatarDiaCalendario(p.prazoEntrega)}</span>
             <span class="proposta-count">${p.totalPropostas} proposta${p.totalPropostas !== 1 ? 's' : ''}</span>
             ${p.publicadoEm ? `<span class="tempo-publicado">${tempoAtras(p.publicadoEm) || formatarData(p.publicadoEm)}</span>` : ''}
         </div>

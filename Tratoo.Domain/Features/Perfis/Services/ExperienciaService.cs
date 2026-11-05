@@ -16,6 +16,8 @@ namespace Tratoo.Domain.Features.Perfis
 
         public async Task AdicionarAsync(ExperienciaDTO dto)
         {
+            ValidarDatas(dto);
+
             var prestador = await _repo.GetCompletoAsync(dto.PrestadorId)
                 ?? throw new NegocioException("Prestador não encontrado");
 
@@ -25,8 +27,8 @@ namespace Tratoo.Domain.Features.Perfis
                 Empresa      = dto.Empresa,
                 Cargo        = dto.Cargo,
                 Atividades   = dto.Atividades,
-                DataInicio   = dto.DataInicio,
-                DataFim      = dto.DataFim,
+                DataInicio   = DatasUtc.Calendario(dto.DataInicio),
+                DataFim      = DatasUtc.Calendario(dto.DataFim),
                 EmpregoAtual = dto.EmpregoAtual,
                 Local        = dto.Local,
                 TipoContrato = dto.TipoContrato
@@ -41,6 +43,8 @@ namespace Tratoo.Domain.Features.Perfis
 
         public async Task EditarAsync(ExperienciaDTO dto)
         {
+            ValidarDatas(dto);
+
             var prestador = await _repo.GetCompletoAsync(dto.PrestadorId)
                 ?? throw new NegocioException("Prestador não encontrado");
 
@@ -50,8 +54,8 @@ namespace Tratoo.Domain.Features.Perfis
             exp.Empresa      = dto.Empresa;
             exp.Cargo        = dto.Cargo;
             exp.Atividades   = dto.Atividades;
-            exp.DataInicio   = dto.DataInicio;
-            exp.DataFim      = dto.DataFim;
+            exp.DataInicio   = DatasUtc.Calendario(dto.DataInicio);
+            exp.DataFim      = DatasUtc.Calendario(dto.DataFim);
             exp.EmpregoAtual = dto.EmpregoAtual;
             exp.Local        = dto.Local;
             exp.TipoContrato = dto.TipoContrato;
@@ -73,6 +77,12 @@ namespace Tratoo.Domain.Features.Perfis
 
             await _repo.SaveAsync();
             await _indexador.IndexarAsync(prestadorId);
+        }
+
+        private static void ValidarDatas(ExperienciaDTO dto)
+        {
+            if (dto.DataInicio == default)
+                throw new NegocioException("Informe a data de início da experiência.");
         }
     }
 }

@@ -1309,7 +1309,7 @@ namespace Tratoo.Domain.Features.Pagamentos
                 {
                     if (prazo.TryGetProperty("dataTermino", out var dt) ||
                         prazo.TryGetProperty("DataTermino", out dt))
-                        return dt.GetDateTime();
+                        return DatasUtc.Instante(dt.GetDateTime());
                 }
             }
             catch { }

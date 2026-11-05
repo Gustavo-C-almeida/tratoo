@@ -40,7 +40,7 @@ namespace Tratoo.Domain.Features.Projetos
             if (dto.OrcamentoMin <= 0 || dto.OrcamentoMax < dto.OrcamentoMin)
                 throw new NegocioException("Valor de orçamento inválido.");
 
-            if (dto.PrazoEntrega.ToUniversalTime() <= DateTime.UtcNow)
+            if (!DatasUtc.EhFutura(dto.PrazoEntrega))
                 throw new NegocioException("O prazo de entrega deve ser uma data futura.");
 
             var habilidadesJson = dto.Habilidades != null && dto.Habilidades.Count > 0
@@ -55,7 +55,7 @@ namespace Tratoo.Domain.Features.Projetos
                 Categoria = dto.Categoria,
                 OrcamentoMin = dto.OrcamentoMin,
                 OrcamentoMax = dto.OrcamentoMax,
-                PrazoEntrega = dto.PrazoEntrega,
+                PrazoEntrega = DatasUtc.Calendario(dto.PrazoEntrega),
                 Habilidades = habilidadesJson,
                 NivelFreelancer = dto.NivelFreelancer,
                 Visibilidade = dto.Visibilidade,
@@ -171,7 +171,7 @@ namespace Tratoo.Domain.Features.Projetos
             if (projeto.OrcamentoMin <= 0 || projeto.OrcamentoMax < projeto.OrcamentoMin)
                 throw new NegocioException("Valor de orçamento inválido.");
 
-            if (projeto.PrazoEntrega.ToUniversalTime() <= DateTime.UtcNow)
+            if (!DatasUtc.EhFutura(projeto.PrazoEntrega))
                 throw new NegocioException("O prazo de entrega deve ser uma data futura.");
         }
 

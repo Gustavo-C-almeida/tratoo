@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Minhas propostas (prestador) ─────────────────────────────────────────────
 
 const root = () => document.getElementById('propostas-root');
@@ -123,7 +124,7 @@ function renderCard(p) {
         </div>
         <div class="proposta-card-meta">
             <span>${moeda(p.valorTotal)}</span>
-            <span>Prazo: ${dataFmt(p.prazoTotal)}</span>
+            <span>Prazo: ${formatarDiaCalendario(p.prazoTotal)}</span>
             <span>Revisões: ${p.revisoesInclusas ?? '—'}</span>
         </div>
         <div class="proposta-objetivo">${esc(p.objetivo)}</div>

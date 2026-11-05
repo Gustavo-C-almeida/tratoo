@@ -693,7 +693,7 @@ namespace Tratoo.Domain.Features.Contratos
                 },
                 Prazo = new ContratoPrazoDto
                 {
-                    DataInicio = DateTime.UtcNow.Date,
+                    DataInicio = DatasUtc.HojeNoBrasil(),
                     DataTermino = versao.PrazoTotal,
                     Marcos = marcos
                 },

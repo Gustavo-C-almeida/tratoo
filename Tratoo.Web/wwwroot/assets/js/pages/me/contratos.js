@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // Página: /pages/me/contratos.html
 // Lista todos os contratos do usuário logado (contratante ou prestador).
 
@@ -73,7 +74,7 @@ function renderCard(c) {
         : '—';
 
     const dataTermino = c.dataTermino && c.dataTermino !== '0001-01-01T00:00:00'
-        ? new Date(c.dataTermino).toLocaleDateString('pt-BR')
+        ? formatarDiaCalendario(c.dataTermino)
         : '—';
 
     const expiraEm = new Date(c.expiraEm).toLocaleDateString('pt-BR');
