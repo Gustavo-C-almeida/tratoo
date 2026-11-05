@@ -6,12 +6,12 @@
     --secondary: #22C55E;
     --secondary-dark: #16A34A;
     --secondary-light: #86EFAC;
-    --bg: #F8FAFC;
+    --bg: #FFFFFF;
     --surface: #FFFFFF;
     --surface-hover: #F1F5F9;
     --text: #1E293B;
-    --text-secondary: #64748B;
-    --text-muted: #94A3B8;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
     --border: #E2E8F0;
     --border-light: #F1F5F9;
     --error: #EF4444;
@@ -134,7 +134,7 @@ body {
 }
 
     .back-link:hover {
-        color: var(--secondary);
+        color: var(--secondary-text);
         transform: translateX(-4px);
     }
 
@@ -147,7 +147,7 @@ body {
 }
 
     .msg-centro.erro {
-        color: var(--error);
+        color: var(--error-text);
         font-weight: 600;
     }
 
@@ -206,12 +206,15 @@ body {
 
 /* ── Header da Proposta ───────────────────────────────────────────────────── */
 .prop-header {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    background: var(--surface);
     padding: var(--space-xl) var(--space-lg);
     border-radius: var(--radius-lg);
     margin-bottom: var(--space-xl);
     position: relative;
     overflow: hidden;
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
 }
 
     .prop-header::before {
@@ -221,7 +224,7 @@ body {
         right: -50%;
         width: 200%;
         height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+        background: none;
         pointer-events: none;
     }
 
@@ -240,12 +243,12 @@ body {
     .prop-titulo-bloco h1 {
         font-size: clamp(var(--text-lg), 5vw, var(--text-2xl));
         font-weight: 700;
-        color: white;
+        color: var(--primary);
         margin: 0 0 var(--space-xs);
     }
 
 .prop-sub {
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: var(--text-sm);
     margin-bottom: var(--space-sm);
 }
@@ -312,17 +315,18 @@ body {
 .valor-destaque {
     font-size: clamp(var(--text-2xl), 5vw, var(--text-3xl));
     font-weight: 800;
-    color: var(--secondary);
+    color: var(--secondary-text);
     margin-bottom: var(--space-xs);
     letter-spacing: -0.02em;
 }
 
 /* Métricas no Sidebar */
 .proposta-metrics {
-    background: linear-gradient(135deg, var(--primary), #1a2744);
+    background: var(--surface);
     border-radius: var(--radius-lg);
     padding: 16px;
     margin-bottom: 20px;
+    border: 1px solid var(--border);
 }
 
 .metric-item {
@@ -330,18 +334,18 @@ body {
     justify-content: space-between;
     align-items: baseline;
     padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid var(--border-light);
 }
 
 .metric-label {
     font-size: 12px;
-    color: rgba(255,255,255,0.7);
+    color: var(--text-secondary);
 }
 
 .metric-value {
     font-size: 18px;
     font-weight: bold;
-    color: white;
+    color: var(--text);
 }
 
 .metric-trend {
@@ -350,11 +354,11 @@ body {
 }
 
     .metric-trend.up {
-        color: var(--secondary);
+        color: var(--secondary-text);
     }
 
     .metric-trend.down {
-        color: var(--error);
+        color: var(--error-text);
     }
 
 .response-time {
@@ -368,7 +372,7 @@ body {
     .response-time .time-value {
         font-size: 24px;
         font-weight: bold;
-        color: var(--secondary);
+        color: var(--secondary-text);
     }
 
 /* Ações */
@@ -440,7 +444,7 @@ body {
 
 .btn-recusar {
     background: transparent;
-    color: var(--error);
+    color: var(--error-text);
     border: 2px solid var(--error);
     width: 100%;
     padding: 0.75rem 1rem;
@@ -502,7 +506,7 @@ body {
 .btn-texto {
     background: none;
     border: none;
-    color: var(--secondary);
+    color: var(--secondary-text);
     cursor: pointer;
     font-size: var(--text-sm);
     font-weight: 600;
@@ -511,7 +515,7 @@ body {
 }
 
     .btn-texto:hover {
-        color: var(--secondary-dark);
+        color: var(--secondary-text);
         text-decoration: underline;
     }
 
@@ -533,7 +537,7 @@ body {
 
     .versao-card.versao-ativa {
         border-color: var(--secondary);
-        background: var(--success-light);
+        background: var(--surface);
         border-left: 4px solid var(--secondary);
     }
 
@@ -620,7 +624,7 @@ body {
     flex-direction: column;
     gap: var(--space-sm);
     padding: var(--space-md);
-    background: linear-gradient(to bottom, var(--bg), var(--surface));
+    background: var(--surface);
     border-radius: var(--radius-md);
     margin-bottom: var(--space-md);
 }
@@ -919,7 +923,7 @@ body {
 
     .close-form:hover {
         background: var(--surface-hover);
-        color: var(--error);
+        color: var(--error-text);
     }
 
 /* Stepper */
@@ -985,7 +989,7 @@ body {
 }
 
 .step.active .step-label {
-    color: var(--secondary);
+    color: var(--secondary-text);
     font-weight: 600;
 }
 
@@ -999,11 +1003,12 @@ body {
 
 /* Preview ao vivo */
 .live-preview {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    background: var(--surface);
     border-radius: var(--radius-lg);
     padding: 20px;
     margin-top: 24px;
-    color: white;
+    color: var(--text);
+    border: 1px solid var(--border);
 }
 
     .live-preview h4 {
@@ -1096,11 +1101,11 @@ body {
     }
 
     .validation-message.error {
-        color: var(--error);
+        color: var(--error-text);
     }
 
     .validation-message.success {
-        color: var(--secondary);
+        color: var(--secondary-text);
     }
 
 .campo-row {
@@ -1134,7 +1139,7 @@ body {
 }
 
 .obr {
-    color: var(--error);
+    color: var(--error-text);
     font-size: var(--text-xs);
 }
 
@@ -1175,7 +1180,7 @@ body {
 
 .btn-secundario {
     background: transparent;
-    color: var(--secondary);
+    color: var(--secondary-text);
     border: 2px solid var(--secondary);
     border-radius: var(--radius-md);
     padding: 0.75rem 1.25rem;
@@ -1207,13 +1212,13 @@ body {
 .msg-sucesso {
     background: var(--success-light);
     border: 1px solid var(--secondary-light);
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
 }
 
 .msg-erro {
     background: var(--error-light);
     border: 1px solid var(--error);
-    color: var(--error);
+    color: var(--error-text);
 }
 
 .hint {
@@ -1413,25 +1418,25 @@ body {
 .status-azul,
 .status-submitted {
     background: var(--info-light);
-    color: var(--info);
+    color: var(--info-text);
 }
 
 .status-amarelo,
 .status-emnegociacao {
     background: var(--warning-light);
-    color: var(--warning);
+    color: var(--warning-text);
 }
 
 .status-verde,
 .status-aceita {
     background: var(--success-light);
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
 }
 
 .status-vermelho,
 .status-recusada {
     background: var(--error-light);
-    color: var(--error);
+    color: var(--error-text);
 }
 
 .badge-expirado {
@@ -1483,17 +1488,17 @@ body {
 }
 
 .validade-ok {
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
     font-weight: 600;
 }
 
 .validade-alerta {
-    color: var(--warning);
+    color: var(--warning-text);
     font-weight: 700;
 }
 
 .validade-expirada {
-    color: var(--error);
+    color: var(--error-text);
     font-weight: 700;
 }
 
@@ -1552,20 +1557,20 @@ body {
     .motivo-chip:hover {
         background: var(--error-light);
         border-color: var(--error);
-        color: var(--error);
+        color: var(--error-text);
     }
 
 /* ─── Char Counters ──────────────────────────────────────────────────────── */
 .char-counter {
     font-size: var(--text-xs);
-    color: var(--error);
+    color: var(--error-text);
     font-weight: 600;
     align-self: flex-end;
     transition: var(--transition-fast);
 }
 
     .char-counter.valido {
-        color: var(--secondary-dark);
+        color: var(--secondary-text);
     }
 
 /* ─── Resumo Financeiro ──────────────────────────────────────────────────── */
@@ -1578,7 +1583,7 @@ body {
     border-radius: var(--radius-md);
     padding: var(--space-sm) var(--space-md);
     font-size: var(--text-sm);
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
 }
 
 /* ─── Preview Modal ──────────────────────────────────────────────────────── */
@@ -1707,12 +1712,12 @@ body {
     --secondary: #22C55E;
     --secondary-dark: #16A34A;
     --secondary-light: #86EFAC;
-    --bg: #F8FAFC;
+    --bg: #FFFFFF;
     --surface: #FFFFFF;
     --surface-hover: #F1F5F9;
     --text: #1E293B;
-    --text-secondary: #64748B;
-    --text-muted: #94A3B8;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
     --border: #E2E8F0;
     --border-light: #F1F5F9;
     --error: #EF4444;
@@ -1751,7 +1756,7 @@ body {
 }
 
 body {
-    background: linear-gradient(135deg, var(--bg) 0%, #f1f5f9 100%);
+    background: var(--surface);
     color: var(--text);
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     line-height: 1.5;
@@ -1821,13 +1826,15 @@ body {
 
 /* Header da Proposta - Design Moderno */
 .prop-header {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    background: var(--surface);
     padding: var(--space-2xl) var(--space-xl);
     border-radius: var(--radius-2xl);
     margin-bottom: var(--space-2xl);
     position: relative;
     overflow: hidden;
-    box-shadow: var(--shadow-xl);
+    box-shadow: var(--shadow-sm);
+    color: var(--text);
+    border: 1px solid var(--border);
 }
 
     .prop-header::before {
@@ -1837,7 +1844,7 @@ body {
         right: -30%;
         width: 80%;
         height: 200%;
-        background: radial-gradient(circle, rgba(34,197,94,0.15) 0%, transparent 70%);
+        background: none;
         pointer-events: none;
     }
 
@@ -1848,7 +1855,7 @@ body {
         left: -20%;
         width: 60%;
         height: 150%;
-        background: radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%);
+        background: none;
         pointer-events: none;
     }
 
@@ -1860,17 +1867,17 @@ body {
     .prop-titulo-bloco h1 {
         font-size: clamp(1.5rem, 4vw, 2.5rem);
         font-weight: 800;
-        color: white;
+        color: var(--primary);
         margin: 0 0 var(--space-sm);
         letter-spacing: -0.02em;
-        background: linear-gradient(135deg, #fff, var(--secondary-light));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        background: none;
+        -webkit-background-clip: border-box;
+        -webkit-text-fill-color: currentColor;
+        background-clip: border-box;
     }
 
 .prop-sub {
-    color: rgba(255,255,255,0.8);
+    color: var(--text-secondary);
     font-size: var(--text-base);
     margin-bottom: var(--space-md);
 }
@@ -1924,7 +1931,7 @@ body {
 
     /* Versão Ativa - Design Destacado */
     .versao-card.versao-ativa {
-        background: linear-gradient(135deg, var(--surface) 0%, var(--success-light) 100%);
+        background: var(--surface);
         border: 2px solid var(--secondary);
         box-shadow: var(--shadow-xl);
         position: relative;
@@ -1962,7 +1969,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: var(--space-lg) var(--space-xl) var(--space-md) var(--space-xl);
-    background: rgba(0,0,0,0.02);
+    background: var(--surface);
     border-bottom: 1px solid var(--border-light);
 }
 
@@ -2040,7 +2047,7 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: var(--space-md);
     padding: var(--space-md) var(--space-xl);
-    background: rgba(0,0,0,0.01);
+    background: var(--surface);
 }
 
     .versao-campo-row span {
@@ -2111,7 +2118,7 @@ body {
 .btn-texto {
     background: none;
     border: none;
-    color: var(--secondary);
+    color: var(--secondary-text);
     cursor: pointer;
     font-size: var(--text-sm);
     font-weight: 600;
@@ -2124,7 +2131,7 @@ body {
 }
 
     .btn-texto:hover {
-        color: var(--secondary-dark);
+        color: var(--secondary-text);
         background: var(--success-light);
         transform: translateX(4px);
     }
@@ -2149,10 +2156,11 @@ body {
 
 /* Métricas */
 .proposta-metrics {
-    background: linear-gradient(135deg, var(--primary), #1a2744);
+    background: var(--surface);
     border-radius: var(--radius-xl);
     padding: var(--space-lg);
     margin-bottom: var(--space-xl);
+    border: 1px solid var(--border);
 }
 
 .metric-item {
@@ -2160,7 +2168,7 @@ body {
     justify-content: space-between;
     align-items: baseline;
     padding: 10px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid var(--border-light);
 }
 
     .metric-item:last-child {
@@ -2169,7 +2177,7 @@ body {
 
 .metric-label {
     font-size: var(--text-xs);
-    color: rgba(255,255,255,0.7);
+    color: var(--text-secondary);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -2178,7 +2186,7 @@ body {
 .metric-value {
     font-size: var(--text-xl);
     font-weight: 800;
-    color: white;
+    color: var(--text);
 }
 
 /* Response Time */
@@ -2201,7 +2209,7 @@ body {
     .response-time .time-value {
         font-size: 28px;
         font-weight: 800;
-        color: var(--secondary);
+        color: var(--secondary-text);
     }
 
 /* Botões de ação */
@@ -2238,7 +2246,7 @@ body {
 
 .btn-recusar {
     background: transparent;
-    color: var(--error);
+    color: var(--error-text);
     border: 2px solid var(--error);
 }
 
@@ -2249,7 +2257,7 @@ body {
 
 .btn-secundario {
     background: transparent;
-    color: var(--secondary);
+    color: var(--secondary-text);
     border: 2px solid var(--secondary);
 }
 
@@ -2418,7 +2426,7 @@ body {
 }
 
 .step.active .step-label {
-    color: var(--secondary);
+    color: var(--secondary-text);
     font-weight: 700;
 }
 
@@ -2465,16 +2473,17 @@ body {
     }
 
     .validation-message.error {
-        color: var(--error);
+        color: var(--error-text);
     }
 
 /* Live Preview */
 .live-preview {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    background: var(--surface);
     border-radius: var(--radius-xl);
     padding: var(--space-lg);
     margin-top: var(--space-lg);
-    color: white;
+    color: var(--text);
+    border: 1px solid var(--border);
 }
 
 .preview-values {
@@ -2516,37 +2525,37 @@ body {
 
 .status-submitted {
     background: var(--info-light);
-    color: var(--info);
+    color: var(--info-text);
 }
 
 .status-emnegociacao {
     background: var(--warning-light);
-    color: var(--warning);
+    color: var(--warning-text);
 }
 
 .status-aceita {
     background: var(--success-light);
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
 }
 
 .status-recusada {
     background: var(--error-light);
-    color: var(--error);
+    color: var(--error-text);
 }
 
 /* Validade */
 .validade-ok {
-    color: var(--secondary-dark);
+    color: var(--secondary-text);
     font-weight: 600;
 }
 
 .validade-alerta {
-    color: var(--warning);
+    color: var(--warning-text);
     font-weight: 700;
 }
 
 .validade-expirada {
-    color: var(--error);
+    color: var(--error-text);
     font-weight: 700;
 }
 
@@ -2651,7 +2660,7 @@ body {
 }
 
 .recusar-form-container {
-    background: linear-gradient(135deg, var(--surface), var(--surface-hover));
+    background: var(--surface);
     border-radius: var(--radius-2xl);
     padding: var(--space-lg);
     border: 1px solid var(--border);
@@ -2682,7 +2691,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--error);
+    color: var(--error-text);
 }
 
 .recusar-header-text h4 {
@@ -2726,7 +2735,7 @@ body {
     .motivo-chip-modern:hover {
         background: var(--error-light);
         border-color: var(--error);
-        color: var(--error);
+        color: var(--error-text);
         transform: translateX(4px);
     }
 
@@ -2814,12 +2823,12 @@ body {
 }
 
     .recusar-char-counter.warning {
-        color: var(--warning);
+        color: var(--warning-text);
         font-weight: 600;
     }
 
     .recusar-char-counter.danger {
-        color: var(--error);
+        color: var(--error-text);
         font-weight: 700;
     }
 
@@ -2948,22 +2957,6 @@ body {
     .recusar-header-text h4 {
         font-size: var(--text-base);
     }
-}
-
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-    .recusar-form-container {
-        background: linear-gradient(135deg, #1E293B, #0F172A);
-    }
-
-    .motivo-chip-modern {
-        background: #1E293B;
-        border-color: #334155;
-    }
-
-        .motivo-chip-modern:hover {
-            background: rgba(239, 68, 68, 0.2);
-        }
 }
 
 /* Reduced Motion */
@@ -3133,7 +3126,7 @@ body {
     border-radius: var(--radius-md);
     margin-top: 16px;
     font-size: var(--text-xs);
-    color: var(--warning);
+    color: var(--warning-text);
 }
 
     .modal-alert svg {
@@ -3188,12 +3181,15 @@ body {
 
 /* Header Premium */
 .propostas-header-premium {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    background: var(--surface);
     border-radius: var(--radius-2xl);
     padding: var(--space-xl);
     margin-bottom: var(--space-xl);
     position: relative;
     overflow: hidden;
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
 }
 
     .propostas-header-premium::before {
@@ -3203,7 +3199,7 @@ body {
         right: -20%;
         width: 60%;
         height: 200%;
-        background: radial-gradient(circle, rgba(34,197,94,0.1) 0%, transparent 70%);
+        background: none;
         pointer-events: none;
     }
 
@@ -3230,22 +3226,22 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    color: rgba(255,255,255,0.7);
+    color: var(--text-secondary);
     text-decoration: none;
     transition: var(--transition-fast);
 }
 
     .breadcrumb-link-modern:hover {
-        color: white;
+        color: var(--primary);
         transform: translateX(-2px);
     }
 
 .breadcrumb-separator {
-    color: rgba(255,255,255,0.4);
+    color: var(--text-muted);
 }
 
 .breadcrumb-current {
-    color: rgba(255,255,255,0.9);
+    color: var(--text);
 }
 
 .propostas-title-section {
@@ -3255,14 +3251,14 @@ body {
 .propostas-title {
     font-size: clamp(1.5rem, 4vw, 2rem);
     font-weight: 800;
-    color: white;
+    color: var(--primary);
     margin: 0 0 var(--space-xs);
     letter-spacing: -0.02em;
 }
 
 .propostas-subtitle {
     font-size: var(--text-sm);
-    color: rgba(255,255,255,0.7);
+    color: var(--text-secondary);
     margin: 0;
 }
 
@@ -3271,11 +3267,11 @@ body {
     align-items: center;
     gap: 8px;
     padding: 10px 20px;
-    background: rgba(255,255,255,0.1);
+    background: var(--surface);
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.2);
+    border: 1px solid var(--border);
     border-radius: var(--radius-xl);
-    color: white;
+    color: var(--primary);
     text-decoration: none;
     font-size: var(--text-sm);
     font-weight: 600;
@@ -3283,7 +3279,7 @@ body {
 }
 
     .btn-projeto-modern:hover {
-        background: rgba(34,197,94,0.2);
+        background: var(--surface-hover);
         border-color: var(--secondary);
         transform: translateY(-2px);
     }
@@ -3314,6 +3310,7 @@ body {
     }
 
 .stat-icon {
+    color: var(--white);
     width: 48px;
     height: 48px;
     border-radius: var(--radius-lg);
@@ -3397,7 +3394,7 @@ body {
 
     .filtro-btn:hover:not(.active) {
         border-color: var(--secondary);
-        color: var(--secondary);
+        color: var(--secondary-text);
     }
 
 .ordenacao-wrapper {
@@ -3545,22 +3542,22 @@ body {
 
     .status-badge-modern.azul {
         background: var(--info-light);
-        color: var(--info);
+        color: var(--info-text);
     }
 
     .status-badge-modern.amarelo {
         background: var(--warning-light);
-        color: var(--warning);
+        color: var(--warning-text);
     }
 
     .status-badge-modern.verde {
         background: var(--success-light);
-        color: var(--secondary-dark);
+        color: var(--secondary-text);
     }
 
     .status-badge-modern.vermelho {
         background: var(--error-light);
-        color: var(--error);
+        color: var(--error-text);
     }
 
     .status-badge-modern.cinza {
@@ -3621,11 +3618,11 @@ body {
 }
 
     .meta-value.urgente {
-        color: var(--error);
+        color: var(--error-text);
     }
 
     .meta-value.alerta {
-        color: var(--warning);
+        color: var(--warning-text);
     }
 
     .meta-value.expirado {
@@ -3645,7 +3642,7 @@ body {
     gap: 6px;
     font-size: var(--text-sm);
     font-weight: 600;
-    color: var(--secondary);
+    color: var(--secondary-text);
     transition: var(--transition-fast);
 }
 
@@ -3747,7 +3744,7 @@ body {
 }
 
 .erro-msg {
-    color: var(--error);
+    color: var(--error-text);
     font-size: var(--text-base);
 }
 
@@ -3784,7 +3781,7 @@ body {
 }
 /* ── Resumo de transparência de taxa operacional do gateway ───────────────── */
 .resumo-taxa-op {
-    background: #f8fafc;
+    background: var(--surface);
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     padding: 12px 16px;
@@ -3808,7 +3805,7 @@ body {
 }
 .rto-obs {
     font-size: 11px;
-    color: #94a3b8;
+    color: #64748B;
     margin-top: 8px;
     line-height: 1.5;
 }
@@ -3890,7 +3887,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #f1f5f9;
+    background: var(--surface);
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 10px 14px;
@@ -3900,5 +3897,5 @@ body {
 }
 
 .aviso-turno i {
-    color: #94a3b8;
+    color: #64748B;
 }

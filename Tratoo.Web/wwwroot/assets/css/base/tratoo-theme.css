@@ -41,7 +41,7 @@
     --tratoo-brand-rgb:  34, 197, 94;
 
     /* ── Superfícies e texto ─────────────────────────────────────────────── */
-    --bs-body-bg:              #F8FAFC;
+    --bs-body-bg:              #FFFFFF;
     --bs-body-color:           #1E293B;
     --bs-body-color-rgb:       30, 41, 59;
     --bs-secondary-color:      #64748B;
@@ -196,7 +196,7 @@ h6, .h6 { font-weight: 600; }
     box-shadow: 0 0 0 3px rgba(var(--tratoo-brand-rgb), 0.15);
 }
 
-.form-control::placeholder { color: #94A3B8; }
+.form-control::placeholder { color: #64748B; }
 
 .form-control.is-invalid,
 .form-select.is-invalid {
@@ -209,7 +209,7 @@ h6, .h6 { font-weight: 600; }
 
 /* Input group com ícone à esquerda (busca, e-mail, etc.) */
 .input-group-text {
-    background: #F8FAFC;
+    background: #FFFFFF;
     border-color: #E2E8F0;
     color: #64748B;
 }
@@ -349,7 +349,7 @@ h6, .h6 { font-weight: 600; }
     letter-spacing: 0.04em;
     color: #64748B;
     border-bottom-width: 1px;
-    background: #F8FAFC;
+    background: #FFFFFF;
     white-space: nowrap;
 }
 
@@ -406,7 +406,7 @@ h6, .h6 { font-weight: 600; }
     height: 64px;
     border-radius: 9999px;
     background: #F1F5F9;
-    color: #94A3B8;
+    color: #64748B;
     display: inline-flex;
     align-items: center;
     justify-content: center;

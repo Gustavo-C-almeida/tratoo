@@ -49,7 +49,7 @@ namespace Tratoo.Domain.Features.Pagamentos
                 prestador.ContaBancaria.ContaCriptografada = contaProtegida;
                 prestador.ContaBancaria.PixChave = dto.Pix;
                 prestador.ContaBancaria.TipoPix = dto.TipoPix;
-                prestador.ContaBancaria.AtualizadoEm = DateTime.Now;
+                prestador.ContaBancaria.AtualizadoEm = DateTime.UtcNow;
             }
 
             await _db.SaveChangesAsync();

@@ -131,9 +131,8 @@ namespace Tratoo.API.EndPoints
                     return Results.BadRequest(new { mensagem = "A descrição da entrega é obrigatória." });
 
                 var observacoes = form["observacoes"].ToString();
-                DateTime dataEntrega = DateTime.UtcNow;
-                if (DateTime.TryParse(form["dataEntrega"].ToString(), out var dt))
-                    dataEntrega = dt.ToUniversalTime();
+                // Sem data informada, a entrega vale para hoje: o serviço aplica o padrão.
+                DatasUtc.TentarLer(form["dataEntrega"].ToString(), out var dataEntrega);
 
                 // Links opcionais (JSON: [{ "url": "...", "descricao": "..." }])
                 List<EntregaLinkDto>? links = null;

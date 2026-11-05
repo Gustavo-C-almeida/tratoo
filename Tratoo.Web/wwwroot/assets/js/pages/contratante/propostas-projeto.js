@@ -1,4 +1,5 @@
 import { api } from '/assets/js/services/api.js';
+import { formatarDiaCalendario } from '/assets/js/utils/datas.js';
 // ── Propostas do projeto (contratante) - Design Moderno ──────────────────────
 
 const root = () => document.getElementById('root');
@@ -350,7 +351,7 @@ function renderCardModerno(p, opaco = false) {
                     <span class="meta-icon"><i class="fa-solid fa-calendar-days"></i></span>
                     <div class="meta-content">
                         <span class="meta-label">Prazo</span>
-                        <strong class="meta-value ${prazoRestante.classe}">${dataFmt(p.prazoTotal)}</strong>
+                        <strong class="meta-value ${prazoRestante.classe}">${formatarDiaCalendario(p.prazoTotal)}</strong>
                     </div>
                 </div>
                 <div class="meta-item-modern">

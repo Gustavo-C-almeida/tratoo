@@ -144,7 +144,7 @@
 
 /* ── Erro ───────────────────────────────────────────────────────────────────── */
 .onboarding__erro {
-    color: var(--error);
+    color: var(--error-text);
     font-size: var(--text-xs);
     background: var(--error-light);
     border-radius: var(--radius-sm);
@@ -258,7 +258,7 @@
 
 .onboarding__sucesso-icone {
     font-size: 3.25rem;
-    color: var(--secondary);
+    color: var(--secondary-text);
     margin-bottom: var(--space-sm);
 }
 

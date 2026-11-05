@@ -58,7 +58,7 @@ namespace Tratoo.Domain.Features.Propostas
                     throw new NegocioException("Você já possui uma proposta enviada ou em negociação neste projeto.");
             }
 
-            if (dto.ValidoAte.ToUniversalTime() <= DateTime.UtcNow)
+            if (DatasUtc.Instante(dto.ValidoAte) <= DateTime.UtcNow)
                 throw new NegocioException("Informe a validade da proposta (deve ser data futura).");
 
             var proposta = new PropostaProjeto
@@ -67,7 +67,7 @@ namespace Tratoo.Domain.Features.Propostas
                 PrestadorId = dto.PrestadorId,
                 Status = StatusPropostaProjeto.Draft,
                 VersaoAtual = 1,
-                ValidoAte = dto.ValidoAte,
+                ValidoAte = DatasUtc.Instante(dto.ValidoAte),
                 CriadoEm = DateTime.UtcNow,
                 AtualizadoEm = DateTime.UtcNow
             };
@@ -109,7 +109,7 @@ namespace Tratoo.Domain.Features.Propostas
             if (projeto.Status != StatusProjeto.Aberto)
                 throw new NegocioException("Este projeto não está mais aberto.");
 
-            if (dto.ValidoAte.ToUniversalTime() <= DateTime.UtcNow)
+            if (DatasUtc.Instante(dto.ValidoAte) <= DateTime.UtcNow)
                 throw new NegocioException("Informe a validade da proposta (deve ser data futura).");
 
             // Não permite duplicar proposta ativa do mesmo convite
@@ -134,7 +134,7 @@ namespace Tratoo.Domain.Features.Propostas
                 ConviteId = conviteId,
                 Status = StatusPropostaProjeto.Submitted, // já enviada diretamente
                 VersaoAtual = 1,
-                ValidoAte = dto.ValidoAte,
+                ValidoAte = DatasUtc.Instante(dto.ValidoAte),
                 CriadoEm = DateTime.UtcNow,
                 AtualizadoEm = DateTime.UtcNow
             };
@@ -345,7 +345,7 @@ namespace Tratoo.Domain.Features.Propostas
                 Escopo = dto.Escopo.Trim(),
                 Exclusoes = dto.Exclusoes?.Trim(),
                 RevisoesInclusas = dto.RevisoesInclusas,
-                PrazoTotal = dto.PrazoTotal,
+                PrazoTotal = DatasUtc.Calendario(dto.PrazoTotal),
                 ValorTotal = dto.ValorTotal,
                 Entrada = dto.Entrada,
                 FormaPagamento = dto.FormaPagamento,
@@ -638,7 +638,7 @@ namespace Tratoo.Domain.Features.Propostas
                 throw new NegocioException("Informe o valor total da proposta.");
             if (v.RevisoesInclusas <= 0)
                 throw new NegocioException("Informe quantas revisões estão inclusas.");
-            if (v.PrazoTotal.ToUniversalTime() <= DateTime.UtcNow)
+            if (!DatasUtc.EhFutura(v.PrazoTotal))
                 throw new NegocioException("O prazo de entrega deve ser uma data futura.");
             if (string.IsNullOrWhiteSpace(v.Objetivo) || v.Objetivo.Length < 20)
                 throw new NegocioException("Descreva o objetivo com pelo menos 20 caracteres.");
@@ -654,7 +654,7 @@ namespace Tratoo.Domain.Features.Propostas
                 throw new NegocioException("Informe o valor total da proposta.");
             if (dto.RevisoesInclusas <= 0)
                 throw new NegocioException("Informe quantas revisões estão inclusas.");
-            if (dto.PrazoTotal.ToUniversalTime() <= DateTime.UtcNow)
+            if (!DatasUtc.EhFutura(dto.PrazoTotal))
                 throw new NegocioException("O prazo de entrega deve ser uma data futura.");
             if (string.IsNullOrWhiteSpace(dto.Objetivo) || dto.Objetivo.Length < 20)
                 throw new NegocioException("Descreva o objetivo com pelo menos 20 caracteres.");
@@ -674,7 +674,7 @@ namespace Tratoo.Domain.Features.Propostas
                 Escopo = dto.Escopo?.Trim() ?? string.Empty,
                 Exclusoes = dto.Exclusoes?.Trim(),
                 RevisoesInclusas = dto.RevisoesInclusas,
-                PrazoTotal = dto.PrazoTotal,
+                PrazoTotal = DatasUtc.Calendario(dto.PrazoTotal),
                 ValorTotal = dto.ValorTotal,
                 Entrada = dto.Entrada,
                 FormaPagamento = dto.FormaPagamento,

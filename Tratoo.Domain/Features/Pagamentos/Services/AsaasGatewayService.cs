@@ -198,7 +198,7 @@ namespace Tratoo.Domain.Features.Pagamentos
                     if (exp.TryGetDateTimeOffset(out var dto))
                         expiration = dto.UtcDateTime;
                     else if (exp.TryGetDateTime(out var dt))
-                        expiration = dt;
+                        expiration = DatasUtc.Instante(dt);
                 }
 
                 // Somente valida se obteve o payload mínimo

@@ -207,7 +207,7 @@
         width: 24px;
         height: 24px;
         background: white;
-        color: var(--secondary-dark);
+        color: var(--secondary-text);
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -397,36 +397,3 @@
     }
 }
 
-/* ═════════════════════════════════════════════════════════════════════ */
-/* DARK MODE */
-/* ═════════════════════════════════════════════════════════════════════ */
-
-@media (prefers-color-scheme: dark) {
-    .pillars,
-    .flow,
-    .closing {
-        background: transparent;
-    }
-
-    .pillars {
-        border-top-color: rgba(255, 255, 255, 0.05);
-        border-bottom-color: rgba(255, 255, 255, 0.05);
-    }
-
-    .pillar-icon {
-        background: rgba(34, 197, 94, 0.15);
-    }
-
-    .btn-secondary {
-        border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    .btn-secondary:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: rgba(255, 255, 255, 0.3);
-    }
-
-    .flow-connector {
-        background: rgba(255, 255, 255, 0.1);
-    }
-}
