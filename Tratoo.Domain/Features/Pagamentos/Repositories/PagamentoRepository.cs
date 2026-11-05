@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Tratoo.Domain.Data;
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
@@ -119,11 +120,26 @@ namespace Tratoo.Domain.Features.Pagamentos
             await _db.WebhookLogs.AddAsync(log);
         }
 
-        public async Task<bool> WebhookJaProcessadoAsync(string chaveIdempotencia)
+        public async Task<WebhookLog?> GetWebhookLogAsync(string chaveIdempotencia)
         {
             return await _db.WebhookLogs
-                .AnyAsync(w => w.ChaveIdempotencia == chaveIdempotencia && w.ProcessadoComSucesso);
+                .FirstOrDefaultAsync(w => w.ChaveIdempotencia == chaveIdempotencia);
         }
+
+        public async Task<bool> TryMarcarRetidoAsync(Guid pagamentoId)
+        {
+            // UPDATE ... WHERE Id = @id AND Status IN ('Aguardando', 'Processando'). Quem chega
+            // depois espera o commit de quem está transicionando e então não afeta linha nenhuma.
+            var linhas = await _db.Pagamentos
+                .Where(p => p.Id == pagamentoId &&
+                            (p.Status == StatusPagamento.Aguardando || p.Status == StatusPagamento.Processando))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, StatusPagamento.Retido));
+            return linhas == 1;
+        }
+
+        public Task<IDbContextTransaction> IniciarTransacaoAsync() => _db.Database.BeginTransactionAsync();
+
+        public Task RecarregarAsync(Pagamento pagamento) => _db.Entry(pagamento).ReloadAsync();
 
         public async Task<DisputaPagamento?> GetDisputaAtivaAsync(Guid pagamentoId)
         {
