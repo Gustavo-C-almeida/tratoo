@@ -427,7 +427,7 @@ erDiagram
 | Projeto e ambiente | Um ambiente, `production`, com os serviços `tratoo` e `Redis`, mais um serviço de homologação com Redis próprio, publicado da branch `staging` ([CICD.md](CICD.md#homologação-e-produção-na-railway)) | API da Railway (`list-services`) |
 | Serviço `tratoo` | Origem GitHub `Gustavo-C-almeida/tratoo`, branch `main`, região `us-east4-eqdc4a`, **2 réplicas**. O build usa o `Dockerfile` da raiz | Configurações do serviço (05/11); log de build (`load build definition from Dockerfile`) |
 | Gatilho de deploy | Push na `main`, com `checkSuites: true`: a Railway espera os checks do GitHub passarem | Configurações do serviço |
-| Deploy ativo | `ab6682ea` (02/11, 03:01 UTC), SUCCESS. O deploy `ebf57cde` (31/10, commit `b134922`) é o citado nos logs deste documento | API da Railway (`describe-service`) |
+| Deploy de referência | `b1716275` (05/11, 02:04 UTC, commit `5905ef4`), SUCCESS, 2/2 online: o primeiro com 2 réplicas e o medido no [§6.6](#66-duas-réplicas-em-produção). O deploy `ebf57cde` (31/10, commit `b134922`) é o citado nos demais logs deste documento | API da Railway (`describe-service`) |
 | Configuração de deploy | `healthcheckPath = /health/ready` e `drainingSeconds = 30`, nas **configurações do serviço** | Configurações do serviço; log de build |
 | Domínios | `www.tratoo.app.br` (custom) e `tratoo-production.up.railway.app`, ambos na porta 8080 | `railway domain list` |
 | Serviço `Redis` | Imagem `redis:8.2`, 1 réplica em `us-east4-eqdc4a`, senha obrigatória (`--requirepass`), snapshot RDB `--save 60 1`, volume `redis-volume-us-east4` de 5 GB em `/data`, endpoint só na rede privada (sem domínio nem TCP proxy) | Configurações do serviço `Redis` (02/11) |
