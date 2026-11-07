@@ -6,11 +6,10 @@ using Referencia = Tratoo.Tests.DataProtectorTests.Referencia;
 namespace Tratoo.Tests
 {
     /// <summary>
-    /// Etapa 2a da migração AES-CBC → AES-GCM: o código LÊ o formato v2, mas continua
-    /// GRAVANDO o antigo. Estes testes travam as duas metades disso:
-    ///  • v2 é lido corretamente e rejeita chave errada, adulteração e valor malformado;
-    ///  • nada mudou para o formato antigo — o que esta versão grava continua legível pela
-    ///    versão anterior (<see cref="Referencia"/>), e vice-versa.
+    /// Migração AES-CBC → AES-GCM: o código GRAVA v2 (etapa 2b) e continua LENDO o formato
+    /// antigo dos dados já gravados. Estes testes travam:
+    ///  • v2 é gravado, lido corretamente e rejeita chave errada, adulteração e valor malformado;
+    ///  • o que a versão anterior gravou (<see cref="Referencia"/>) continua legível.
     /// Nenhuma chave real aparece aqui.
     /// </summary>
     public class DataProtectorV2Tests
@@ -30,17 +29,34 @@ namespace Tratoo.Tests
             new object[] { "" }
         };
 
-        // ── Gravação NÃO mudou nesta etapa ───────────────────────────────────
+        // ── Gravação ─────────────────────────────────────────────────────────
 
         [Theory]
         [MemberData(nameof(Claros))]
-        public void Encrypt_continua_gravando_o_formato_antigo_legivel_pela_versao_anterior(string claro)
+        public void Encrypt_grava_v2(string claro)
         {
             var valor = DataProtector.Encrypt(claro, ChaveA);
 
+            Assert.StartsWith(DataProtector.PrefixoV2 + DataProtector.IdDaChaveV2(ChaveA) + ":", valor);
+            Assert.Equal(claro, DataProtector.Decrypt(valor, ChaveA));
+        }
+
+        [Fact]
+        public void Encrypt_sem_chave_explicita_usa_a_chave_atual_e_grava_v2()
+        {
+            var valor = DataProtector.Encrypt("12345678909");
+            Assert.True(DataProtector.EhV2(valor));
+            Assert.Equal("12345678909", DataProtector.Decrypt(valor));
+        }
+
+        [Theory]
+        [MemberData(nameof(Claros))]
+        public void EncryptLegado_mantem_o_formato_antigo_legivel_pela_versao_anterior(string claro)
+        {
+            var valor = DataProtector.EncryptLegado(claro, ChaveA);
+
             Assert.False(DataProtector.EhV2(valor));
-            Assert.Contains('|', valor);
-            Assert.Equal(claro, Referencia.Decifrar(valor, TextoChaveA)); // a versão antiga lê
+            Assert.Equal(claro, Referencia.Decifrar(valor, TextoChaveA));
         }
 
         [Theory]
@@ -188,12 +204,16 @@ namespace Tratoo.Tests
             Assert.False(DataProtector.PareceCifrado(v3));
         }
 
-        // ── Por que a gravação v2 ainda não foi ligada ───────────────────────
+        // ── Rollback ─────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Uma versão anterior à 2a (só CBC) NÃO lê o que a produção grava agora: por isso o
+        /// rollback não pode voltar para antes da 2a (Docs/ROTACAO-CHAVES.md).
+        /// </summary>
         [Fact]
-        public void A_versao_anterior_NAO_le_v2_por_isso_a_gravacao_muda_so_na_etapa_seguinte()
+        public void Versao_anterior_a_leitura_de_v2_NAO_le_o_que_e_gravado_agora()
         {
-            var valor = DataProtector.EncryptV2("12345678909", ChaveA);
+            var valor = DataProtector.Encrypt("12345678909", ChaveA);
             Assert.ThrowsAny<Exception>(() => Referencia.Decifrar(valor, TextoChaveA));
         }
     }

@@ -83,7 +83,8 @@ namespace Tratoo.Tests
             for (var i = 0; i < quantidade; i++)
             {
                 var claro = (10_000_000_000L + i * 7919L).ToString();
-                var valor = DataProtector.Encrypt(claro, Rotacao.Anterior!);
+                // Caso específico do CBC (dados legados): o v2 é autenticado e não tem esse problema.
+                var valor = DataProtector.EncryptLegado(claro, Rotacao.Anterior!);
 
                 try { DataProtector.Decrypt(valor, Rotacao.Atual); paddingCasouComAErrada++; }
                 catch (CryptographicException) { }
