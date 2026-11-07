@@ -19,7 +19,7 @@ namespace Tratoo.Tests
     public class DataProtectorTests
     {
         /// <summary>O algoritmo de sempre, reescrito de forma independente.</summary>
-        private static class Referencia
+        internal static class Referencia
         {
             public static byte[] Chave(string texto)
             {

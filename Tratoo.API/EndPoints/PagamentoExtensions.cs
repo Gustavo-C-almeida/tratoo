@@ -137,6 +137,41 @@ namespace Tratoo.API.EndPoints
                 return Results.Ok(resultado);
             }).RequireAuthorization();
 
+            app.AddEndPointWebhookAsaas();
+
+            // ──────────────────────────────────────────────────────────────────────
+            // REPROCESSAR TRANSFERÊNCIA FALHA (admin)
+            // POST /api/admin/pagamentos/{id}/reprocessar-transferencia
+            // Reverte FalhaTransferencia → Retido e inicia nova tentativa de liberação.
+            // ──────────────────────────────────────────────────────────────────────
+            app.MapPost("/api/admin/pagamentos/{id:guid}/reprocessar-transferencia", async (
+                Guid id,
+                HttpContext http,
+                IPagamentoService service,
+                ILogger<WebApplication> logger) =>
+            {
+                var adminId = ExtrairUserId(http);
+                if (adminId == null) return Results.Unauthorized();
+
+                logger.LogWarning(
+                    "Admin {AdminId} solicitou reprocessamento da transferência do pagamento {PagamentoId}.",
+                    adminId, id);
+
+                var resultado = await service.ReprocessarTransferenciaAsync(id, adminId.Value);
+                return Results.Ok(new
+                {
+                    mensagem    = "Reprocessamento iniciado. Aguardando confirmação via webhook TRANSFER_DONE.",
+                    pagamentoId = resultado.Id,
+                    statusAtual = resultado.Status.ToString()
+                });
+            }).RequireAuthorization("Admin");
+        }
+
+        /// <summary>
+        /// Webhook público do Asaas. Separado só para poder ser mapeado sozinho nos testes.
+        /// </summary>
+        public static void AddEndPointWebhookAsaas(this WebApplication app)
+        {
             // ──────────────────────────────────────────────────────────────────────
             // WEBHOOK ASAAS (público — para quando ngrok estiver configurado)
             // POST /api/webhooks/asaas
@@ -152,21 +187,22 @@ namespace Tratoo.API.EndPoints
                 // O Asaas envia o token configurado no painel via header
                 // "asaas-access-token". Sem isso, qualquer um poderia forjar eventos
                 // (ex: marcar um pagamento como recebido). Rejeita com 401 se não conferir.
-                var tokenEsperado = asaasOptions.Value.WebhookToken;
-                if (!string.IsNullOrWhiteSpace(tokenEsperado))
-                {
-                    var tokenRecebido = http.Request.Headers["asaas-access-token"].ToString();
-                    var valido =
-                        !string.IsNullOrEmpty(tokenRecebido) &&
-                        CryptographicOperations.FixedTimeEquals(
-                            Encoding.UTF8.GetBytes(tokenRecebido),
-                            Encoding.UTF8.GetBytes(tokenEsperado));
+                // Fora de Development o token é obrigatório (a API nem sobe sem ele); aqui
+                // fica a defesa final: sem token configurado, o webhook recusa tudo.
+                // Durante uma troca, WebhookTokenAnterior também é aceito.
+                var emDevelopment = http.RequestServices
+                    .GetRequiredService<IHostEnvironment>().IsDevelopment();
+                var tokenRecebido = http.Request.Headers["asaas-access-token"].ToString();
+                var valido = SegredosObrigatorios.WebhookTokenConfere(
+                    tokenRecebido,
+                    asaasOptions.Value.WebhookToken,
+                    asaasOptions.Value.WebhookTokenAnterior,
+                    emDevelopment);
 
-                    if (!valido)
-                    {
-                        logger.LogWarning("Webhook Asaas rejeitado: token de autenticação ausente ou inválido.");
-                        return Results.Unauthorized();
-                    }
+                if (!valido)
+                {
+                    logger.LogWarning("Webhook Asaas rejeitado: token de autenticação ausente ou inválido.");
+                    return Results.Unauthorized();
                 }
 
                 // ── Lê o payload ──────────────────────────────────────────────
@@ -220,32 +256,6 @@ namespace Tratoo.API.EndPoints
             });
             // webhook é público (sem RequireAuthorization) — segurança via token
 
-            // ──────────────────────────────────────────────────────────────────────
-            // REPROCESSAR TRANSFERÊNCIA FALHA (admin)
-            // POST /api/admin/pagamentos/{id}/reprocessar-transferencia
-            // Reverte FalhaTransferencia → Retido e inicia nova tentativa de liberação.
-            // ──────────────────────────────────────────────────────────────────────
-            app.MapPost("/api/admin/pagamentos/{id:guid}/reprocessar-transferencia", async (
-                Guid id,
-                HttpContext http,
-                IPagamentoService service,
-                ILogger<WebApplication> logger) =>
-            {
-                var adminId = ExtrairUserId(http);
-                if (adminId == null) return Results.Unauthorized();
-
-                logger.LogWarning(
-                    "Admin {AdminId} solicitou reprocessamento da transferência do pagamento {PagamentoId}.",
-                    adminId, id);
-
-                var resultado = await service.ReprocessarTransferenciaAsync(id, adminId.Value);
-                return Results.Ok(new
-                {
-                    mensagem    = "Reprocessamento iniciado. Aguardando confirmação via webhook TRANSFER_DONE.",
-                    pagamentoId = resultado.Id,
-                    statusAtual = resultado.Status.ToString()
-                });
-            }).RequireAuthorization("Admin");
         }
 
         private static int? ExtrairUserId(HttpContext http) => ClaimsHelper.ExtrairUserId(http);
