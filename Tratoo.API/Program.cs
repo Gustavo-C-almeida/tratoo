@@ -54,6 +54,13 @@ try
 
     if (Tratoo.Domain.Features.Shared.DataProtector.Chaves.Anterior is not null)
         Console.WriteLine("[startup] Rotação da chave de dados em curso: gravando com a chave nova, lendo também com a anterior.");
+
+    // Token do webhook do Asaas: obrigatório fora de Development. Sem ele o webhook
+    // ficaria aberto a eventos forjados — melhor o deploy falhar e a versão anterior ficar.
+    Tratoo.API.Infrastructure.SegredosObrigatorios.ValidarWebhookAsaas(
+        builder.Configuration[Tratoo.API.Infrastructure.SegredosObrigatorios.WebhookTokenConfiguracao],
+        builder.Configuration[Tratoo.API.Infrastructure.SegredosObrigatorios.WebhookTokenAnteriorConfiguracao],
+        builder.Environment.IsDevelopment());
 }
 catch (InvalidOperationException ex)
 {

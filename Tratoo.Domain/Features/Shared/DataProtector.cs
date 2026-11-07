@@ -18,6 +18,15 @@ namespace Tratoo.Domain.Features.Shared
     ///  • formato do valor cifrado: <c>base64(IV) + "|" + base64(AES-CBC/PKCS7)</c>.
     /// Com o MESMO texto de chave, este código lê tudo o que a versão anterior gravou.
     ///
+    /// Formato v2 (AES-256-GCM, autenticado): <c>v2:&lt;id&gt;:base64(nonce ‖ cifra ‖ tag)</c>.
+    ///  • a chave GCM e o <c>id</c> (8 hex) são derivados por HKDF-SHA256 dos mesmos 32 bytes
+    ///    acima, com rótulos próprios — um único segredo configurado serve aos dois formatos;
+    ///  • o <c>id</c> diz QUAL chave cifrou, sem tentativa e erro; o prefixo inteiro
+    ///    (<c>v2:&lt;id&gt;</c>) entra como dado associado, então adulterar qualquer parte invalida;
+    ///  • ETAPA DE TRANSIÇÃO: este código já LÊ v2, mas <see cref="Encrypt(string)"/> ainda
+    ///    GRAVA o formato antigo. Só depois que todas as réplicas em produção lerem v2 a
+    ///    gravação muda (assim uma réplica antiga nunca encontra um valor que não sabe ler).
+    ///
     /// Rotação (Docs/ROTACAO-CHAVE-DADOS.md): durante a troca, <c>DataProtector:Chave</c> é a
     /// chave NOVA e <c>DataProtector:ChaveAnterior</c> a que está sendo aposentada. Grava-se
     /// sempre com a nova; lê-se com a nova e, se não decifrar, com a anterior. O comando
@@ -145,6 +154,9 @@ namespace Tratoo.Domain.Features.Shared
 
         public static string Decrypt(string data, byte[] chave)
         {
+            if (EhV2(data))
+                return DecryptV2(data, chave);
+
             var parts = data.Split('|');
 
             using var aes = Aes.Create();
@@ -181,7 +193,9 @@ namespace Tratoo.Domain.Features.Shared
             try
             {
                 var resultado = Decrypt(valor!, chave);
-                if (!PareceTexto(resultado))
+                // v2 é autenticado (GCM): se decifrou, é o valor certo. A heurística de texto
+                // só existe para o CBC, que "decifra" lixo com a chave errada.
+                if (!EhV2(valor) && !PareceTexto(resultado))
                     return false;
 
                 claro = resultado;
@@ -234,6 +248,9 @@ namespace Tratoo.Domain.Features.Shared
             if (string.IsNullOrEmpty(valor))
                 return false;
 
+            if (EhV2(valor))
+                return TentarLerV2(valor, out _, out _);
+
             var parts = valor.Split('|');
             if (parts.Length != 2)
                 return false;
@@ -245,6 +262,100 @@ namespace Tratoo.Domain.Features.Shared
             var cifrado = new byte[(parts[1].Length * 3 / 4) + 3];
             return Convert.TryFromBase64String(parts[1], cifrado, out var lidos)
                    && lidos > 0 && lidos % 16 == 0;
+        }
+
+        // ─── Formato v2 (AES-256-GCM) ─────────────────────────────────────────────
+
+        public const string PrefixoV2 = "v2:";
+        private const int TamanhoIdV2 = 8;      // hex
+        private const int TamanhoNonce = 12;
+        private const int TamanhoTag = 16;
+        private static readonly byte[] InfoCifraV2 = Encoding.UTF8.GetBytes("tratoo/dados/v2/cifra");
+        private static readonly byte[] InfoIdV2 = Encoding.UTF8.GetBytes("tratoo/dados/v2/id");
+
+        /// <summary>true se o valor declara o formato v2 (pelo prefixo; não valida o resto).</summary>
+        public static bool EhV2(string? valor) =>
+            valor is not null && valor.StartsWith(PrefixoV2, StringComparison.Ordinal);
+
+        /// <summary>Identificador público (8 hex) da chave no formato v2. Não revela a chave.</summary>
+        public static string IdDaChaveV2(byte[] chave) =>
+            Convert.ToHexString(HKDF.DeriveKey(HashAlgorithmName.SHA256, chave, TamanhoIdV2 / 2, info: InfoIdV2))
+                .ToLowerInvariant();
+
+        private static byte[] ChaveGcm(byte[] chave) =>
+            HKDF.DeriveKey(HashAlgorithmName.SHA256, chave, 32, info: InfoCifraV2);
+
+        /// <summary>
+        /// Cifra no formato v2. NESTA ETAPA nenhum código de produção chama isto —
+        /// <see cref="Encrypt(string)"/> continua gravando o formato antigo.
+        /// </summary>
+        public static string EncryptV2(string data, byte[] chave)
+        {
+            var id = IdDaChaveV2(chave);
+            var aad = Encoding.UTF8.GetBytes(PrefixoV2 + id);
+            var claro = Encoding.UTF8.GetBytes(data);
+
+            var pacote = new byte[TamanhoNonce + claro.Length + TamanhoTag];
+            var nonce = pacote.AsSpan(0, TamanhoNonce);
+            var cifra = pacote.AsSpan(TamanhoNonce, claro.Length);
+            var tag = pacote.AsSpan(TamanhoNonce + claro.Length, TamanhoTag);
+            RandomNumberGenerator.Fill(nonce);
+
+            using var gcm = new AesGcm(ChaveGcm(chave), TamanhoTag);
+            gcm.Encrypt(nonce, claro, cifra, tag, aad);
+
+            return PrefixoV2 + id + ":" + Convert.ToBase64String(pacote);
+        }
+
+        /// <summary>
+        /// Decifra um valor v2. Lança <see cref="CryptographicException"/> se o valor estiver
+        /// malformado, se for de outra chave (id diferente) ou se tiver sido adulterado (tag).
+        /// </summary>
+        public static string DecryptV2(string data, byte[] chave)
+        {
+            if (!TentarLerV2(data, out var id, out var pacote))
+                throw new CryptographicException("Valor v2 malformado.");
+
+            if (!string.Equals(id, IdDaChaveV2(chave), StringComparison.Ordinal))
+                throw new CryptographicException("Valor v2 cifrado com outra chave.");
+
+            var tamanhoClaro = pacote.Length - TamanhoNonce - TamanhoTag;
+            var claro = new byte[tamanhoClaro];
+            using var gcm = new AesGcm(ChaveGcm(chave), TamanhoTag);
+            gcm.Decrypt(
+                pacote.AsSpan(0, TamanhoNonce),
+                pacote.AsSpan(TamanhoNonce, tamanhoClaro),
+                pacote.AsSpan(TamanhoNonce + tamanhoClaro, TamanhoTag),
+                claro,
+                Encoding.UTF8.GetBytes(PrefixoV2 + id)); // lança AuthenticationTagMismatchException
+
+            return Encoding.UTF8.GetString(claro);
+        }
+
+        /// <summary>Lê a estrutura de um valor v2 sem decifrar: <c>v2:&lt;8 hex&gt;:&lt;base64&gt;</c>.</summary>
+        private static bool TentarLerV2(string valor, out string id, out byte[] pacote)
+        {
+            id = string.Empty;
+            pacote = Array.Empty<byte>();
+
+            var resto = valor.AsSpan(PrefixoV2.Length);
+            if (resto.Length <= TamanhoIdV2 + 1 || resto[TamanhoIdV2] != ':')
+                return false;
+
+            var idSpan = resto[..TamanhoIdV2];
+            foreach (var c in idSpan)
+                if (!char.IsAsciiHexDigitLower(c) && !char.IsAsciiDigit(c))
+                    return false;
+
+            var base64 = resto[(TamanhoIdV2 + 1)..];
+            var buffer = new byte[(base64.Length * 3 / 4) + 3];
+            if (!Convert.TryFromBase64Chars(base64, buffer, out var lidos)
+                || lidos < TamanhoNonce + TamanhoTag)
+                return false;
+
+            id = idSpan.ToString();
+            pacote = buffer.AsSpan(0, lidos).ToArray();
+            return true;
         }
     }
 
