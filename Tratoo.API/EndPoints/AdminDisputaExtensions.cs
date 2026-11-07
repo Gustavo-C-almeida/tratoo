@@ -37,7 +37,7 @@ namespace Tratoo.API.EndPoints
 
                 var disputas = await service.ListarAsync(statusEnum, de, ate, contratanteId, prestadorId, projetoId);
                 return Results.Ok(disputas);
-            }).RequireAuthorization("Admin");
+            }).RequireAuthorization("Admin").RequireSessaoVerificada();
 
             // ──────────────────────────────────────────────────────────────────────
             // DETALHE DA DISPUTA — GET /api/admin/disputas/{disputaId}
@@ -48,7 +48,7 @@ namespace Tratoo.API.EndPoints
             {
                 var detalhe = await service.ObterDetalheAsync(disputaId);
                 return Results.Ok(detalhe);
-            }).RequireAuthorization("Admin");
+            }).RequireAuthorization("Admin").RequireSessaoVerificada();
 
             // ──────────────────────────────────────────────────────────────────────
             // RESOLVER DISPUTA — POST /api/admin/disputas/{disputaId}/resolver
@@ -70,7 +70,7 @@ namespace Tratoo.API.EndPoints
 
                 await service.ResolverAsync(disputaId, adminId, request, ip);
                 return Results.Ok(new { mensagem = "Disputa resolvida com sucesso." });
-            }).RequireAuthorization("Admin");
+            }).RequireAuthorization("Admin").ExigirReautenticacaoRecente();
         }
     }
 }

@@ -8,6 +8,9 @@
 // dando um ciclo de vida real (connectedCallback) em vez de um script solto que
 // dependia da ordem de carregamento no <body>.
 
+import { api } from '/assets/js/services/api.js';
+import { encerrarSessao } from '/assets/js/services/refresh.js';
+
 export class TratooHeader extends HTMLElement {
     async connectedCallback() {
         // connectedCallback pode disparar mais de uma vez se o elemento for movido;
@@ -46,7 +49,7 @@ export class TratooHeader extends HTMLElement {
         }
 
         // Páginas compartilhadas autenticadas — detecta pelo /api/me
-        if (/\/pages\/(me|contrato|proposta|pagamento|avaliacao|chat|admin)\//.test(path)) {
+        if (/\/pages\/(me|conta|contrato|proposta|pagamento|avaliacao|chat|admin)\//.test(path)) {
             return await this._getUserHeaderType('publico');
         }
 
@@ -66,9 +69,9 @@ export class TratooHeader extends HTMLElement {
             return this._user.tipo === 'Contratante' ? 'contratante' : 'prestador';
         }
         try {
-            const res = await fetch('/api/me', { credentials: 'same-origin' });
-            if (!res.ok) return fallback;
-            const user = await res.json();
+            // Pelo api.js: com o access expirado, renova a sessão antes de desistir.
+            // anonimoPermitido: em página pública, visitante sem sessão não vai ao login.
+            const user = await api.get('/api/me', { silencioso: true, anonimoPermitido: true });
             this._user = user;
             return user.tipo === 'Contratante' ? 'contratante' : 'prestador';
         } catch (_) {
@@ -104,8 +107,7 @@ export class TratooHeader extends HTMLElement {
         }
         if (!this._user) {
             try {
-                const res = await fetch('/api/me', { credentials: 'same-origin' });
-                if (res.ok) this._user = await res.json();
+                this._user = await api.get('/api/me', { silencioso: true, anonimoPermitido: true });
             } catch (_) {}
         }
 
@@ -138,9 +140,8 @@ export class TratooHeader extends HTMLElement {
             logoutBtn.addEventListener('click', async function () {
                 logoutBtn.textContent = 'Saindo...';
                 logoutBtn.disabled = true;
-                try {
-                    await fetch('/usuarios/logout', { method: 'POST', credentials: 'same-origin' });
-                } catch (_) {}
+                // Revoga a sessão no servidor, apaga os dois cookies e avisa as outras abas.
+                await encerrarSessao();
                 window.location.href = '/pages/auth/login.html';
             });
         }

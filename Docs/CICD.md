@@ -221,6 +221,38 @@ No repositório: squash e merge commit ativos, *Allow rebase merging* desmarcado
 Crie as credenciais do quadro de isolamento que ainda forem compartilhadas e aplique-as somente no
 serviço de homologação.
 
+#### Redis: persistência das sessões (pendente)
+
+Com o controle de sessão, o Redis guarda as sessões de login. O snapshot RDB atual
+(`--save 60 1`) pode perder até um minuto de escrita num reinício; com AOF, a perda cai para cerca
+de um segundo. Perder sessões não perde dado (só obriga a novo login), mas um reinício do Redis
+deslogaria todo mundo. Passo manual, nos serviços `Redis` de produção e de homologação, nas
+configurações do serviço (comando de início), sem tirar a senha nem o RDB:
+
+```
+redis-server --requirepass <a mesma referência de senha de hoje> --save 60 1 --appendonly yes --appendfsync everysec
+```
+
+Depois de aplicar, confira pelo `redis-cli` dentro do serviço:
+
+```
+CONFIG GET appendonly            # esperado: yes
+CONFIG GET appendfsync           # esperado: everysec
+CONFIG GET maxmemory-policy      # NÃO pode ser allkeys-* (apagaria sessões vivas sob pressão de memória)
+```
+
+`noeviction` (padrão) ou `volatile-*` servem: toda chave de sessão tem TTL. Com `allkeys-lru` ou
+`allkeys-random`, o Redis poderia descartar uma sessão ativa e deslogar alguém sem motivo.
+
+#### Deploy do controle de sessão
+
+- O primeiro deploy com sessão no servidor **desloga todos os usuários** uma vez: os tokens antigos
+  não têm o claim `sid` e recebem 401.
+- `Jwt__ExpirationHours` deixa de ser lido. Remova a variável dos dois serviços depois do deploy.
+- Os tempos têm padrão no código; `Sessao__*` só é necessário para mudar algum
+  ([ARQUITETURA.md §2.6](ARQUITETURA.md#26-autenticação-e-autorização)).
+- Trocar `Redis__ChaveProtecao` desloga todos (as sessões ficam ilegíveis).
+
 ## Promover para produção
 
 ```bash

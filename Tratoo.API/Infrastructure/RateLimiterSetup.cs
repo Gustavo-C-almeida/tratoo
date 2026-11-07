@@ -32,6 +32,8 @@ namespace Tratoo.API.Infrastructure
         public const string PoliticaSenha           = "senha";
         public const string PoliticaDadosBancarios  = "dados-bancarios";
         public const string PoliticaOtpAssinatura   = "otp-assinatura";
+        public const string PoliticaRefresh         = "refresh";
+        public const string PoliticaReautenticar    = "reautenticar";
 
         /// <summary>
         /// Valor do header <c>Retry-After</c> nas respostas 429, em segundos.
@@ -61,6 +63,13 @@ namespace Tratoo.API.Infrastructure
 
                 // Máximo 3 solicitações de OTP por minuto por IP (protege contra spam de e-mail)
                 options.AdicionarPoliticaPorIp(PoliticaOtpAssinatura, permitLimit: 3);
+
+                // Rotação do refresh token: 30 por minuto por IP. Folga para várias abas e
+                // pessoas atrás do mesmo NAT; ainda corta quem tenta adivinhar tokens.
+                options.AdicionarPoliticaPorIp(PoliticaRefresh, permitLimit: 30);
+
+                // Reautenticação (senha/MFA antes de ação sensível): 5 por minuto por IP.
+                options.AdicionarPoliticaPorIp(PoliticaReautenticar, permitLimit: 5);
 
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
                 options.OnRejected = async (context, cancellationToken) =>

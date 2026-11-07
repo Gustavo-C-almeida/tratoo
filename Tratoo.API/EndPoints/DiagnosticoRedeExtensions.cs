@@ -62,7 +62,7 @@ namespace Tratoo.API.EndPoints
             });
 
             if (!app.Environment.IsDevelopment())
-                rota.RequireAuthorization("Admin");
+                rota.RequireAuthorization("Admin").RequireSessaoVerificada();
         }
     }
 }

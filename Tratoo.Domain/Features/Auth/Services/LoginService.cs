@@ -55,7 +55,8 @@ namespace Tratoo.Domain.Features.Auth
             if (usuario.Status == StatusUsuario.Blocked)
                 throw new NegocioException("Conta bloqueada. Entre em contato com o suporte.");
 
-            if (usuario.MFA)
+            // MFA obrigatório para Admin, mesmo com o flag desligado no cadastro.
+            if (usuario.MFA || usuario.IsAdmin)
             {
                 string codigo = await _mfaService.GerarECriarAsync(usuario.Email, "login");
                 await _emailService.EnviarCodigoVerificacaoAsync(usuario.Email, codigo);
@@ -88,7 +89,7 @@ namespace Tratoo.Domain.Features.Auth
             var usuario = await _repo.ObterPorEmailAsync(dto.Email)
                 ?? throw new NegocioException("Usuário não encontrado");
 
-            if (!usuario.MFA)
+            if (!usuario.MFA && !usuario.IsAdmin)
                 throw new NegocioException("MFA não habilitado para este usuário");
 
             await _mfaService.ValidarAsync(dto.Email, dto.Codigo, "login");

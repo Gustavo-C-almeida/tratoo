@@ -30,6 +30,9 @@ namespace Tratoo.API.Infrastructure
                 path.StartsWith("/usuarios/onboarding", StringComparison.OrdinalIgnoreCase) ||
                 // Logout (deve sempre funcionar)
                 path.StartsWith("/usuarios/logout", StringComparison.OrdinalIgnoreCase) ||
+                // Sessão: refresh, logout, logout-todas, dispositivos, atividade e
+                // reautenticação — precisam funcionar antes de o onboarding terminar.
+                path.StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase) ||
                 // Login e MFA — o cookie pode estar presente mas o usuário quer trocar de conta
                 // ou o token expirou e ele precisa se reautenticar
                 path.StartsWith("/usuarios/login", StringComparison.OrdinalIgnoreCase) ||

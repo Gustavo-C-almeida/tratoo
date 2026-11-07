@@ -1,11 +1,8 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
+﻿using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
 using Resend;
 using Serilog;
-using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Tratoo.Domain.Data;
@@ -154,6 +151,7 @@ builder.Services.AddScoped<ICadastroService, CadastroService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<IIdentidadeService, IdentidadeService>();
 builder.Services.AddScoped<IExclusaoContaService, ExclusaoContaService>();
+builder.Services.AddScoped<IContaService, ContaService>();
 // ─── E-mail transacional — Resend (SDK oficial, HTTPS) ───────────────────────
 // SMTP não é opção no Railway Trial (portas 25/465/587 bloqueadas); a API do
 // Resend usa HTTPS/443. Lê a config uma única vez (seção "Resend" do appsettings;
@@ -186,11 +184,11 @@ builder.Services.AddTratooEstadoEfemero(builder.Configuration);
 
 // Data Protection NÃO é compartilhado entre réplicas, de propósito: nada no Tratoo o
 // consome. A autenticação é JWT (cookie "tratoo_auth" assinado com Jwt:SecretKey, igual
-// em todas as réplicas), não há antiforgery (rotas com formulário usam
-// DisableAntiforgery), sessão nem cookie auth do ASP.NET. Se algum desses entrar, as
-// chaves precisam ir para um armazenamento comum (ex.: PersistKeysToStackExchangeRedis),
-// senão um cookie emitido por uma réplica não abre na outra.
-// Ver Docs/TRILHA2-DECISOES.md, seção 1.4.
+// em todas as réplicas) + sessão própria no Redis (SessaoAutenticacaoSetup); não há
+// antiforgery (rotas com formulário usam DisableAntiforgery), ASP.NET Session nem cookie
+// auth do ASP.NET. Se algum desses entrar, as chaves precisam ir para um armazenamento
+// comum (ex.: PersistKeysToStackExchangeRedis), senão um cookie emitido por uma réplica
+// não abre na outra. Ver Docs/TRILHA2-DECISOES.md, seção 1.4.
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<PerfilContratanteService>();
 builder.Services.AddScoped<ProjetoService>();
@@ -245,38 +243,12 @@ builder.Services.Configure<R2PrivateConfig>(builder.Configuration.GetSection("Cl
 builder.Services.AddScoped<IR2PrivateStorageService, R2PrivateStorageService>();
 builder.Services.AddScoped<IContratosPdfService, ContratosPdfService>();
 
-// Autenticação JWT via cookie httpOnly
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Events = new JwtBearerEvents
-        {
-            OnMessageReceived = ctx =>
-            {
-                ctx.Token = ctx.Request.Cookies["tratoo_auth"];
-                return Task.CompletedTask;
-            }
-        };
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SecretKey"]!)),
-            ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero
-        };
-    });
-
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("Prestador", policy => policy.RequireRole("Prestador"));
-    options.AddPolicy("Contratante", policy => policy.RequireRole("Contratante"));
-    options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
-});
+// ─── Autenticação e sessão ───────────────────────────────────────────────────
+// JWT curto no cookie httpOnly "tratoo_auth" (15 min; Admin 10) + refresh token opaco
+// rotativo ("tratoo_refresh", Path=/api/auth) + sessão no ISessaoStore (Redis com
+// Redis:ConnectionString; memória sem ele), conferida a cada requisição. Tempos na
+// seção "Sessao" (SessaoConfig). Políticas Prestador/Contratante/Admin também ali.
+builder.Services.AddTratooAutenticacao(builder.Configuration);
 
 // ─── Rate limiting por IP do cliente ─────────────────────────────────────────
 // Políticas e limites em RateLimiterSetup. O IP usado como chave de partição vem
@@ -411,6 +383,9 @@ app.UseStaticFiles(new StaticFileOptions
 Console.WriteLine(caminhoWeb);
 
 app.UseAuthentication();
+// Rotas sensíveis (RequireSessaoVerificada) respondem 503 se a sessão não pôde ser
+// conferida (Redis fora): fail-closed. As demais seguem só com o JWT.
+app.UseVerificacaoDeSessao();
 app.UseAuthorization();
 app.UseRateLimiter();
 
@@ -459,6 +434,7 @@ app.MapGet("/api/config/financeiro", (HttpContext http) =>
 app.AddEndPointsCep();
 app.AddEndPointsCompetencias();
 app.AddEndPointsUsers();
+app.AddEndPointsAuth();
 app.AddEndPointsPerfil();
 app.AddEndPointsDadosBancarios();
 app.AddEndPointsContratante();

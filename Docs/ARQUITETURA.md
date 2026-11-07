@@ -22,6 +22,14 @@
 > [§4.5](#45-fluxo-de-deploy-cd-e-rollback), [§4.6](#46-health-checks), [§5.3](#53-rate-limiting),
 > [§6](#6-concorrência-e-escalabilidade), [§7](#7-cicd-e-qualidade), [§9](#9-decisões-arquiteturais)
 > e o Apêndice A foram atualizadas nessa data.
+>
+> **Atualização de 07/11/2026 — controle de sessão:** a branch `feature/controle-de-sessao` troca o
+> JWT de 8 h por sessão híbrida (access curto + refresh rotativo + sessão no Redis). As seções
+> [§2.3](#23-pipeline-de-middlewares), [§2.6](#26-autenticação-e-autorização), [§4.9](#49-variáveis-de-ambiente),
+> [§5.1](#51-ameaças-e-mecanismos), [§5.3](#53-rate-limiting), [§5.5](#55-autenticação),
+> [§5.7](#57-proteção-do-estado-no-redis), [§6.1](#61-o-que-é-estado-de-processo), [§6.6](#66-duas-réplicas-em-produção),
+> [§7.2](#72-testes), a decisão [D15](#d15--sessão-híbrida-com-a-sessão-no-redis) e o Apêndice A descrevem
+> essa versão, que **ainda não está em produção**: o status de cada item diz o que foi provado e onde.
 
 ---
 
@@ -74,7 +82,7 @@ Os rótulos de status seguem a legenda do [§1.5](#15-como-ler-este-documento).
 | Área | O que existe | Status |
 |---|---|---|
 | Cadastro e identidade | Cadastro em duas etapas, com o código de e-mail guardado em estado efêmero. Onboarding obrigatório. CPF/CNPJ cifrado e validado localmente pelos dígitos verificadores (`ValidadorCNPJ.Validar` para CNPJ). Consentimento e auditoria (`ConsentLog`, `AuditLog`). | No código |
-| Login | JWT (token assinado que carrega a identidade do usuário) em cookie `HttpOnly`, MFA opcional por e-mail, tempo de resposta equalizado contra enumeração de contas. | No código; o OTP de MFA é Confirmado por testes |
+| Login e sessão | JWT curto (token assinado que carrega a identidade do usuário) + refresh token rotativo em cookies `HttpOnly`, com a sessão no Redis conferida a cada requisição; MFA opcional por e-mail (obrigatório para Admin); tempo de resposta equalizado contra enumeração de contas; reautenticação antes de ações sensíveis; tela de dispositivos conectados. | No código; o OTP de MFA é Confirmado por testes. Sessão: testes em memória aprovados localmente em 07/11, Redis real pendente do CI ([§2.6](#26-autenticação-e-autorização)) |
 | Projetos e propostas | Rascunho e publicação de projetos, busca com filtros, convites, proposta com até 10 versões de negociação, chat por polling (3 s com a aba ativa, 30 s em segundo plano). | No código |
 | Contratos | Gerados a partir da proposta aceita. Assinatura com OTP (10 min, 5 tentativas), hash SHA-256, snapshot imutável e PDF (QuestPDF) num bucket privado, com URL pré-assinada de 15 min. | No código; o OTP de assinatura é Confirmado por testes |
 | Pagamento e escrow | Cobrança PIX no Asaas, webhook idempotente, ledger imutável, liberação manual ou automática (prazo de entrega + 7 dias), disputa, estorno integral no cancelamento e limite diário de R$ 5.000 por contratante. | No código; a liberação concorrente é Confirmada por testes |
@@ -164,7 +172,7 @@ R2 são usados em fluxos específicos: busca/indexação e upload/download, resp
 | [`Tratoo.API`](../Tratoo.API) | ASP.NET Core (Minimal API) | Host HTTP. Contém `Program.cs` (composição e pipeline), 18 grupos de endpoints em `EndPoints/*Extensions.cs`, `Infrastructure/` (proxy, rate limiting, Redis, health checks, porta, encerramento, modos de linha de comando), os `BackgroundServices` e os DTOs de entrada em `Requests/`. |
 | [`Tratoo.Domain`](../Tratoo.Domain) | Class library | Regras de negócio organizadas por feature (`Features/<Feature>/{DTOs,Repositories,Services,Validators}`), entidades EF (`Domain/Models`), enums, `TratooContext`/`VectorContext` e a migration. Também contém as implementações das integrações (Asaas, R2, OpenAI, Resend) e a criptografia (`Features/Shared/DataProtector.cs`). |
 | [`Tratoo.Web`](../Tratoo.Web) | Projeto Web sem código de servidor | Só o `wwwroot` (35 HTML, 32 JS e 24 CSS fora de `vendor/`). Na imagem Docker, ele é copiado para `/Tratoo.Web/wwwroot` e servido pela API. |
-| [`Tratoo.Tests`](../Tratoo.Tests) | xUnit | 288 testes: unidade, host em memória (TestServer) e integração com Postgres e Redis reais via Docker. |
+| [`Tratoo.Tests`](../Tratoo.Tests) | xUnit | 338 testes (288 antes do controle de sessão): unidade, host em memória (TestServer) e integração com Postgres e Redis reais via Docker. |
 
 Organização:
 
@@ -201,8 +209,9 @@ flowchart TD
     C --> D["4 · Cabeçalhos de segurança<br/>CSP, X-Frame-Options, nosniff"]
     D --> E["5 · Tratamento de erros<br/>400 / 503 / 500"]
     E --> F["6 · Arquivos estáticos<br/>wwwroot, short-circuit"]
-    F --> G["7 · UseAuthentication<br/>JWT do cookie tratoo_auth"]
-    G --> H["8 · UseAuthorization"]
+    F --> G["7 · UseAuthentication<br/>JWT do cookie tratoo_auth<br/>+ sessão (sid) no Redis"]
+    G --> G2["7b · Verificação de sessão<br/>503 em rota sensível sem Redis"]
+    G2 --> H["8 · UseAuthorization"]
     H --> I["9 · UseRateLimiter<br/>particionado por IP"]
     I --> J["10 · Guarda de onboarding<br/>403 ONBOARDING_PENDENTE"]
     J --> K["11 · Endpoints<br/>Minimal API + /health/*"]
@@ -216,6 +225,10 @@ flowchart TD
   Qualquer outra exceção vira 500 genérico, com log ([`TratamentoErrosSetup`](../Tratoo.API/Infrastructure/TratamentoErrosSetup.cs)).
 - **6 vem antes da autenticação.** Arquivos estáticos não passam por autenticação, rate limiting
   nem guarda de onboarding.
+- **7 confere a sessão; 7b decide o que fazer sem ela.** O `OnTokenValidated` do JwtBearer lê
+  `sessao:{sid}` no Redis. Se o Redis não responde, a requisição segue só com o JWT, e o 7b
+  (`UseVerificacaoDeSessao`) responde 503 nas rotas marcadas como sensíveis
+  ([§2.6](#26-autenticação-e-autorização)).
 - **10 tem lista de isenções.** O cookie vai em toda requisição same-origin, inclusive em
   login e cadastro. Por isso as rotas públicas e as sondas `/health/*` estão listadas em
   [`RotasIsentasOnboarding`](../Tratoo.API/Infrastructure/RotasIsentasOnboarding.cs).
@@ -263,19 +276,108 @@ externos.
 
 ### 2.6 Autenticação e autorização
 
-- **Token:** JWT HMAC-SHA256 gerado pelo `JwtService`, com validade em `Jwt:ExpirationHours`
-  (padrão 8 h). A validação confere emissor, audiência, assinatura e validade, com
-  `ClockSkew = TimeSpan.Zero` (nenhuma tolerância de expiração).
-- **Transporte:** cookie `tratoo_auth` com `HttpOnly` (JavaScript não lê o token), `Secure` fora
-  de Development, `SameSite=Strict` e expiração de 8 h. O `JwtBearerEvents.OnMessageReceived` lê o
-  token do cookie, não do header `Authorization`. O `SameSite=Strict` é a defesa contra CSRF.
+**Sessão híbrida** ([D15](#d15--sessão-híbrida-com-a-sessão-no-redis)): um JWT curto, um refresh
+token opaco que muda a cada uso e a sessão guardada no servidor, no
+[`ISessaoStore`](../Tratoo.API/Infrastructure/ISessaoStore.cs) (Redis com `Redis:ConnectionString`;
+memória do processo sem ele, só para testes e uma réplica). A montagem fica em
+[`SessaoAutenticacaoSetup`](../Tratoo.API/Infrastructure/SessaoAutenticacaoSetup.cs) e o ciclo de vida
+em [`SessaoService`](../Tratoo.API/Infrastructure/SessaoService.cs).
+
+```mermaid
+sequenceDiagram
+    participant B as Navegador
+    participant API as Réplica qualquer
+    participant R as Redis
+    B->>API: POST usuarios/login (+ MFA)
+    API->>R: sessao:{sid} + refresh:{HMAC} + índice do usuário (Lua)
+    API-->>B: tratoo_auth (JWT 15 min, sid) + tratoo_refresh ({sid}.{segredo}, Path=/api/auth)
+    B->>API: GET /api/... (cookie tratoo_auth)
+    API->>R: GET sessao:{sid} — existe? é deste usuário?
+    API-->>B: 200, ou 401 SESSAO_ENCERRADA
+    B->>API: POST /api/auth/refresh (access expirou)
+    API->>R: Lua: consome o token e grava refresh-usado
+    API-->>B: cookies novos (mesmo sid)
+```
+
+- **Access token:** JWT HMAC-SHA256 do `JwtService`, com o claim `sid` e validade de 15 min
+  (Admin 10). A validação confere emissor, audiência, assinatura e validade, com
+  `ClockSkew = TimeSpan.Zero`. Vai no cookie `tratoo_auth` (`HttpOnly`, `Secure` fora de
+  Development, `SameSite=Strict`, `Path=/`), lido em `JwtBearerEvents.OnMessageReceived`.
+- **Refresh token:** 256 bits aleatórios, no cookie `tratoo_refresh` como `{sid}.{segredo}`
+  (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/auth`, `Max-Age` igual à duração absoluta).
+  O `Path` faz o cookie ir só para as rotas de sessão. No Redis, o segredo só aparece dentro do
+  HMAC do nome da chave.
+- **Conferência a cada requisição** (`OnTokenValidated`): `sessao:{sid}` precisa existir, pertencer
+  ao usuário do token e estar antes da expiração absoluta. Se não, 401 com `codigoErro`
+  `SESSAO_ENCERRADA`. Revogar uma sessão vale na requisição seguinte, em qualquer réplica.
+  **Token sem `sid`** (emitido antes desta versão) também recebe 401: o deploy desloga todo mundo
+  uma vez.
+- **Tempos** (seção `Sessao`, variáveis `Sessao__*`, padrões em
+  [`SessaoConfig`](../Tratoo.API/Infrastructure/SessaoConfig.cs); substituem `Jwt:ExpirationHours`):
+
+  | | Comum | Admin | "Manter conectado" |
+  |---|---|---|---|
+  | Access token | 15 min | 10 min | 15 min |
+  | Inatividade | 30 min | 15 min | 7 dias |
+  | Duração absoluta | 12 h | 8 h | 14 dias |
+  | Sessões simultâneas | 5 | 2 | 5 |
+  | Reautenticação vale por | 10 min | 5 min | 10 min |
+
+  "Manter conectado" é uma opção do login e não vale para Admin. A tolerância de refresh
+  concorrente é de 10 s.
+- **Inatividade:** a chave `sessao:{sid}` tem TTL = mínimo entre a janela de inatividade e o tempo
+  até a expiração absoluta, então o próprio Redis apaga a sessão parada. Só atividade real renova:
+  requisições com `X-Tratoo-Passivo: 1` (polling do chat) e o próprio refresh não contam. A
+  regravação acontece no máximo uma vez por minuto, com `SET ... XX`: uma sessão revogada entre a
+  leitura e a escrita não volta.
+- **Rotação do refresh** (`POST /api/auth/refresh`, anônimo): um script Lua compara o token, apaga e
+  grava `refresh-usado:{token}` na mesma operação, então só uma requisição vence. Quem perde a
+  corrida, ou reapresenta o token em menos de 10 s, recebe 409 `REFRESH_CONCORRENTE`, sem revogar
+  nada (duas abas, retry de rede). Depois disso, a reapresentação revoga a sessão
+  (`sessao_revogada:reuso_detectado` e `refresh_reuso_detectado` no `AuditLog`) e responde 401.
+  Token desconhecido: 401 sem revogar. O refresh relê a conta no Postgres: conta bloqueada,
+  excluída ou que perdeu ou ganhou o papel Admin perde a sessão em até um access token.
+- **Criação:** login e MFA criam sempre uma sessão nova (novo `sid`, contra *session fixation*) e
+  revogam a que o mesmo navegador tinha. Acima do limite, a sessão mais antiga é revogada
+  (`sessao_revogada:limite_sessoes`). O limite é conferido antes de gravar, sem trava: dois logins
+  simultâneos podem passar dele por uma sessão.
+- **Revogação:** logout, "sair de todos" e encerrar um dispositivo apagam `sessao:{sid}` e tiram o
+  sid do índice `sessoes-usuario:{id}`. Redefinição de senha, ativar ou desativar MFA e exclusão de
+  conta revogam todas as sessões do usuário. A troca voluntária de senha preserva a atual.
+- **Reautenticação:** o filtro `ExigirReautenticacaoRecente` exige a marca `reauth:{sid}` (TTL de
+  10 min; Admin 5), gravada por `POST /api/auth/reautenticar` com a senha e, se houver MFA, o código
+  por e-mail (`VerificacaoMFAService`, tipo `reauth`). Sem a marca: 403 `REAUTH_REQUIRED`. Vale para
+  liberação manual de pagamento, aprovação de entrega, decisão de disputa (Admin), troca de senha,
+  ativar/desativar MFA e exclusão de conta. Dados bancários e assinatura de contrato mantêm o OTP
+  próprio.
+- **Redis fora do ar:** as rotas marcadas com `RequireSessaoVerificada()` respondem 503 +
+  `Retry-After: 5` (`SESSAO_INDISPONIVEL`, fail-closed): liberação de pagamento, aprovação de
+  entrega, disputas, todas as rotas de Admin, reautenticação, dispositivos e ações de conta. As
+  demais aceitam o JWT, que é assinado e vale no máximo 15 min, com um aviso no log a cada 30 s no
+  máximo. Login, refresh e logout dependem do Redis: os dois primeiros respondem 503; o logout
+  apaga os cookies mesmo assim.
+- **MFA obrigatório para Admin:** o login pede o código mesmo com o MFA desligado no cadastro, e o
+  Admin não consegue desligá-lo.
+- **Endpoints:** `POST /api/auth/refresh`, `POST /api/auth/logout`, `POST /api/auth/logout-todas`,
+  `GET /api/auth/sessoes`, `DELETE /api/auth/sessoes/{id}` (só do próprio usuário; o de outro dá
+  404), `POST /api/auth/atividade` (204), `POST /api/auth/reautenticar`, `GET /api/conta/seguranca`,
+  `POST /api/conta/senha` e `PUT /api/conta/mfa`. `GET /api/me` devolve
+  `sessao: { expiraPorInatividadeEm, expiraAbsolutaEm, janelaInatividadeSegundos }`.
+- **Frontend** ([§2.7](#27-frontend)): `services/refresh.js` renova em *single-flight* entre abas
+  (`navigator.locks`, com BroadcastChannel como reserva) e o `api.js` repete a requisição uma vez;
+  409 espera 200 ms; 503 avisa e tenta de novo, sem deslogar; 403 `REAUTH_REQUIRED` abre o modal de
+  senha/MFA. O `utils/sessao.js` mostra "sua sessão expira em 2 min" e sincroniza atividade e logout
+  entre abas. O timer do cliente é só UX: o servidor decide.
 - **Papéis:** as políticas `Prestador`, `Contratante` e `Admin` usam `RequireRole`, e o papel é
   emitido como `ClaimTypes.Role`.
 - **Onboarding:** usuário autenticado com `perfilCompleto != "true"` recebe 403 fora das rotas
-  isentas.
+  isentas, que incluem `/api/auth/*`.
 - **Senhas:** BCrypt. O login sempre executa o BCrypt (contra `PasswordHasher.DummyHash` quando o
   e-mail não existe) e completa em no mínimo 300 ms. Assim o tempo de resposta não revela se a
   conta existe ([`LoginService`](../Tratoo.Domain/Features/Auth/Services/LoginService.cs)).
+- **Status:** No código. Os 40 testes de `Tratoo.Tests/Sessao` (host em memória) passaram
+  localmente em 07/11; os 6 de `SessaoRedisTests` (Redis real) só rodam no CI do PR. A tela de
+  dispositivos e o fluxo no navegador não foram exercitados.
 
 ### 2.7 Frontend
 
@@ -284,7 +386,10 @@ externos.
 - **Web Components** em Light DOM (`<tratoo-header>`, `<tratoo-footer>`), registrados por
   `core/app.js`. Os scripts de página são **ES Modules** e inicializam via `onReady()`.
 - `services/api.js` centraliza o `fetch` com `credentials: 'same-origin'`. O frontend nunca
-  manipula o token.
+  manipula o token. Ele também reage às respostas de sessão (refresh, reautenticação e 503
+  transitório), e o polling manda `X-Tratoo-Passivo: 1` ([§2.6](#26-autenticação-e-autorização)).
+- `pages/conta/seguranca.html` lista os dispositivos conectados, encerra um ou todos, troca a senha
+  e liga ou desliga o MFA.
 - `utils/auth-guard.js` é um script **clássico e bloqueante** de propósito: esconde o `<body>`,
   consulta `/api/me` e redireciona para login ou onboarding antes de qualquer conteúdo protegido
   aparecer.
@@ -631,7 +736,8 @@ convenção `Secao__Chave` do .NET vira `Secao:Chave` na configuração.
 | Banco | `ConnectionStrings__DefaultConnection`, `ConnectionStrings__VectorConnection` | Neon pooler, `us-east-2`, bancos `tratoo` e `tratoo_vector` |
 | Chave de dados | `DataProtector__Chave` | Uma única chave configurada |
 | Redis | `Redis__ConnectionString`, `Redis__ChaveProtecao` | A connection string referencia as variáveis do serviço `Redis` (host privado) |
-| JWT | `Jwt__SecretKey`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpirationHours` | — |
+| JWT | `Jwt__SecretKey`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpirationHours` | Com o controle de sessão, `Jwt__ExpirationHours` deixa de ser lido (a validade vem de `Sessao__*`); a variável continua na Railway até ser removida |
+| Sessão | Nenhuma `Sessao__*` definida | Valem os padrões de `SessaoConfig` ([§2.6](#26-autenticação-e-autorização)) |
 | Asaas | `Asaas__ApiKey`, `Asaas__BaseUrl`, `Asaas__WebhookToken`, `Asaas__ConfirmarTransferenciaImediatamente`, `Asaas__TaxaOperacionalEstimadaPercentual` | `BaseUrl` aponta para `sandbox.asaas.com` |
 | E-mail | `Resend__ApiKey`, `Resend__BaseUrl`, `Resend__FromEmail`, `Resend__FromName`, `Resend__TimeoutSegundos` | `BaseUrl` aponta para `api.resend.com`; o remetente usa o domínio `tratoo.app.br`. O código também aceita `RESEND_API_KEY`/`RESEND_FROM_*`, que têm precedência; em produção, a configuração usa a seção `Resend__*` |
 | OpenAI | `OpenAI__ApiKey`, `OpenAI__BaseUrl` | — |
@@ -710,7 +816,11 @@ em HMAC e contadores ([§5.7](#57-proteção-do-estado-no-redis)).
 | Leitura do Redis por terceiros | AES-256-GCM nos valores + HMAC nos nomes de chave + rede privada + senha | **Confirmado** (testes; Redis sem endpoint público e com `--requirepass`) |
 | XSS | Construção de DOM com `textContent` (`utils/dom.js`), CSP e CodeQL | **Confirmado** (CSP de produção; CodeQL sem alertas abertos) |
 | SQL injection | EF Core com LINQ parametrizado; SQL cru só constante ou interpolado com parâmetro | **No código** |
-| CSRF | Cookie `SameSite=Strict` + `HttpOnly` | **No código** |
+| CSRF | Cookies `SameSite=Strict` + `HttpOnly`; o refresh só vai para `/api/auth` | **No código** |
+| Sessão roubada ou esquecida aberta | Sessão no servidor conferida a cada requisição; logout e "sair de todos" valem na hora; inatividade de 30 min e teto de 12 h; access de 15 min | **No código** (testes em memória aprovados localmente; Redis real pendente do CI) |
+| Refresh token copiado | Rotação a cada uso; reuso fora da tolerância de 10 s revoga a sessão | **No código** (idem) |
+| Sessão sequestrada usada para ação de dinheiro ou de conta | Reautenticação recente (senha e MFA) exigida, 403 `REAUTH_REQUIRED` | **No código** (idem) |
+| *Session fixation* | Sessão nova (novo `sid`) em cada login e MFA; a anterior do navegador é revogada | **No código** (idem) |
 | Enumeração de contas | Tempo mínimo de 300 ms no login; reset de senha com resposta idêntica | **No código** |
 | Webhook de pagamento forjado | Token compartilhado comparado em tempo constante | **Configurado** (`Asaas__WebhookToken` presente) |
 | Dados pessoais em logs | Logs sem destinatário, assunto e fragmentos de chave | **Confirmado** (CodeQL) |
@@ -774,6 +884,8 @@ Diagnóstico e metodologia em [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-C
 | `senha` | 3 | Reset de senha |
 | `dados-bancarios` | 5 | Token, confirmação e gravação de dados bancários |
 | `otp-assinatura` | 3 | Pedido de OTP de contrato (evita spam de e-mail) |
+| `refresh` | 30 | `POST /api/auth/refresh` (folga para várias abas e NAT) |
+| `reautenticar` | 5 | `POST /api/auth/reautenticar` |
 
 - **Partição por política e IP:** cada política usa `AddPolicy` + `RateLimitPartition`, com a
   chave `"{política}|{ip}"` ([`RateLimiterSetup`](../Tratoo.API/Infrastructure/RateLimiterSetup.cs)),
@@ -820,10 +932,23 @@ Diagnóstico e metodologia em [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-C
 
 ### 5.5 Autenticação
 
-Os detalhes estão em [§2.6](#26-autenticação-e-autorização). O token não é acessível ao
-JavaScript (`HttpOnly`), então um XSS não consegue exfiltrá-lo diretamente. Como um XSS ainda
-poderia fazer requisições em nome do usuário, a construção segura de DOM e o CSP
-([§5.8](#58-xss-codeql-e-csp)) fazem parte da defesa da sessão.
+Os detalhes estão em [§2.6](#26-autenticação-e-autorização). Os dois tokens são `HttpOnly`, então
+um XSS não consegue exfiltrá-los diretamente. Um XSS ainda pode fazer requisições em nome do
+usuário enquanto a página estiver aberta. Por isso a construção segura de DOM e o CSP
+([§5.8](#58-xss-codeql-e-csp)) continuam fazendo parte da defesa da sessão, e as ações de dinheiro
+e de conta pedem a senha de novo.
+
+O que a sessão no servidor muda em relação ao JWT de 8 h:
+
+- **Um token vazado vale pouco tempo.** O access dura 15 min (Admin 10). O refresh muda a cada uso,
+  e a reapresentação de um refresh antigo derruba a sessão inteira.
+- **Sair vale na hora.** Antes, o logout só apagava o cookie, e uma cópia do token continuava
+  válida por até 8 h. Agora a sessão é apagada no Redis e o token deixa de valer em qualquer
+  réplica.
+- **Reautenticação limita o estrago de uma sessão aberta.** Quem encontra o computador destravado
+  não libera um pagamento nem troca a senha sem digitá-la.
+- **Disponibilidade:** o Redis passa a sustentar login, refresh e as rotas sensíveis. A escolha
+  entre fail-closed e aceitar só o JWT está no [§2.6](#26-autenticação-e-autorização).
 
 ### 5.6 Criptografia de dados sensíveis
 
@@ -870,7 +995,11 @@ seguinte:
   diagnóstico.
 - As duas chaves são derivadas por **HKDF** de um único segredo, `Redis:ChaveProtecao` (32 bytes
   ou mais, igual em todas as réplicas). Trocar esse segredo invalida os códigos pendentes, que
-  passam a ser tratados como ausentes, e nada além disso.
+  passam a ser tratados como ausentes, e **desloga todos os usuários**: as sessões, os refresh
+  tokens e os índices ficam ilegíveis e são tratados como inexistentes.
+- As sessões seguem a mesma regra: `sessao:{sid}`, `refresh:{token}`, `refresh-usado:{token}`,
+  `reauth:{sid}` e `sessoes-usuario:{id}` têm o nome em HMAC e o valor em AES-GCM, inclusive os
+  membros do conjunto do índice. Nenhum token, IP, user-agent ou e-mail fica em claro.
 
 **Em produção:** `Redis__ChaveProtecao` está configurada; o Redis só tem endpoint na rede privada e
 exige senha.
@@ -948,13 +1077,20 @@ Nenhum desses pontos monta SQL com entrada de usuário.
 O inventário em [`TRILHA2-DECISOES.md` §1.1](TRILHA2-DECISOES.md) separa dois grupos:
 
 - **Compartilhado entre réplicas:** OTPs, contadores de tentativa, cadastro pendente, token e
-  janela de edição de dados bancários, OTP de assinatura e contadores do rate limiting. Tudo isso
-  fica atrás de `IEstadoEfemero` ou do limitador Redis.
+  janela de edição de dados bancários, OTP de assinatura, contadores do rate limiting e as
+  **sessões de login**. Tudo isso fica atrás de `IEstadoEfemero`, do limitador Redis ou do
+  `ISessaoStore`.
 - **Local por réplica:** os caches de perfil público (TTL de 2 min, `IMemoryCache`). Levá-los
   para o Redis trocaria uma ida à rede por outra e ainda exigiria invalidação distribuída.
 
 **Regra:** nada que seja fonte da verdade vai para o Redis. Dinheiro, contrato, ledger, auditoria
 e idempotência ficam no Postgres.
+
+**A sessão é a exceção aceita.** Ela é efêmera por natureza: perder uma sessão (Redis reiniciado
+sem persistência, chave de proteção trocada) só obriga o usuário a entrar de novo, sem perda de
+dado nem de dinheiro. Os **eventos** de sessão (criação, encerramento, revogação, reuso de refresh,
+reautenticação) vão para o `AuditLog` no Postgres. Nenhum dado financeiro ou contratual entra na
+sessão.
 
 ### 6.2 Estado efêmero: memória × Redis
 
@@ -1078,7 +1214,7 @@ mesmo `Jwt:SecretKey`, e o que precisa ser visto pelas duas está no Redis, no P
 
 | Tema | Onde vive | Com 2 réplicas | Status |
 |---|---|---|---|
-| Sessão e autenticação | Cookie JWT, sem sessão no servidor | Qualquer réplica valida o token | **Confirmado** no compose: login numa réplica, 20 requisições autenticadas alternando e 20 depois de `docker kill` em uma delas, todas 200 |
+| Sessão e autenticação | Cookie JWT curto + sessão no Redis (`ISessaoStore`) | Qualquer réplica valida o token e lê a mesma sessão; a revogação feita numa vale na outra na requisição seguinte | JWT sem sessão: **Confirmado** no compose (login numa réplica, 20 requisições alternando e 20 depois de `docker kill`, todas 200). Com sessão no Redis: **No código**, provado por `SessaoRedisTests` (duas réplicas, Redis real) quando o CI do PR rodar |
 | Rate limiting | Redis | Um contador para a aplicação | **Confirmado** em produção ([§5.3](#53-rate-limiting)) |
 | OTP e cadastro pendente | Redis | Gerado numa réplica, vale na outra, uma única vez | **Confirmado** por testes (`RedisReplicasTests`). Não exercitado em produção, para não enviar e-mail real |
 | Jobs agendados | Postgres | Trava de transação ou escrita condicional ([§6.3](#63-backgroundservices)) | **Confirmado** por testes; rodadas observadas em produção |
@@ -1113,8 +1249,12 @@ mesmo `Jwt:SecretKey`, e o que precisa ser visto pelas duas está no Redis, no P
 
 #### O que duas réplicas não resolvem
 
-- **Redis:** continua uma instância só. Sem ele, os OTPs respondem 503 e o rate limit volta a contar
-  por réplica, o que dobra o limite efetivo. Um deploy também não passa no `/health/ready`.
+- **Redis:** continua uma instância só, e com o controle de sessão ele passa a sustentar **toda
+  requisição autenticada**. Sem ele, login, refresh, OTPs e rotas sensíveis respondem 503, as
+  demais rotas seguem só com o JWT (no máximo 15 min, e depois disso o refresh também falha) e o
+  rate limit volta a contar por réplica, o que dobra o limite efetivo. Um deploy também não passa no
+  `/health/ready`. Um reinício do Redis sem persistência desloga todo mundo; por isso o AOF
+  ([CICD.md](CICD.md)) é passo pendente de infraestrutura.
 - **Neon e região:** o banco é uma dependência única, e as duas réplicas estão na mesma região.
 - **Réplica travada:** a Railway não usa o health check depois do deploy. Uma réplica viva, mas sem
   responder, pode continuar recebendo tráfego. **Não testado.**
@@ -1155,12 +1295,15 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e 
 | Proxy, IP e rate limit | `ForwardedHeadersTests`, `RateLimitingPorIpTests`, `CapturaIpAuditoriaTests`, `ClientRequestInfoTests`, `BindingConfiguracaoTests` |
 | Health checks e runtime | `HealthCheckTests`, `PortaHttpTests`, `ShutdownTests`, `LogArquivoSetupTests`, `ModoMigracaoTests` |
 | Estado efêmero e OTP | `EstadoEfemeroTests`, `OtpConcorrenciaTests` |
+| Sessão (host em memória) | `SessaoTests`, `SessaoConfigTests` |
 | Criptografia | `DataProtectorTests`, `RotacaoChaveDadosTests`, `ChaveDeDadosNaSubidaTests` |
-| **Integração (Docker)** | `RedisReplicasTests`, `JobsConcorrenciaTests`, `WebhookConcorrenciaTests`, `DatasPersistenciaTests`, `DadosCifradosHealthCheckTests`, `RecifragemTests` |
+| **Integração (Docker)** | `RedisReplicasTests`, `SessaoRedisTests`, `JobsConcorrenciaTests`, `WebhookConcorrenciaTests`, `DatasPersistenciaTests`, `DadosCifradosHealthCheckTests`, `RecifragemTests` |
 
 - **Como a integração roda:** os testes chamam a **CLI do Docker** diretamente
   (`Integracao/Docker.cs`) e marcam os containers com o rótulo `tratoo-testes=1`. O atributo
-  `[FactComDocker]` vira "ignorado" sem Docker, exceto quando `TRATOO_EXIGIR_DOCKER=1`.
+  `[FactComDocker]` vira "ignorado" sem Docker, exceto quando `TRATOO_EXIGIR_DOCKER=1`. Com
+  `TRATOO_PULAR_DOCKER=1`, eles são ignorados sem nem chamar `docker info` (para máquinas em que o
+  Docker Desktop pesa demais); o CI continua exigindo o Docker.
 - **Testes de processo:** `ProcessoApi` executa o binário real para provar recusas de subida e os
   modos de linha de comando.
 
@@ -1337,6 +1480,26 @@ Cada decisão registra o que é e por que é assim. O contexto de cada uma está
 - **Consequência:** o uso de recursos dobra. Redis e banco seguem como dependências únicas.
 - **Evidência:** [§6.6](#66-duas-réplicas-em-produção).
 
+#### D15 — Sessão híbrida, com a sessão no Redis
+
+- **O que é:** JWT de 15 min (Admin 10) com o claim `sid`, refresh token opaco de 256 bits que muda
+  a cada uso, e a sessão em `sessao:{sid}` no Redis, conferida a cada requisição
+  ([§2.6](#26-autenticação-e-autorização)).
+- **Por quê:** o JWT de 8 h não podia ser revogado, então logout, troca de senha e "sair de todos"
+  não valiam para uma cópia do token. Uma sessão só no servidor (cookie opaco a cada requisição)
+  resolveria a revogação, mas o JWT curto ainda permite seguir com o Redis fora nas rotas comuns.
+- **Por que no Redis, e não no Postgres:** é estado efêmero, consultado em toda requisição, e
+  perdê-lo só exige novo login ([§6.1](#61-o-que-é-estado-de-processo)). Os eventos vão para o
+  `AuditLog`, sem migration.
+- **Por que não ASP.NET Session, Cookie Authentication nem Antiforgery:** os três dependem do Data
+  Protection, que é local por réplica de propósito ([§6.5](#65-escala-horizontal)). Um cookie
+  protegido numa réplica não abriria na outra.
+- **Consequências:** o Redis entra no caminho de toda requisição autenticada (um `GET` por
+  requisição; uma escrita por minuto de atividade); trocar `Redis:ChaveProtecao` desloga todos; o
+  deploy desta versão desloga todos uma vez (tokens sem `sid`).
+- **Evidência:** `SessaoTests` (40 testes em memória, aprovados localmente em 07/11) e
+  `SessaoRedisTests` (Redis real e duas réplicas, a rodar no CI do PR).
+
 ---
 
 ## Apêndice A — Matriz de rastreabilidade
@@ -1393,6 +1556,12 @@ Evidência coletada em 31/10/2026.
 | Pagamentos Asaas | Configurado (sandbox) | `Asaas__BaseUrl` → `sandbox.asaas.com` |
 | OpenAI e R2 | Configurado | Variáveis `OpenAI__*`, `CloudflareR2*__*` |
 | Migrations aplicadas manualmente | No código | `TratooContextFactory` (design-time) |
+| Sessão híbrida: JWT curto + refresh rotativo + sessão no Redis | No código (branch `feature/controle-de-sessao`) | `SessaoAutenticacaoSetup`, `SessaoService`, `SessaoStoreRedis`; `SessaoTests` aprovados localmente em 07/11 |
+| Revogação vale na outra réplica; refresh concorrente com um vencedor; TTL deslizante; `SET XX`; Redis parado → 503 só nas rotas sensíveis | Planejado (teste escrito) | `SessaoRedisTests`, com Redis real; só roda com Docker, a confirmar no CI do PR |
+| Reautenticação antes de ação sensível (403 `REAUTH_REQUIRED`) | No código | `ExigirReautenticacaoRecente`; `SessaoTests` |
+| MFA obrigatório para Admin | No código | `LoginService`, `ContaService`; `SessaoTests` |
+| Tela de dispositivos conectados | No código | `pages/conta/seguranca.html`; não exercitada no navegador |
+| AOF no Redis de produção | Planejado | Passo manual em [CICD.md](CICD.md) |
 | Rotas de seed (`/api/dev/*`) | No código (só em Development) | `DevSeedExtensions` |
 | Diagnóstico de rede (`/api/diagnostico/rede`) | No código (Admin em produção) | `DiagnosticoRedeExtensions` |
 
