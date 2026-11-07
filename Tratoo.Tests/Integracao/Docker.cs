@@ -14,6 +14,12 @@ namespace Tratoo.Tests.Integracao
     {
         private static readonly Lazy<bool> _disponivel = new(() =>
         {
+            // TRATOO_PULAR_DOCKER=1: não chama o Docker de jeito nenhum (nem `docker info`) e
+            // ignora os testes de integração. Para rodar só a suíte rápida numa máquina em que
+            // o Docker Desktop pesa demais; o CI continua exigindo os dois (TRATOO_EXIGIR_DOCKER).
+            if (Environment.GetEnvironmentVariable("TRATOO_PULAR_DOCKER") == "1" && !Exigido)
+                return false;
+
             try { return Executar(TimeSpan.FromSeconds(60), "info", "--format", "{{.ServerVersion}}").ExitCode == 0; }
             catch { return false; }
         });

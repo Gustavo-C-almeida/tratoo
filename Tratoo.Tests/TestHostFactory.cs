@@ -85,7 +85,8 @@ namespace Tratoo.Tests
             bool isDevelopment = false,
             bool comHsts = true,
             bool comRateLimiter = false,
-            Action<WebApplication>? mapearRotas = null)
+            Action<WebApplication>? mapearRotas = null,
+            Action<IServiceCollection>? configurarServicos = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -103,6 +104,8 @@ namespace Tratoo.Tests
 
             if (comRateLimiter)
                 builder.Services.AddTratooRateLimiter();
+
+            configurarServicos?.Invoke(builder.Services);
 
             var app = builder.Build();
 

@@ -45,7 +45,8 @@ namespace Tratoo.Tests
 
             foreach (var chave in psi.Environment.Keys
                          .Where(k => k.StartsWith("ConnectionStrings__", StringComparison.OrdinalIgnoreCase)
-                                  || k.StartsWith("DataProtector__", StringComparison.OrdinalIgnoreCase))
+                                  || k.StartsWith("DataProtector__", StringComparison.OrdinalIgnoreCase)
+                                  || k.StartsWith("Asaas__", StringComparison.OrdinalIgnoreCase))
                          .ToList())
                 psi.Environment.Remove(chave);
             foreach (var (k, v) in ambiente)

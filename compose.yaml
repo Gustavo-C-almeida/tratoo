@@ -144,7 +144,7 @@ services:
       DataProtector__ChaveAnterior: ${DATAPROTECTOR_CHAVE_ANTERIOR:-}
       Jwt__Issuer: tratoo-local
       Jwt__Audience: tratoo-local
-      Jwt__ExpirationHours: "8"
+      # Tempos de sessão: padrões do código (SessaoConfig). Para mudar, Sessao__* (ver .env.example).
 
       # E-mail é obrigatório: cadastro, MFA e reset de senha dependem dele.
       Resend__ApiKey: ${RESEND_API_KEY:?defina RESEND_API_KEY no .env}
@@ -158,7 +158,7 @@ services:
       Asaas__ApiKey: ${ASAAS_SANDBOX_API_KEY:-}
       # Obrigatório: com token vazio a API PULA a validação do webhook (aceita
       # eventos forjados). Qualquer string aleatória serve localmente.
-      Asaas__WebhookToken: ${ASAAS_WEBHOOK_TOKEN:?defina ASAAS_WEBHOOK_TOKEN no .env (qualquer string aleatória)}
+      Asaas__WebhookToken: ${ASAAS_WEBHOOK_TOKEN:?defina ASAAS_WEBHOOK_TOKEN no .env (16+ caracteres: openssl rand -base64 32)}
       Asaas__ConfirmarTransferenciaImediatamente: ${ASAAS_CONFIRMAR_TRANSFERENCIA_IMEDIATAMENTE:-false}
 
       # Opcionais: sem chave, a busca semântica cai para keyword e o upload falha

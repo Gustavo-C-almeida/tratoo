@@ -62,7 +62,7 @@ mostra apenas a taxa operacional do gateway (Asaas), a título informativo.
 | Backend | .NET 8 · ASP.NET Core Minimal API · EF Core 9 · Npgsql |
 | Banco | PostgreSQL (Neon) com pgvector (índice HNSW) |
 | Cache e estado compartilhado | Redis (StackExchange.Redis) |
-| Autenticação | JWT em cookie `HttpOnly` · BCrypt · MFA por e-mail |
+| Autenticação | JWT curto + refresh token rotativo em cookies `HttpOnly` · sessão no Redis · BCrypt · MFA por e-mail |
 | Integrações | Asaas (PIX) · Resend (e-mail) · OpenAI (embeddings) · Cloudflare R2 (arquivos) · BrasilAPI · ViaCEP |
 | Frontend | HTML, CSS e JavaScript sem framework · Web Components · ES Modules · Bootstrap 5.3 |
 | Infraestrutura | Docker · Railway · Docker Compose (Nginx, Postgres, Redis) para o ambiente local |
@@ -127,8 +127,8 @@ flowchart LR
     R2 --> PG
 ```
 
-As réplicas não guardam nada que a outra precise ver: a sessão é um JWT em cookie, o estado
-temporário fica no Redis, os dados no Postgres e os arquivos no R2. Em produção, em 05/11:
+As réplicas não guardam nada que a outra precise ver: a sessão de login e o estado temporário
+ficam no Redis, os dados no Postgres e os arquivos no R2. Em produção, em 05/11:
 
 - 720 requisições foram repartidas em 346 e 374 entre as réplicas, todas com 200.
 - O limite de 10 logins por minuto valeu para as duas juntas: 10 aceitos e 6 recusados com 429.
@@ -151,7 +151,12 @@ completa estão em [ARQUITETURA.md §6.6](Docs/ARQUITETURA.md#66-duas-réplicas-
 - **IP real do cliente atrás do proxy**, com um trust boundary explícito. Só a rede interna da
   Railway pode apresentar `X-Forwarded-For`, e o número de saltos (2) foi medido em produção. O IP
   correto alimenta a auditoria, o rate limiting e o HSTS.
-- **Rate limiting por IP** em login, cadastro, reset de senha, dados bancários e OTP de contrato.
+- **Controle de sessão:** access token de 15 min e refresh token rotativo, com a sessão no Redis
+  conferida a cada requisição. Logout e "sair de todos os dispositivos" valem na hora, a sessão
+  expira por inatividade (30 min) e por tempo absoluto (12 h), um refresh token reapresentado
+  revoga a sessão, e ações como liberar pagamento pedem a senha de novo.
+- **Rate limiting por IP** em login, cadastro, reset de senha, dados bancários, OTP de contrato,
+  refresh e reautenticação.
   O contador é distribuído no Redis e, se o Redis cair, o limite volta para a memória do processo.
 - **OTP de uso único sob concorrência:** a tentativa é contada antes da comparação e o código é
   apagado de forma atômica. Se o armazenamento ficar indisponível, a operação é recusada com 503.
@@ -283,7 +288,8 @@ versionado.**
 | `ConnectionStrings__VectorConnection` | Banco vetorial (`VectorContext`, pgvector) | Sim |
 | `DataProtector__Chave` | Chave AES dos dados sensíveis. Sem ela a API **não sobe** | Sim |
 | `DataProtector__ChaveAnterior` | Só durante uma rotação de chave | Não |
-| `Jwt__SecretKey`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpirationHours` | Emissão e validação do token | Sim (a expiração tem padrão de 8 h) |
+| `Jwt__SecretKey`, `Jwt__Issuer`, `Jwt__Audience` | Emissão e validação do access token | Sim |
+| `Sessao__*` (ex.: `Sessao__InatividadeMinutos`) | Tempos e limites da sessão (access de 15 min, inatividade de 30 min, 12 h absolutas, 5 sessões; Admin mais curto) | Não (padrões no código; ver `appsettings.example.json`) |
 | `Resend__ApiKey`, `Resend__FromEmail`, `Resend__FromName`, `Resend__BaseUrl`, `Resend__TimeoutSegundos` | E-mail transacional (o código também aceita `RESEND_API_KEY`/`RESEND_FROM_*`) | Sim, para cadastro, MFA e reset |
 | `Redis__ConnectionString`, `Redis__ChaveProtecao` | Estado compartilhado e rate limiting distribuído. Sem Redis, usa a memória do processo | Não; se houver Redis, a chave de proteção é obrigatória |
 | `Asaas__ApiKey`, `Asaas__BaseUrl`, `Asaas__WebhookToken`, `Asaas__ConfirmarTransferenciaImediatamente`, `Asaas__TaxaOperacionalEstimadaPercentual` | Pagamentos PIX e webhook | Para pagamentos |
