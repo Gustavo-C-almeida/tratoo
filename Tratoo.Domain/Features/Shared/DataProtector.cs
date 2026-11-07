@@ -23,9 +23,11 @@ namespace Tratoo.Domain.Features.Shared
     ///    acima, com rótulos próprios — um único segredo configurado serve aos dois formatos;
     ///  • o <c>id</c> diz QUAL chave cifrou, sem tentativa e erro; o prefixo inteiro
     ///    (<c>v2:&lt;id&gt;</c>) entra como dado associado, então adulterar qualquer parte invalida;
-    ///  • ETAPA DE TRANSIÇÃO: este código já LÊ v2, mas <see cref="Encrypt(string)"/> ainda
-    ///    GRAVA o formato antigo. Só depois que todas as réplicas em produção lerem v2 a
-    ///    gravação muda (assim uma réplica antiga nunca encontra um valor que não sabe ler).
+    ///  • <see cref="Encrypt(string)"/> GRAVA v2. O formato antigo continua sendo LIDO (dados
+    ///    já existentes) até a recifragem convertê-los (<c>--recifrar-dados</c>); só se grava
+    ///    CBC com <see cref="EncryptLegado"/>, que existe para testes de compatibilidade.
+    ///  • ROLLBACK: valores v2 só são lidos a partir da versão que introduziu a leitura de v2
+    ///    (etapa 2a). Não volte a produção para uma versão anterior a ela.
     ///
     /// Rotação (Docs/ROTACAO-CHAVE-DADOS.md): durante a troca, <c>DataProtector:Chave</c> é a
     /// chave NOVA e <c>DataProtector:ChaveAnterior</c> a que está sendo aposentada. Grava-se
@@ -137,7 +139,14 @@ namespace Tratoo.Domain.Features.Shared
                 : Decrypt(data, chaves.Atual, chaves.Anterior);
         }
 
-        public static string Encrypt(string data, byte[] chave)
+        /// <summary>Cifra no formato v2 (AES-256-GCM).</summary>
+        public static string Encrypt(string data, byte[] chave) => EncryptV2(data, chave);
+
+        /// <summary>
+        /// Formato ANTIGO (AES-CBC, sem autenticação). Nenhum código de produção grava com
+        /// isto: existe só para testes de compatibilidade com os dados já gravados.
+        /// </summary>
+        public static string EncryptLegado(string data, byte[] chave)
         {
             using var aes = Aes.Create();
             aes.Key = chave;
@@ -285,10 +294,7 @@ namespace Tratoo.Domain.Features.Shared
         private static byte[] ChaveGcm(byte[] chave) =>
             HKDF.DeriveKey(HashAlgorithmName.SHA256, chave, 32, info: InfoCifraV2);
 
-        /// <summary>
-        /// Cifra no formato v2. NESTA ETAPA nenhum código de produção chama isto —
-        /// <see cref="Encrypt(string)"/> continua gravando o formato antigo.
-        /// </summary>
+        /// <summary>Cifra no formato v2 (é o que <see cref="Encrypt(string, byte[])"/> usa).</summary>
         public static string EncryptV2(string data, byte[] chave)
         {
             var id = IdDaChaveV2(chave);

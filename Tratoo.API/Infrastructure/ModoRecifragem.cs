@@ -5,10 +5,13 @@ using Tratoo.Domain.Features.Shared;
 namespace Tratoo.API.Infrastructure
 {
     /// <summary>
-    /// Rotação da chave de dados: <c>dotnet Tratoo.API.dll --recifrar-dados [--aplicar]</c>
-    /// regrava com a chave ATUAL (<c>DataProtector:Chave</c>) todo valor que ainda está
-    /// cifrado com a ANTERIOR (<c>DataProtector:ChaveAnterior</c>). Roteiro completo em
-    /// Docs/ROTACAO-CHAVE-DADOS.md.
+    /// Recifragem: <c>dotnet Tratoo.API.dll --recifrar-dados [--aplicar]</c> regrava, com a
+    /// chave ATUAL (<c>DataProtector:Chave</c>) e no formato v2 (AES-GCM):
+    ///  • todo valor ainda cifrado com a ANTERIOR (<c>DataProtector:ChaveAnterior</c>), numa
+    ///    rotação de chave;
+    ///  • todo valor da chave atual ainda no formato antigo (AES-CBC) — migração de formato,
+    ///    que não exige chave anterior.
+    /// Roteiro completo em Docs/ROTACAO-CHAVES.md.
     ///
     /// Sem <c>--aplicar</c> é só um relatório: classifica cada valor das colunas cifradas e
     /// não grava nada. Com <c>--aplicar</c>, recifra numa única transação e confere o
@@ -44,8 +47,16 @@ namespace Tratoo.API.Infrastructure
 
         public sealed record Registro(int Id, string? Valor);
 
+        /// <param name="Atual">Valores na chave atual, em qualquer formato.</param>
+        /// <param name="FormatoAntigo">Dos valores na chave atual, quantos ainda estão em AES-CBC.</param>
+        /// <param name="Recifrados">Regravados nesta execução (da anterior ou do formato antigo).</param>
         public sealed record ResultadoColuna(
-            string Coluna, int NaoCifrados, int Atual, int Anterior, int Ambas, int Nenhuma, int Recifrados);
+            string Coluna, int NaoCifrados, int Atual, int Anterior, int Ambas, int Nenhuma, int Recifrados,
+            int FormatoAntigo)
+        {
+            /// <summary>Valores que a recifragem ainda tem de regravar.</summary>
+            public int Pendentes => Anterior + FormatoAntigo;
+        }
 
         private sealed record Coluna(
             string Nome,
@@ -116,19 +127,14 @@ namespace Tratoo.API.Infrastructure
                 return ExitConfiguracaoAusente;
             }
 
-            if (chaves.Anterior is null)
-            {
-                logger.LogError(
-                    "Recifragem abortada: defina {Anterior} com a chave antiga e {Atual} com a nova (Docs/ROTACAO-CHAVE-DADOS.md).",
-                    DataProtector.VariavelDeAmbienteAnterior, DataProtector.VariavelDeAmbiente);
-                return ExitConfiguracaoAusente;
-            }
-
             try
             {
-                logger.LogInformation("{Modo} em {Alvo}.",
+                logger.LogInformation("{Modo} em {Alvo}. {Escopo}.",
                     aplicar ? "Recifragem (APLICANDO)" : "Recifragem — só relatório, nada será gravado",
-                    ModoMigracao.Descrever(conexao));
+                    ModoMigracao.Descrever(conexao),
+                    chaves.Anterior is null
+                        ? "Sem chave anterior: só migração de formato (AES-CBC → v2)"
+                        : "Rotação de chave + migração de formato");
 
                 var opcoes = new DbContextOptionsBuilder<TratooContext>()
                     .UseNpgsql(conexao)
@@ -142,10 +148,10 @@ namespace Tratoo.API.Infrastructure
 
                 if (!aplicar)
                 {
-                    var faltam = resultado.Sum(r => r.Anterior);
+                    var faltam = resultado.Sum(r => r.Pendentes);
                     logger.LogInformation(faltam == 0
-                        ? "Nenhum valor na chave anterior."
-                        : "{Faltam} valor(es) na chave anterior. Rode de novo com " + ArgumentoAplicar + " para recifrar.", faltam);
+                        ? "Nada a recifrar: tudo na chave atual e no formato v2."
+                        : "{Faltam} valor(es) a recifrar. Rode de novo com " + ArgumentoAplicar + " para recifrar.", faltam);
                     return ExitSucesso;
                 }
 
@@ -154,16 +160,17 @@ namespace Tratoo.API.Infrastructure
                 var depois = await RecifrarAsync(db, chaves, aplicar: false);
                 Registrar(logger, "Depois (relido do banco)", depois);
 
-                if (depois.Any(r => r.Anterior > 0 || r.Ambas > 0 || r.Nenhuma > 0))
+                if (depois.Any(r => r.Pendentes > 0 || r.Ambas > 0 || r.Nenhuma > 0))
                 {
                     logger.LogWarning(
-                        "Ficaram valores fora da chave atual. NÃO remova {Anterior} até resolvê-los.",
+                        "Ficaram valores fora da chave atual ou do formato v2. NÃO remova {Anterior} até resolvê-los.",
                         DataProtector.VariavelDeAmbienteAnterior);
                     return ExitPendencias;
                 }
 
-                logger.LogInformation(
-                    "Recifragem concluída: todos os valores cifrados estão na chave atual. {Anterior} já pode sair da configuração.",
+                logger.LogInformation(chaves.Anterior is null
+                        ? "Recifragem concluída: todos os valores cifrados estão no formato v2."
+                        : "Recifragem concluída: todos os valores cifrados estão na chave atual e no formato v2. {Anterior} já pode sair da configuração.",
                     DataProtector.VariavelDeAmbienteAnterior);
                 return ExitSucesso;
             }
@@ -176,48 +183,51 @@ namespace Tratoo.API.Infrastructure
         }
 
         /// <summary>
-        /// Classifica todos os valores e, se <paramref name="aplicar"/>, recifra os que estão
-        /// na chave anterior numa única transação. Lança (e desfaz tudo) se um valor mudou
-        /// no banco entre a leitura e a gravação.
+        /// Classifica todos os valores e, se <paramref name="aplicar"/>, recifra numa única
+        /// transação os que estão na chave anterior ou no formato antigo. Lança (e desfaz
+        /// tudo) se um valor mudou no banco entre a leitura e a gravação.
         /// </summary>
         public static async Task<IReadOnlyList<ResultadoColuna>> RecifrarAsync(
             TratooContext db, ChavesDeDados chaves, bool aplicar, CancellationToken ct = default)
         {
-            if (chaves.Anterior is null)
-                throw new ArgumentException("A recifragem precisa da chave anterior.", nameof(chaves));
-
             await using var transacao = aplicar ? await db.Database.BeginTransactionAsync(ct) : null;
             var resultados = new List<ResultadoColuna>();
 
             foreach (var coluna in Colunas)
             {
                 var registros = await coluna.Ler(db).AsNoTracking().ToListAsync(ct);
-                int naoCifrados = 0, atual = 0, anterior = 0, ambas = 0, nenhuma = 0, recifrados = 0;
+                int naoCifrados = 0, atual = 0, anterior = 0, ambas = 0, nenhuma = 0, recifrados = 0, formatoAntigo = 0;
 
                 foreach (var r in registros)
                 {
                     switch (DataProtector.Identificar(r.Valor, chaves))
                     {
                         case ChaveDoValor.NaoCifrado: naoCifrados++; break;
-                        case ChaveDoValor.Atual: atual++; break;
                         case ChaveDoValor.Ambas: ambas++; break;
                         case ChaveDoValor.Nenhuma: nenhuma++; break;
+                        case ChaveDoValor.Atual:
+                            atual++;
+                            if (DataProtector.EhV2(r.Valor))
+                                break;
+                            formatoAntigo++;
+                            if (aplicar)
+                            {
+                                await GravarAsync(coluna, db, r, Recifrar(r.Valor!, chaves.Atual, chaves), ct);
+                                recifrados++;
+                            }
+                            break;
                         case ChaveDoValor.Anterior:
                             anterior++;
-                            if (!aplicar)
-                                break;
-
-                            var novo = Recifrar(r.Valor!, chaves);
-                            var gravados = await coluna.Gravar(db, r.Id, r.Valor!, novo, ct);
-                            if (gravados != 1)
-                                throw new InvalidOperationException(
-                                    $"{coluna.Nome} (Id {r.Id}) mudou durante a recifragem. Rode o comando de novo.");
-                            recifrados++;
+                            if (aplicar)
+                            {
+                                await GravarAsync(coluna, db, r, Recifrar(r.Valor!, chaves.Anterior!, chaves), ct);
+                                recifrados++;
+                            }
                             break;
                     }
                 }
 
-                resultados.Add(new ResultadoColuna(coluna.Nome, naoCifrados, atual, anterior, ambas, nenhuma, recifrados));
+                resultados.Add(new ResultadoColuna(coluna.Nome, naoCifrados, atual, anterior, ambas, nenhuma, recifrados, formatoAntigo));
             }
 
             if (transacao is not null)
@@ -226,26 +236,31 @@ namespace Tratoo.API.Infrastructure
             return resultados;
         }
 
-        /// <summary>
-        /// Decifra com a anterior e cifra com a atual, conferindo o resultado antes de devolvê-lo:
-        /// o valor novo tem de decifrar com a atual para o MESMO texto e não pode ser
-        /// confundível com a anterior.
-        /// </summary>
-        private static string Recifrar(string valor, ChavesDeDados chaves)
+        private static async Task GravarAsync(
+            Coluna coluna, TratooContext db, Registro r, string novo, CancellationToken ct)
         {
-            if (!DataProtector.TentarDecifrar(valor, chaves.Anterior!, out var claro))
-                throw new InvalidOperationException("Valor classificado como da chave anterior não decifrou com ela.");
+            var gravados = await coluna.Gravar(db, r.Id, r.Valor!, novo, ct);
+            if (gravados != 1)
+                throw new InvalidOperationException(
+                    $"{coluna.Nome} (Id {r.Id}) mudou durante a recifragem. Rode o comando de novo.");
+        }
 
-            // IV aleatório: na chance ínfima de o valor novo também "decifrar" com a anterior,
-            // gera outro.
-            for (var tentativa = 0; tentativa < 5; tentativa++)
-            {
-                var novo = DataProtector.Encrypt(claro, chaves.Atual);
-                if (DataProtector.Identificar(novo, chaves) == ChaveDoValor.Atual
-                    && DataProtector.TentarDecifrar(novo, chaves.Atual, out var conferido)
-                    && string.Equals(conferido, claro, StringComparison.Ordinal))
-                    return novo;
-            }
+        /// <summary>
+        /// Decifra com a chave de origem e cifra com a atual em v2, conferindo o resultado
+        /// antes de devolvê-lo: o valor novo tem de ser v2, decifrar com a atual para o MESMO
+        /// texto e ser identificado como da atual.
+        /// </summary>
+        private static string Recifrar(string valor, byte[] chaveDeOrigem, ChavesDeDados chaves)
+        {
+            if (!DataProtector.TentarDecifrar(valor, chaveDeOrigem, out var claro))
+                throw new InvalidOperationException("Valor classificado numa chave não decifrou com ela.");
+
+            var novo = DataProtector.Encrypt(claro, chaves.Atual);
+            if (DataProtector.EhV2(novo)
+                && DataProtector.Identificar(novo, chaves) == ChaveDoValor.Atual
+                && DataProtector.TentarDecifrar(novo, chaves.Atual, out var conferido)
+                && string.Equals(conferido, claro, StringComparison.Ordinal))
+                return novo;
 
             throw new InvalidOperationException("Não foi possível produzir um valor recifrado conferido.");
         }
@@ -255,8 +270,8 @@ namespace Tratoo.API.Infrastructure
             logger.LogInformation("{Titulo}:", titulo);
             foreach (var r in resultado)
                 logger.LogInformation(
-                    "  {Coluna}: atual={Atual} anterior={Anterior} recifrados={Recifrados} ilegíveis={Nenhuma} ambíguos={Ambas} não-cifrados={NaoCifrados}",
-                    r.Coluna, r.Atual, r.Anterior, r.Recifrados, r.Nenhuma, r.Ambas, r.NaoCifrados);
+                    "  {Coluna}: atual={Atual} (formato antigo={FormatoAntigo}) anterior={Anterior} recifrados={Recifrados} ilegíveis={Nenhuma} ambíguos={Ambas} não-cifrados={NaoCifrados}",
+                    r.Coluna, r.Atual, r.FormatoAntigo, r.Anterior, r.Recifrados, r.Nenhuma, r.Ambas, r.NaoCifrados);
         }
     }
 }
