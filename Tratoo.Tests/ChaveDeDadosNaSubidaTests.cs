@@ -108,5 +108,17 @@ namespace Tratoo.Tests
             Assert.DoesNotContain("Recifragem abortada", saida);
             Assert.DoesNotContain("Now listening", saida);
         }
+
+        [Fact]
+        public async Task Numa_rotacao_com_chave_nova_curta_a_API_nao_sobe()
+        {
+            var (exit, saida) = await ProcessoApi.RodarAsync(
+                argumento: null, Ambiente("curta-demais", chaveAnterior: "chave-antiga-de-teste-0123456789-abcd"));
+
+            Assert.Equal(1, exit);
+            Assert.Contains("[startup]", saida);
+            Assert.Contains("32 bytes", saida);
+            Assert.DoesNotContain("Now listening", saida);
+        }
     }
 }

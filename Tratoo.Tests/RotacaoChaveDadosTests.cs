@@ -109,5 +109,27 @@ namespace Tratoo.Tests
         {
             Assert.Equal(esperado, DataProtector.PareceTexto(claro));
         }
+
+        [Theory]
+        [InlineData("curta")]
+        [InlineData("trinta-e-um-bytes-0123456789abc")]          // 31
+        [InlineData("ééééééééééééééé")]                         // 15 caracteres, 30 bytes
+        public void Numa_rotacao_chave_nova_com_menos_de_32_bytes_e_recusada(string nova)
+        {
+            var erro = Assert.Throws<InvalidOperationException>(() => DataProtector.PrepararChaves(nova, TextoAnterior));
+            Assert.Contains(DataProtector.VariavelDeAmbiente, erro.Message);
+            Assert.Contains("32", erro.Message);
+            Assert.DoesNotContain(nova, erro.Message);   // a mensagem nunca repete a chave
+        }
+
+        [Theory]
+        [InlineData("trinta-e-dois-bytes-0123456789ab")]         // exatamente 32
+        [InlineData("ééééééééééééééééé")]                       // 17 caracteres, 34 bytes
+        public void Numa_rotacao_chave_nova_com_32_bytes_ou_mais_e_aceita(string nova) =>
+            Assert.NotNull(DataProtector.PrepararChaves(nova, TextoAnterior).Anterior);
+
+        [Fact]
+        public void Fora_de_rotacao_a_chave_atual_curta_continua_aceita() =>
+            Assert.Null(DataProtector.PrepararChaves("curta", null).Anterior);
     }
 }

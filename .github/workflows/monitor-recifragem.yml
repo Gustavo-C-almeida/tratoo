@@ -1,0 +1,55 @@
+# Monitoramento da rotação de chave / recifragem de dados (Docs/ROTACAO-CHAVES.md).
+#
+# Só LÊ o /health/ready público de cada ambiente: nenhum segredo, nenhuma credencial do
+# Railway ou do banco. A recifragem roda dentro da própria API (RecifragemAutomaticaService);
+# este workflow só avisa quando ela precisa de atenção:
+#   • falha (vermelho) — rodada falhou, sobrou pendência, valor ilegível, ou a chave de
+#     dados não decifra os dados (dados-cifrados Unhealthy);
+#   • aviso — rotação em curso (dados-cifrados Degraded);
+#   • nota — concluída: a chave anterior pode sair da configuração (sempre manualmente).
+#
+# URLs em variáveis do repositório (Settings → Secrets and variables → Actions → Variables):
+# URL_PRODUCAO e URL_STAGING. Sem a variável, o ambiente é pulado.
+name: Monitor da recifragem
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"   # a cada 2 h, fora do minuto 0
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: monitor-recifragem
+  cancel-in-progress: true
+
+jobs:
+  monitorar:
+    name: Recifragem (${{ matrix.ambiente }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ambiente: produção
+            variavel: URL_PRODUCAO
+          - ambiente: staging
+            variavel: URL_STAGING
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Ler o /health/ready
+        env:
+          AMBIENTE: ${{ matrix.ambiente }}
+          URL_BASE: ${{ vars[matrix.variavel] }}
+          VARIAVEL: ${{ matrix.variavel }}
+        run: |
+          if [ -z "$URL_BASE" ]; then
+            echo "::notice::Variável $VARIAVEL não definida; $AMBIENTE não monitorado."
+            exit 0
+          fi
+          .github/scripts/monitorar-recifragem.sh "$AMBIENTE" "$URL_BASE"
