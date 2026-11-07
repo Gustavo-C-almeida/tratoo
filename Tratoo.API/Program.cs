@@ -240,6 +240,8 @@ builder.Services.AddHostedService<ContratoExpiracaoService>();
 builder.Services.AddHostedService<PagamentoLiberacaoService>();
 builder.Services.AddHostedService<AvaliacaoExpiracaoService>();
 builder.Services.AddHostedService<ReindexacaoBackgroundService>();
+// Desligada por padrão: DataProtector__RecifrarAutomaticamente=true (Docs/ROTACAO-CHAVES.md).
+builder.Services.AddHostedService<RecifragemAutomaticaService>();
 
 // Cloudflare R2 — bucket público (fotos de perfil, portfólio)
 builder.Services.Configure<R2Config>(builder.Configuration.GetSection("CloudflareR2"));

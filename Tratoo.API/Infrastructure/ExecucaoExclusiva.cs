@@ -29,6 +29,7 @@ namespace Tratoo.API.Infrastructure
         // não colidir com advisory locks de outros sistemas no mesmo banco.
         public const long ChavePagamentoLiberacao = 0x5472_6174_6F6F_0001;
         public const long ChaveReindexacao        = 0x5472_6174_6F6F_0002;
+        public const long ChaveRecifragem         = 0x5472_6174_6F6F_0003;
 
         /// <summary>
         /// Executa <paramref name="rodada"/> só se esta instância obtiver a trava
