@@ -73,7 +73,10 @@ namespace Tratoo.Tests
             var chave = DataProtector.DerivarChave(texto);
 
             Assert.Equal(claro, DataProtector.Decrypt(Referencia.Cifrar(claro, texto), chave));
-            Assert.Equal(claro, Referencia.Decifrar(DataProtector.Encrypt(claro, chave), texto));
+            // O formato antigo, quando gravado (só em testes), continua idêntico ao de sempre.
+            Assert.Equal(claro, Referencia.Decifrar(DataProtector.EncryptLegado(claro, chave), texto));
+            // E o que a produção grava agora (v2) decifra com a mesma chave configurada.
+            Assert.Equal(claro, DataProtector.Decrypt(DataProtector.Encrypt(claro, chave), chave));
         }
 
         [Fact]
@@ -101,10 +104,11 @@ namespace Tratoo.Tests
         }
 
         [Fact]
-        public void Formato_do_valor_cifrado_e_IV_aleatorio()
+        public void Formato_legado_do_valor_cifrado_e_IV_aleatorio()
         {
-            var a = DataProtector.Encrypt("mesmo texto");
-            var b = DataProtector.Encrypt("mesmo texto");
+            var chave = DataProtector.Chaves.Atual;
+            var a = DataProtector.EncryptLegado("mesmo texto", chave);
+            var b = DataProtector.EncryptLegado("mesmo texto", chave);
 
             Assert.NotEqual(a, b); // IV novo a cada vez
             var partes = a.Split('|');

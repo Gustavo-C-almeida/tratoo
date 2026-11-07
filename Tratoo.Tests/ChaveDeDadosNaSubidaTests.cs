@@ -84,12 +84,14 @@ namespace Tratoo.Tests
         }
 
         [Fact]
-        public async Task Recifragem_sem_chave_anterior_recusa_e_explica()
+        public async Task Recifragem_sem_chave_anterior_e_migracao_de_formato_e_segue_para_o_banco()
         {
+            // Sem anterior não há troca de chave, mas ainda há valores AES-CBC a converter para v2.
             var (exit, saida) = await ProcessoApi.RodarAsync("--recifrar-dados", Ambiente("chave-nova-de-teste-0123456789-abcdef"));
 
-            Assert.Equal(2, exit);
-            Assert.Contains(DataProtector.VariavelDeAmbienteAnterior, saida);
+            Assert.Equal(1, exit);                       // banco inalcançável
+            Assert.Contains("Recifragem falhou", saida);
+            Assert.DoesNotContain("Recifragem abortada", saida);
             Assert.DoesNotContain("Now listening", saida);
         }
 
