@@ -45,6 +45,9 @@ namespace Tratoo.Domain.Features.Shared
         public const string ChaveAnteriorConfiguracao = "DataProtector:ChaveAnterior";
         public const string VariavelDeAmbienteAnterior = "DataProtector__ChaveAnterior";
 
+        /// <summary>Tamanho mínimo, em bytes UTF-8, da chave NOVA durante uma rotação.</summary>
+        public const int TamanhoMinimoChaveNova = 32;
+
         /// <summary>Prefixo dos placeholders dos arquivos de exemplo — nunca é uma chave válida.</summary>
         private const string PrefixoPlaceholder = "DEFINA_";
 
@@ -87,6 +90,14 @@ namespace Tratoo.Domain.Features.Shared
             var atual = DerivarChave(chave, VariavelDeAmbiente, ChaveConfiguracao);
             if (string.IsNullOrEmpty(chaveAnterior))
                 return new ChavesDeDados(atual, null);
+
+            // Numa troca, a chave NOVA tem de ter 32+ bytes: abaixo disso a derivação completa
+            // com zeros e a chave perde entropia. A chave atual fora de uma troca segue aceita
+            // como está, para não impedir a subida com a chave que já cifra os dados.
+            if (Encoding.UTF8.GetByteCount(chave!) < TamanhoMinimoChaveNova)
+                throw new InvalidOperationException(
+                    $"Numa rotação, a chave nova ({VariavelDeAmbiente}) precisa ter ao menos " +
+                    $"{TamanhoMinimoChaveNova} bytes. Gere com `openssl rand -base64 32`.");
 
             var anterior = DerivarChave(chaveAnterior, VariavelDeAmbienteAnterior, ChaveAnteriorConfiguracao);
             if (CryptographicOperations.FixedTimeEquals(atual, anterior))
