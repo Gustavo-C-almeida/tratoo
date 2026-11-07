@@ -80,7 +80,7 @@ namespace Tratoo.API.EndPoints
 
                 var resultado = await service.LiberarPagamentoAsync(id, userId.Value, dto.ObservacaoContratante, ip, userAgent);
                 return Results.Ok(resultado);
-            }).RequireAuthorization("Contratante");
+            }).RequireAuthorization("Contratante").ExigirReautenticacaoRecente();
 
             // ──────────────────────────────────────────────────────────────────────
             // ABRIR DISPUTA
@@ -98,7 +98,7 @@ namespace Tratoo.API.EndPoints
 
                 var disputa = await service.AbrirDisputaAsync(id, userId.Value, dto);
                 return Results.Ok(disputa);
-            }).RequireAuthorization();
+            }).RequireAuthorization().RequireSessaoVerificada();
 
             // Resolução de disputa: ver área administrativa
             // POST /api/admin/disputas/{disputaId}/resolver (AdminDisputaExtensions, role Admin)
@@ -164,7 +164,7 @@ namespace Tratoo.API.EndPoints
                     pagamentoId = resultado.Id,
                     statusAtual = resultado.Status.ToString()
                 });
-            }).RequireAuthorization("Admin");
+            }).RequireAuthorization("Admin").RequireSessaoVerificada();
         }
 
         /// <summary>

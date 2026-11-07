@@ -403,7 +403,8 @@ async function carregarMensagens(primeiraCarga = false) {
     let resp;
     try {
         const url = `/api/projects/${projetoId}/mensagens?page=1&prestadorId=${prestadorId}`;
-        resp = await api.get(url);
+        // Passivo: o polling (3 s / 30 s) não conta como atividade e não segura a sessão aberta.
+        resp = await api.get(url, { passivo: true });
     } catch {
         if (primeiraCarga) {
             lista.innerHTML = '<p class="chat-estado">Não foi possível carregar as mensagens.</p>';

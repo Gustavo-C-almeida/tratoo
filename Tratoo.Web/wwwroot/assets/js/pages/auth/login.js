@@ -1,6 +1,13 @@
 import { api } from '/assets/js/services/api.js';
 import { onReady } from '/assets/js/core/app.js';
 import { escapeHtml, setButtonLoading, showError, getErrorMessage } from '/assets/js/utils/form.js';
+import { el } from '/assets/js/utils/dom.js';
+import { retornoSeguro } from '/assets/js/services/refresh.js';
+
+// ?motivo=expirada&retorno=/pages/... — vindo de uma sessão que expirou (services/refresh.js).
+const parametros = new URLSearchParams(window.location.search);
+const motivoLogin = parametros.get('motivo');
+const retornoAposLogin = retornoSeguro(parametros.get('retorno'));
 
 // e-mail guardado em memória para os fluxos de MFA e reset de senha
 let emailMFA = null;
@@ -42,6 +49,14 @@ function renderizarFormLogin() {
                 </div>
             </div>
 
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="manterConectado" name="manterConectado">
+                <label class="form-check-label small" for="manterConectado">
+                    Manter conectado neste dispositivo
+                </label>
+                <div class="form-text">Até 14 dias. Não use em computadores compartilhados.</div>
+            </div>
+
             <div class="text-center mb-3">
                 <a href="#" id="esqueceuSenha" class="small fw-semibold text-decoration-none">Esqueci minha senha</a>
             </div>
@@ -58,6 +73,13 @@ function renderizarFormLogin() {
             <a href="/pages/auth/start.html" class="fw-semibold text-decoration-none">Cadastre-se</a>
         </p>
     `;
+
+    // Aviso de sessão expirada: DOM com el(), sem HTML vindo da URL.
+    if (motivoLogin === 'expirada') {
+        container.querySelector('.text-center')?.after(
+            el('div', { class: 'alert alert-info py-2 px-3 small', role: 'status' },
+                'Sua sessão expirou. Entre novamente para continuar de onde parou.'));
+    }
 
     document.getElementById('email')?.focus();
 }
@@ -231,6 +253,9 @@ async function redirecionarAposLogin(perfilCompleto, tipo) {
 
     if (perfilStatus === false) {
         window.location.href = '/pages/auth/onboarding.html';
+    } else if (retornoAposLogin) {
+        // Volta para onde a sessão expirou (só caminhos do próprio site).
+        window.location.href = retornoAposLogin;
     } else if (tipoUsuario === 'Contratante') {
         window.location.href = '/pages/contratante/meus-projetos.html';
     } else {
@@ -257,6 +282,7 @@ document.addEventListener('submit', async function (e) {
     if (form.id === 'loginForm') {
         const email = document.getElementById('email').value.trim();
         const senha = document.getElementById('senha').value;
+        const manterConectado = document.getElementById('manterConectado')?.checked === true;
 
         // Validações
         const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -273,13 +299,15 @@ document.addEventListener('submit', async function (e) {
         const restaurarBtn = setButtonLoading(btn, 'Aguarde...');
 
         try {
-            const response = await api.post('/usuarios/login', { email, senha });
+            const response = await api.post('/usuarios/login', { email, senha, manterConectado });
 
             // CASO 1: Usuário tem MFA habilitado
             if (response.requerMFA) {
                 // Guarda apenas o email para usar na validação do MFA
                 dadosLoginPendente = {
-                    email: response.email ?? email
+                    email: response.email ?? email,
+                    // A sessão só nasce no passo do MFA: a escolha vai junto de novo.
+                    manterConectado
                     // NÃO guarda perfilCompleto aqui porque o login ainda não foi concluído
                 };
                 renderizarFormMFA(dadosLoginPendente.email);
@@ -324,7 +352,8 @@ document.addEventListener('submit', async function (e) {
             // Valida o código MFA - SÓ AQUI O LOGIN É EFETIVAMENTE CONCLUÍDO
             const response = await api.post('/usuarios/login/mfa', {
                 email: emailParaValidar,
-                codigo
+                codigo,
+                manterConectado: dadosLoginPendente?.manterConectado === true
             });
 
             // Agora sim, após o MFA ser confirmado, verifica o perfil e redireciona

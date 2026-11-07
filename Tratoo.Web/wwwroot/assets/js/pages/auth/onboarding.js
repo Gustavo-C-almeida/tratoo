@@ -518,13 +518,10 @@ function renderizarEndereco(fnVoltar, etapaAtual, totalEtapas) {
 async function renderizarSucesso() {
     let destino = '/';
     try {
-        const resp = await fetch('/api/me', { credentials: 'same-origin' });
-        if (resp.ok) {
-            const me = await resp.json();
-            destino = me.tipo === 'Contratante'
-                ? '/pages/contratante/meus-projetos.html'
-                : '/pages/projetos/index.html';
-        }
+        const me = await api.get('/api/me', { silencioso: true });
+        destino = me.tipo === 'Contratante'
+            ? '/pages/contratante/meus-projetos.html'
+            : '/pages/projetos/index.html';
     } catch { /* fallback para '/' */ }
 
     container().innerHTML = `
@@ -546,12 +543,14 @@ async function renderizarSucesso() {
 // Se não autenticado, redireciona para login.
 (async function inicializar() {
     try {
-        const resp = await fetch('/api/me', { credentials: 'same-origin' });
-        if (resp.status === 401) {
-            window.location.replace('/pages/auth/login.html');
-            return;
+        // api.js renova a sessão se o access expirou; sem sessão, ele mesmo leva ao login.
+        let me;
+        try {
+            me = await api.get('/api/me', { silencioso: true });
+        } catch (err) {
+            if (err?.status === 401) return;   // já redirecionado pelo api.js
+            throw err;
         }
-        const me = await resp.json().catch(() => ({}));
         if (me.perfilCompleto === true) {
             const destino = me.tipo === 'Contratante'
                 ? '/pages/contratante/meus-projetos.html'

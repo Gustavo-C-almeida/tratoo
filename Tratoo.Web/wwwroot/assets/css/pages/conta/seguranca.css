@@ -1,0 +1,15 @@
+/* ── pages/conta/seguranca — Segurança e dispositivos ─────────────────────── */
+
+.seguranca {
+    max-width: 52rem;
+}
+
+.seguranca__form {
+    max-width: 26rem;
+}
+
+.seguranca__sessao-detalhe {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color);
+    overflow-wrap: anywhere;
+}

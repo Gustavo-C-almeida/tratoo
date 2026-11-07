@@ -223,7 +223,7 @@ namespace Tratoo.API.EndPoints
 
                 var resultado = await service.AprovarEntregaAsync(id, userId.Value, ip, userAgent);
                 return Results.Ok(resultado);
-            }).RequireAuthorization();
+            }).RequireAuthorization().ExigirReautenticacaoRecente();
 
             // ──────────────────────────────────────────────────────────────────────
             // SOLICITAR AJUSTES (rejeitar) — apenas contratante

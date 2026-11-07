@@ -144,7 +144,7 @@ services:
       DataProtector__ChaveAnterior: ${DATAPROTECTOR_CHAVE_ANTERIOR:-}
       Jwt__Issuer: tratoo-local
       Jwt__Audience: tratoo-local
-      Jwt__ExpirationHours: "8"
+      # Tempos de sessão: padrões do código (SessaoConfig). Para mudar, Sessao__* (ver .env.example).
 
       # E-mail é obrigatório: cadastro, MFA e reset de senha dependem dele.
       Resend__ApiKey: ${RESEND_API_KEY:?defina RESEND_API_KEY no .env}

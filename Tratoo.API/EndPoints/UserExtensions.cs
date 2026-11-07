@@ -12,18 +12,8 @@ namespace Tratoo.API.EndPoints
 {
     public static class UserExtencions
     {
-        private static CookieOptions CriarOpcoesCookie(bool isDev) => new()
-        {
-            HttpOnly = true,
-            Secure = !isDev,
-            SameSite = SameSiteMode.Strict,
-            Expires = DateTimeOffset.UtcNow.AddHours(8),
-            Path = "/"
-        };
-
         public static void AddEndPointsUsers(this WebApplication app)
         {
-            var isDev = app.Environment.IsDevelopment();
 
             // ──────────────────────────────────────────
             // Login
@@ -32,7 +22,7 @@ namespace Tratoo.API.EndPoints
                 LoginRequest request,
                 HttpContext http,
                 ILoginService loginService,
-                IJwtService jwtService) =>
+                SessaoService sessoes) =>
             {
                 var ip = ClientRequestInfo.ObterIp(http);
 
@@ -46,8 +36,8 @@ namespace Tratoo.API.EndPoints
                 if (resultado.RequerMFA)
                     return Results.Ok(new { requerMFA = true, email = resultado.Email, mensagem = resultado.Mensagem });
 
-                var token = jwtService.Gerar(resultado.UsuarioId, resultado.Email, resultado.Nome, resultado.Tipo, resultado.PerfilMinimoCompleto, resultado.IsAdmin);
-                http.Response.Cookies.Append("tratoo_auth", token, CriarOpcoesCookie(isDev));
+                // Sessão nova a cada login (novo sid): anti session fixation.
+                var (sessao, politica) = await sessoes.CriarAsync(http, UsuarioSessao.De(resultado), request.ManterConectado);
 
                 return Results.Ok(new
                 {
@@ -56,7 +46,8 @@ namespace Tratoo.API.EndPoints
                     usuarioId = resultado.UsuarioId,
                     tipo = resultado.Tipo,
                     perfilCompleto = resultado.PerfilMinimoCompleto,
-                    isAdmin = resultado.IsAdmin
+                    isAdmin = resultado.IsAdmin,
+                    sessao = AuthExtensions.DescreverSessao(sessao, politica)
                 });
             }).RequireRateLimiting("login");
 
@@ -67,7 +58,7 @@ namespace Tratoo.API.EndPoints
                 ValidarLoginMFARequest request,
                 HttpContext http,
                 ILoginService loginService,
-                IJwtService jwtService) =>
+                SessaoService sessoes) =>
             {
                 var ip = ClientRequestInfo.ObterIp(http);
 
@@ -78,8 +69,7 @@ namespace Tratoo.API.EndPoints
                     Ip = ip
                 });
 
-                var token = jwtService.Gerar(resultado.UsuarioId, resultado.Email, resultado.Nome, resultado.Tipo, resultado.PerfilMinimoCompleto, resultado.IsAdmin);
-                http.Response.Cookies.Append("tratoo_auth", token, CriarOpcoesCookie(isDev));
+                var (sessao, politica) = await sessoes.CriarAsync(http, UsuarioSessao.De(resultado), request.ManterConectado);
 
                 return Results.Ok(new
                 {
@@ -88,14 +78,15 @@ namespace Tratoo.API.EndPoints
                     usuarioId = resultado.UsuarioId,
                     tipo = resultado.Tipo,
                     perfilCompleto = resultado.PerfilMinimoCompleto,
-                    isAdmin = resultado.IsAdmin
+                    isAdmin = resultado.IsAdmin,
+                    sessao = AuthExtensions.DescreverSessao(sessao, politica)
                 });
             }).RequireRateLimiting("login");
 
             // ──────────────────────────────────────────
             // GET /api/me — dados básicos do usuário logado
             // ──────────────────────────────────────────
-            app.MapGet("/api/me", (HttpContext http) =>
+            app.MapGet("/api/me", (HttpContext http, SessaoConfig config) =>
             {
                 var userIdStr = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                              ?? http.User.FindFirst("sub")?.Value;
@@ -108,17 +99,22 @@ namespace Tratoo.API.EndPoints
                 if (!int.TryParse(userIdStr, out var userId))
                     return Results.Unauthorized();
 
-                return Results.Ok(new { id = userId, nome, email, tipo, perfilCompleto, isAdmin });
+                // Datas da sessão para o aviso de expiração no frontend. null quando o
+                // armazenamento de sessões não respondeu (a requisição seguiu só com o JWT).
+                var dados = SessaoAtual.Dados(http);
+                var sessao = dados is null
+                    ? null
+                    : AuthExtensions.DescreverSessao(dados, config.Para(dados.EhAdmin, dados.ManterConectado));
+
+                return Results.Ok(new { id = userId, nome, email, tipo, perfilCompleto, isAdmin, sessao });
             }).RequireAuthorization();
 
             // ──────────────────────────────────────────
             // Logout
             // ──────────────────────────────────────────
-            app.MapPost("usuarios/logout", (HttpContext http) =>
-            {
-                http.Response.Cookies.Delete("tratoo_auth", new CookieOptions { Path = "/" });
-                return Results.Ok(new { mensagem = "Logout realizado com sucesso" });
-            });
+            // Mantido por compatibilidade; o frontend usa POST /api/auth/logout. Aqui o cookie
+            // de refresh (Path=/api/auth) não chega, então a sessão é achada pelo access token.
+            app.MapPost("usuarios/logout", AuthExtensions.Logout).AllowAnonymous();
 
             // ──────────────────────────────────────────
             // Excluir conta (Soft Delete — LGPD Art. 18)
@@ -126,7 +122,8 @@ namespace Tratoo.API.EndPoints
             // ──────────────────────────────────────────
             app.MapDelete("usuarios/conta", async (
                 HttpContext http,
-                IExclusaoContaService service) =>
+                IExclusaoContaService service,
+                SessaoService sessoes) =>
             {
                 var userIdStr = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                              ?? http.User.FindFirst("sub")?.Value;
@@ -137,11 +134,12 @@ namespace Tratoo.API.EndPoints
 
                 await service.ExcluirAsync(new ExcluirContaDTO { UserId = userId, Ip = ip });
 
-                // Encerra a sessão imediatamente — a conta não pode mais ser usada.
-                http.Response.Cookies.Delete("tratoo_auth", new CookieOptions { Path = "/" });
+                // Encerra TODAS as sessões imediatamente — a conta não pode mais ser usada.
+                await sessoes.RevogarTodasAsync(userId, SessaoService.MotivoContaExcluida, ip);
+                sessoes.LimparCookies(http);
 
                 return Results.Ok(new { mensagem = "Conta excluída com sucesso." });
-            }).RequireAuthorization();
+            }).RequireAuthorization().ExigirReautenticacaoRecente();
 
 
             // ──────────────────────────────────────────
@@ -219,7 +217,10 @@ namespace Tratoo.API.EndPoints
             app.MapPost("usuarios/senha/resetar", async (
                 ResetarSenhaRequest request,
                 HttpContext http,
-                ILoginService loginService) =>
+                ILoginService loginService,
+                IUsuarioRepository usuarioRepo,
+                SessaoService sessoes,
+                ILogger<SessaoService> logger) =>
             {
                 var ip = ClientRequestInfo.ObterIp(http);
                 await loginService.ResetarSenhaAsync(new ResetarSenhaDTO
@@ -230,6 +231,21 @@ namespace Tratoo.API.EndPoints
                     ConfirmarNovaSenha = request.ConfirmarNovaSenha,
                     Ip = ip
                 });
+
+                // Redefinição (quem esqueceu a senha ou suspeita de invasão): revoga todas as
+                // sessões. A senha já mudou; se o Redis falhar aqui, responder 503 faria o
+                // usuário repetir um código já consumido — registra e segue.
+                try
+                {
+                    var usuario = await usuarioRepo.ObterPorEmailAsync(request.Email.Trim());
+                    if (usuario is not null)
+                        await sessoes.RevogarTodasAsync(usuario.Id, SessaoService.MotivoSenhaRedefinida, ip);
+                }
+                catch (ServicoIndisponivelException)
+                {
+                    logger.LogError("Senha redefinida, mas as sessões não puderam ser revogadas (armazenamento indisponível). Elas expiram por inatividade.");
+                }
+
                 return Results.Ok(new
                 {
                     mensagem = "Senha redefinida com sucesso. Você já pode fazer login com a nova senha."
@@ -245,7 +261,7 @@ namespace Tratoo.API.EndPoints
                 HttpContext http,
                 IUsuarioRepository usuarioRepo,
                 IIdentidadeService identidadeService,
-                IJwtService jwtService) =>
+                SessaoService sessoes) =>
             {
                 var userIdStr = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? http.User.FindFirst("sub")?.Value;
@@ -319,16 +335,12 @@ namespace Tratoo.API.EndPoints
 
                 // Re-emite o cookie JWT com perfilCompleto=true para desbloquear imediatamente
                 // todas as rotas protegidas sem exigir um novo login.
-                if (perfilCompleto)
+                // A sessão (sid) continua a mesma: só o access token muda.
+                var sid = SessaoAtual.SidDoToken(http.User);
+                if (perfilCompleto && sid is not null)
                 {
-                    var novoToken = jwtService.Gerar(
-                        usuarioAtualizado!.Id,
-                        usuarioAtualizado.Email,
-                        usuarioAtualizado.Nome,
-                        usuarioAtualizado.TipoUsuario.ToString(),
-                        perfilMinimoCompleto: true);
-
-                    http.Response.Cookies.Append("tratoo_auth", novoToken, CriarOpcoesCookie(isDev));
+                    sessoes.ReemitirAccess(http, UsuarioSessao.De(usuarioAtualizado!), sid,
+                        manterConectado: SessaoAtual.Dados(http)?.ManterConectado ?? false);
                 }
 
                 return Results.Ok(new
