@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
@@ -17,10 +16,8 @@ namespace Tratoo.Domain.Features.Auth
 
         public string Gerar(int usuarioId, string email, string nome, string tipo, bool perfilMinimoCompleto, bool isAdmin, string sid, TimeSpan validade)
         {
-            var chave = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_config["Jwt:SecretKey"]!));
-
-            var credenciais = new SigningCredentials(chave, SecurityAlgorithms.HmacSha256);
+            // Sempre a chave ATUAL; o kid dela vai no cabeçalho (ver ChavesJwt).
+            var credenciais = new SigningCredentials(ChavesJwt.DeConfiguracao(_config).Atual, SecurityAlgorithms.HmacSha256);
 
             var claims = new List<Claim>
             {

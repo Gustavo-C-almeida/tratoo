@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Tratoo.Domain.Exceptions;
+using Tratoo.Domain.Features.Auth;
 
 namespace Tratoo.API.Infrastructure
 {
@@ -77,8 +78,8 @@ namespace Tratoo.API.Infrastructure
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(
-                            Encoding.UTF8.GetBytes(configuration["Jwt:SecretKey"] ?? string.Empty)),
+                        // Atual e, numa troca, a anterior; o kid do token escolhe a chave.
+                        IssuerSigningKeys = ChavesJwt.DeConfiguracao(configuration).Validacao,
                         ValidateIssuer = true,
                         ValidIssuer = configuration["Jwt:Issuer"],
                         ValidateAudience = true,

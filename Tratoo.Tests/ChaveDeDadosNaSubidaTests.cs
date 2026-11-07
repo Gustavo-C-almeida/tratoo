@@ -22,6 +22,7 @@ namespace Tratoo.Tests
                 ["PORT"] = ProcessoApi.PortaLivre().ToString(),
                 // Em Production o token do webhook do Asaas é obrigatório (outro teste cobre isso).
                 ["Asaas__WebhookToken"] = "token-de-teste-do-webhook-0123456789",
+                ["Jwt__SecretKey"] = "chave-jwt-dos-testes-de-processo-0123456789",
                 ["ConnectionStrings__DefaultConnection"] = conexao,
                 ["ConnectionStrings__VectorConnection"] = conexao
             };
@@ -118,6 +119,21 @@ namespace Tratoo.Tests
             Assert.Equal(1, exit);
             Assert.Contains("[startup]", saida);
             Assert.Contains("32 bytes", saida);
+            Assert.DoesNotContain("Now listening", saida);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("curta-demais-0123456789")]
+        public async Task Sem_chave_do_JWT_valida_a_API_nao_sobe(string? chaveJwt)
+        {
+            var ambiente = Ambiente("uma-chave-de-teste-qualquer-0123456789");
+            ambiente["Jwt__SecretKey"] = chaveJwt;
+            var (exit, saida) = await ProcessoApi.RodarAsync(argumento: null, ambiente);
+
+            Assert.Equal(1, exit);
+            Assert.Contains("[startup]", saida);
+            Assert.Contains("Jwt__SecretKey", saida);
             Assert.DoesNotContain("Now listening", saida);
         }
     }

@@ -61,6 +61,12 @@ try
         builder.Configuration[Tratoo.API.Infrastructure.SegredosObrigatorios.WebhookTokenConfiguracao],
         builder.Configuration[Tratoo.API.Infrastructure.SegredosObrigatorios.WebhookTokenAnteriorConfiguracao],
         builder.Environment.IsDevelopment());
+
+    // Chaves do JWT: a atual (assina) e, numa troca, a anterior (só valida). Ausente,
+    // placeholder ou curta impede a subida aqui, em vez de quebrar no primeiro login.
+    var chavesJwt = Tratoo.Domain.Features.Auth.ChavesJwt.DeConfiguracao(builder.Configuration);
+    if (chavesJwt.Anterior is not null)
+        Console.WriteLine("[startup] Troca da chave do JWT em curso: assinando com a nova, validando também a anterior.");
 }
 catch (InvalidOperationException ex)
 {

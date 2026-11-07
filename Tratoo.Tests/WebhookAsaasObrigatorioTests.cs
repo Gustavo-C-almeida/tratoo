@@ -126,7 +126,8 @@ namespace Tratoo.Tests
                 ["PORT"] = ProcessoApi.PortaLivre().ToString(),
                 ["ConnectionStrings__DefaultConnection"] = conexao,
                 ["ConnectionStrings__VectorConnection"] = conexao,
-                [DataProtector.VariavelDeAmbiente] = "uma-chave-de-teste-qualquer-0123456789"
+                [DataProtector.VariavelDeAmbiente] = "uma-chave-de-teste-qualquer-0123456789",
+                ["Jwt__SecretKey"] = "chave-jwt-dos-testes-de-processo-0123456789"
             };
             if (token is not null)
                 env[SegredosObrigatorios.WebhookTokenVariavel] = token;
