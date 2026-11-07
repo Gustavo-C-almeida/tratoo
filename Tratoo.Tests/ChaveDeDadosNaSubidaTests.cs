@@ -20,6 +20,8 @@ namespace Tratoo.Tests
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["PORT"] = ProcessoApi.PortaLivre().ToString(),
+                // Em Production o token do webhook do Asaas é obrigatório (outro teste cobre isso).
+                ["Asaas__WebhookToken"] = "token-de-teste-do-webhook-0123456789",
                 ["ConnectionStrings__DefaultConnection"] = conexao,
                 ["ConnectionStrings__VectorConnection"] = conexao
             };

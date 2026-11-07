@@ -13,6 +13,12 @@ namespace Tratoo.Domain.Features.Pagamentos
         public string WebhookToken { get; set; } = string.Empty;
 
         /// <summary>
+        /// Token anterior, aceito SÓ durante uma troca do <see cref="WebhookToken"/> (entre
+        /// mudar o painel do Asaas e o deploy chegar). Vazio fora de uma troca.
+        /// </summary>
+        public string WebhookTokenAnterior { get; set; } = string.Empty;
+
+        /// <summary>
         /// Quando true, a liberação ao prestador é finalizada (status Liberado) imediatamente
         /// após a criação da transferência, sem aguardar o webhook TRANSFER_DONE. Use apenas
         /// em ambientes sem entrega de webhook (ex.: localhost sem túnel). Padrão: false —
