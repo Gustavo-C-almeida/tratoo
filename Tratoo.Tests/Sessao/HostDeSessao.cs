@@ -264,7 +264,10 @@ namespace Tratoo.Tests.Sessao
     internal sealed class UsuariosFalsos : IUsuarioRepository
     {
         private readonly ConcurrentDictionary<int, Usuario> _porId = new();
-        private int _proximo = 100;
+        // Contador ÚNICO no processo, não por instância: os testes com Redis real compartilham
+        // o mesmo servidor (RedisFixture), e IDs repetidos entre hosts faziam um teste herdar as
+        // sessões que outro deixou em "sessoes-usuario:{id}".
+        private static int _proximo = 100;
 
         /// <summary>BCrypt com custo 4: o hash é verificado de verdade, mas sem pagar o custo de produção.</summary>
         public Contratante Novo(bool mfa = false, bool admin = false)
