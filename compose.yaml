@@ -135,6 +135,8 @@ services:
       AllowedHosts: localhost;127.0.0.1
 
       Jwt__SecretKey: ${JWT_SECRET_KEY:?defina JWT_SECRET_KEY no .env (32+ caracteres aleatórios)}
+      # Só durante uma troca da chave do JWT (Docs/ROTACAO-CHAVES.md): valida, não assina.
+      Jwt__SecretKeyAnterior: ${JWT_SECRET_KEY_ANTERIOR:-}
 
       # Chave AES dos dados sensíveis (conta bancária, PIX, CPF/CNPJ). Não está mais no
       # código: sem ela a API não sobe. Aqui é uma chave LOCAL qualquer — nunca a de
