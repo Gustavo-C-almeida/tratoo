@@ -59,9 +59,16 @@ namespace Tratoo.API.Infrastructure
                     "dados-cifrados",
                     failureStatus: HealthStatus.Unhealthy,
                     tags: new[] { TagReady },
+                    timeout: TimeoutPorCheck)
+                // Estado da recifragem automática (só informativo: nunca Unhealthy).
+                .AddCheck<RecifragemHealthCheck>(
+                    "recifragem",
+                    failureStatus: HealthStatus.Degraded,
+                    tags: new[] { TagReady },
                     timeout: TimeoutPorCheck);
 
             services.AddSingleton<EstadoChaveDados>();
+            services.AddSingleton<EstadoRecifragem>();
 
             return services;
         }
