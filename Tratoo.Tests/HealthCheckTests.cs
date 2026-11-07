@@ -275,6 +275,10 @@ namespace Tratoo.Tests
         [InlineData("/usuarios/senha/resetar")]
         [InlineData("/swagger")]
         [InlineData("/api/cep/01310100")]
+        [InlineData("/api/auth/refresh")]
+        [InlineData("/api/auth/logout")]
+        [InlineData("/api/auth/sessoes")]
+        [InlineData("/api/auth/reautenticar")]
         public void IsencoesPreexistentes_ForamPreservadas(string caminho)
         {
             Assert.True(RotasIsentasOnboarding.EhIsenta(caminho));

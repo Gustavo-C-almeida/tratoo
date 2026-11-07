@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segurança e dispositivos — Tratoo</title>
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/pages/conta/seguranca.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+</head>
+<body>
+    <tratoo-header></tratoo-header>
+
+    <main class="container py-4 seguranca">
+        <h1 class="page-title h3 mb-1">Segurança e dispositivos</h1>
+        <p class="page-subtitle mb-4">Veja onde sua conta está conectada e ajuste a proteção de acesso.</p>
+
+        <p id="seguranca-erro" class="alert alert-danger py-2 px-3 small" role="alert" hidden></p>
+        <p id="seguranca-ok" class="alert alert-success py-2 px-3 small" role="status" hidden></p>
+
+        <section class="card mb-4" aria-labelledby="titulo-dispositivos">
+            <div class="card-body">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <h2 class="h5 mb-0" id="titulo-dispositivos">Dispositivos conectados</h2>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="btn-sair-todas">
+                        Sair de todos os dispositivos
+                    </button>
+                </div>
+                <ul class="list-group list-group-flush" id="lista-sessoes" aria-live="polite"></ul>
+            </div>
+        </section>
+
+        <section class="card mb-4" aria-labelledby="titulo-senha">
+            <div class="card-body">
+                <h2 class="h5" id="titulo-senha">Trocar senha</h2>
+                <p class="small text-secondary">Os outros dispositivos serão desconectados; este continua conectado.</p>
+                <form id="form-senha" novalidate class="seguranca__form">
+                    <div class="mb-3">
+                        <label class="form-label" for="nova-senha">Nova senha</label>
+                        <input type="password" class="form-control" id="nova-senha" autocomplete="new-password" required>
+                        <div class="form-text">Mínimo 8 caracteres, com 1 maiúscula, 1 número e 1 caractere especial.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="confirmar-senha">Confirmar nova senha</label>
+                        <input type="password" class="form-control" id="confirmar-senha" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Salvar nova senha</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="card mb-4" aria-labelledby="titulo-mfa">
+            <div class="card-body">
+                <h2 class="h5" id="titulo-mfa">Verificação em duas etapas</h2>
+                <p class="small text-secondary mb-2">
+                    Com ela ativa, o login pede também um código enviado para o seu e-mail.
+                    Ao mudar esta opção, todos os dispositivos (inclusive este) são desconectados.
+                </p>
+                <p class="mb-3" id="mfa-status" aria-live="polite">Carregando…</p>
+                <button type="button" class="btn btn-outline-primary" id="btn-mfa" hidden></button>
+            </div>
+        </section>
+    </main>
+
+    <tratoo-footer></tratoo-footer>
+
+    <script type="module" src="/assets/js/core/app.js"></script>
+    <script src="/assets/js/utils/auth-guard.js"></script>
+    <script type="module" src="/assets/js/pages/conta/seguranca.js"></script>
+</body>
+</html>
