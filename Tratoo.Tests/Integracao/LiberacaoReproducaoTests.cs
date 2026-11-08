@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,12 +46,14 @@ namespace Tratoo.Tests.Integracao
             private int _chamadas;
             public int Chamadas => Volatile.Read(ref _chamadas);
             public Func<int, Exception?> Responder { get; init; } = _ => null;
+            public ConcurrentQueue<AsaasTransferenciaPixRequest> Pedidos { get; } = new();
 
             public IAsaasGatewayService Criar() => Falso<IAsaasGatewayService>.Criar(
                 new Dictionary<string, Func<object?[], object?>>
                 {
-                    [nameof(IAsaasGatewayService.CriarTransferenciaPixAsync)] = _ =>
+                    [nameof(IAsaasGatewayService.CriarTransferenciaPixAsync)] = args =>
                     {
+                        Pedidos.Enqueue((AsaasTransferenciaPixRequest)args[0]!);
                         var erro = Responder(Interlocked.Increment(ref _chamadas));
                         return erro is null
                             ? Task.FromResult(new AsaasTransferenciaResponse("tra_" + Guid.NewGuid().ToString("N")[..10], "PENDING"))
@@ -181,6 +184,20 @@ namespace Tratoo.Tests.Integracao
             Assert.True(await job.ExecutarRodadaAsync(CancellationToken.None));
             Assert.Equal(2, asaas.Chamadas);                 // segunda tentativa é legítima
             Assert.Equal(StatusPagamento.TransferenciaEmProgresso, (await EstadoAsync(conexao, cenario.PagamentoId!.Value)).Status);
+        }
+
+        [FactComDocker]
+        public async Task Liberacao_envia_o_id_do_pagamento_como_referencia_externa()
+        {
+            var conexao = await _pg.CriarBancoMigradoAsync();
+            var cenario = await SeedIntegracao.CriarAsync(conexao, comPagamentoRetidoVencido: true);
+            var asaas = new AsaasContador();
+            await using var servicos = Servicos(conexao, asaas.Criar());
+
+            await Job(servicos).ExecutarRodadaAsync(CancellationToken.None);
+
+            var pedido = Assert.Single(asaas.Pedidos);
+            Assert.Equal(cenario.PagamentoId!.Value.ToString(), pedido.ReferenciaExterna);
         }
 
         [FactComDocker]

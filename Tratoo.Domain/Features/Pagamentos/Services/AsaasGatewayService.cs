@@ -228,13 +228,15 @@ namespace Tratoo.Domain.Features.Pagamentos
         // ─────────────────────────────────────────────────────────────────────────
         public async Task<AsaasTransferenciaResponse> CriarTransferenciaPixAsync(AsaasTransferenciaPixRequest request)
         {
-            var body = new
+            var body = new Dictionary<string, object?>
             {
-                value           = (double)request.Valor,
-                pixAddressKey   = request.ChavePix,
-                pixAddressKeyType = request.TipoChavePix,
-                description     = request.Descricao
+                ["value"]             = (double)request.Valor,
+                ["pixAddressKey"]     = request.ChavePix,
+                ["pixAddressKeyType"] = request.TipoChavePix,
+                ["description"]       = request.Descricao
             };
+            if (!string.IsNullOrWhiteSpace(request.ReferenciaExterna))
+                body["externalReference"] = request.ReferenciaExterna;
 
             var json    = JsonSerializer.Serialize(body, _jsonOpts);
             var content = new StringContent(json, Encoding.UTF8, "application/json");

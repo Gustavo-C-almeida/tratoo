@@ -1005,7 +1005,9 @@ namespace Tratoo.Domain.Features.Pagamentos
                     Valor: pagamento.ValorBruto,   // Prestador recebe 100% do valor pago
                     ChavePix: chavePix,
                     TipoChavePix: tipoChavePix,
-                    Descricao: descricao
+                    Descricao: descricao,
+                    // Liga a transferência a este pagamento no Asaas (conciliação).
+                    ReferenciaExterna: pagamento.Id.ToString()
                 ));
             }
             catch (AsaasIntegracaoException asaasEx)

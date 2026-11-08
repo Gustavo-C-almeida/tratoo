@@ -128,11 +128,18 @@ namespace Tratoo.Domain.Features.Pagamentos
         DateTime? ExpirationDate
     );
 
+    /// <param name="ReferenciaExterna">
+    /// Vai em <c>externalReference</c> ("Identificador da transferência no seu sistema",
+    /// documentado em POST /v3/transfers). Na liberação é o <c>Pagamento.Id</c>: liga a
+    /// transferência ao pagamento mesmo quando a resposta da criação se perde. NÃO é chave de
+    /// idempotência — o Asaas não deduplica por ele.
+    /// </param>
     public record AsaasTransferenciaPixRequest(
         decimal Valor,
         string ChavePix,
         string TipoChavePix,
-        string Descricao
+        string Descricao,
+        string? ReferenciaExterna = null
     );
 
     public record AsaasTransferenciaResponse(

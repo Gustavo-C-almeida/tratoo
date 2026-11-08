@@ -19,12 +19,14 @@ namespace Tratoo.Tests
         {
             private readonly Func<HttpResponseMessage> _resposta;
             public int Chamadas { get; private set; }
+            public string? UltimoCorpo { get; private set; }
             public HandlerFalso(Func<HttpResponseMessage> resposta) => _resposta = resposta;
 
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
             {
                 Chamadas++;
-                return Task.FromResult(_resposta());
+                UltimoCorpo = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
+                return _resposta();
             }
         }
 
@@ -149,6 +151,36 @@ namespace Tratoo.Tests
             Assert.Equal("tra_abc123", resposta.Id);
             Assert.Equal("PENDING", resposta.Status);
             Assert.Equal(1, handler.Chamadas);
+        }
+
+        // ── externalReference ──────────────────────────────────────────────────
+
+        private static System.Text.Json.JsonElement CorpoEnviado(HandlerFalso handler)
+            => System.Text.Json.JsonDocument.Parse(handler.UltimoCorpo!).RootElement;
+
+        [Fact]
+        public async Task Referencia_externa_vai_no_corpo_como_externalReference()
+        {
+            var handler = new HandlerFalso(() => Resposta(HttpStatusCode.OK, "{\"id\":\"tra_1\",\"status\":\"PENDING\"}"));
+            var pagamentoId = Guid.NewGuid().ToString();
+
+            await Gateway(handler).CriarTransferenciaPixAsync(Pedido with { ReferenciaExterna = pagamentoId });
+
+            var corpo = CorpoEnviado(handler);
+            Assert.Equal(pagamentoId, corpo.GetProperty("externalReference").GetString());
+            // Os campos que já existiam continuam com os nomes da API.
+            Assert.Equal(150, corpo.GetProperty("value").GetDouble());
+            Assert.Equal("12345678909", corpo.GetProperty("pixAddressKey").GetString());
+            Assert.Equal("CPF", corpo.GetProperty("pixAddressKeyType").GetString());
+            Assert.Equal("Liberação contrato", corpo.GetProperty("description").GetString());
+        }
+
+        [Fact]
+        public async Task Sem_referencia_externa_o_campo_nao_e_enviado()
+        {
+            var handler = new HandlerFalso(() => Resposta(HttpStatusCode.OK, "{\"id\":\"tra_1\",\"status\":\"PENDING\"}"));
+            await Gateway(handler).CriarTransferenciaPixAsync(Pedido);
+            Assert.False(CorpoEnviado(handler).TryGetProperty("externalReference", out _));
         }
     }
 }
