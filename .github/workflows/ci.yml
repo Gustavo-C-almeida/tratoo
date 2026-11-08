@@ -1,4 +1,4 @@
-# CI do Tratoo: build + testes nos PRs e nos pushes de staging e main.
+# CI do Tratoo: build + testes + imagem nos PRs e nos pushes de staging e main.
 # Fluxo completo em Docs/CICD.md.
 #
 # Sem segredos de propósito: a suíte usa chave de dados própria (ConfiguracaoDosTestes)
@@ -11,6 +11,12 @@
 # feature não têm push aqui; rodam pelo PR.
 #
 # Sem filtro de paths: um check obrigatório que não roda deixa o PR preso em "Expected".
+# O atalho de documentação fica DENTRO de cada job (.github/scripts/classificar-mudanca.sh),
+# e não num job separado com `needs`: um job pulado por falha da dependência conta como
+# aprovado num check obrigatório.
+#
+# Actions fixadas por tag de major (estratégia do projeto; o Dependabot atualiza). A imagem
+# do Trivy é fixada por versão E digest.
 name: CI
 
 on:
@@ -50,15 +56,16 @@ jobs:
             exit 1
           fi
           # revert-* é o nome que o botão Revert do GitHub dá à branch da retirada.
+          # dependabot/* são os PRs de atualização (.github/dependabot.yml), só para a staging.
           case "$BRANCH_DESTINO:$BRANCH_ORIGEM" in
             main:staging | main:hotfix/*) ;;
-            staging:feature/* | staging:fix/* | staging:hotfix/* | staging:revert-*) ;;
+            staging:feature/* | staging:fix/* | staging:hotfix/* | staging:revert-* | staging:dependabot/*) ;;
             main:*)
               echo "::error::PR para a main só pode sair de staging ou hotfix/* (Docs/CICD.md)."
               exit 1
               ;;
             *)
-              echo "::error::PR para a staging só pode sair de feature/*, fix/*, hotfix/* ou revert-* (Docs/CICD.md)."
+              echo "::error::PR para a staging só pode sair de feature/*, fix/*, hotfix/*, revert-* ou dependabot/* (Docs/CICD.md)."
               exit 1
               ;;
           esac
@@ -81,31 +88,15 @@ jobs:
         with:
           fetch-depth: 0   # histórico completo para comparar com a base
 
-      # Atalho para mudança SÓ de documentação: o check "Build e testes" continua sendo
-      # reportado (é obrigatório em staging e main, sem bypass), mas passa sem build nem
-      # testes. Conservador: só vale se TODOS os arquivos alterados estiverem em Docs/ ou
-      # forem .md na raiz; qualquer outro arquivo, ou não conseguir calcular a diferença
-      # (branch nova, histórico ausente), roda a CI completa.
+      # Mudança SÓ de documentação: o check continua sendo reportado (é obrigatório em
+      # staging e main, sem bypass), mas passa sem build nem testes.
       - name: Classificar a mudança
         id: mudanca
         env:
           EVENTO: ${{ github.event_name }}
           BASE_PR: ${{ github.event.pull_request.base.sha }}
           ANTES_PUSH: ${{ github.event.before }}
-        run: |
-          if [ "$EVENTO" = "pull_request" ]; then base="$BASE_PR"; else base="$ANTES_PUSH"; fi
-          so_docs=false
-          if [ -n "$base" ] && [ "$base" != "0000000000000000000000000000000000000000" ] \
-             && arquivos="$(git diff --name-only "$base" HEAD)" && [ -n "$arquivos" ]; then
-            echo "Arquivos alterados:"; echo "$arquivos" | sed 's/^/  /'
-            if ! echo "$arquivos" | grep -qvE '^(Docs/.+|[^/]+\.md)$'; then so_docs=true; fi
-          else
-            echo "Não foi possível calcular os arquivos alterados: CI completa."
-          fi
-          echo "so_docs=$so_docs" >> "$GITHUB_OUTPUT"
-          if [ "$so_docs" = true ]; then
-            echo "::notice::Só documentação (Docs/ ou .md na raiz): build e testes dispensados."
-          fi
+        run: .github/scripts/classificar-mudanca.sh
 
       # Mesma major do Dockerfile (sdk:8.0); global.json aceita qualquer 8.0.4xx+.
       - uses: actions/setup-dotnet@v6
@@ -113,12 +104,14 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # A chave segue os lock files: eles mudam sempre que qualquer pacote, direto ou
+      # transitivo, muda.
       - name: Cache do NuGet
         if: steps.mudanca.outputs.so_docs != 'true'
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json', '.config/dotnet-tools.json') }}
           restore-keys: nuget-${{ runner.os }}-
 
       # Baixa as imagens antes dos testes: a fixture tem timeout próprio e o download
@@ -129,13 +122,31 @@ jobs:
           docker pull -q pgvector/pgvector:pg16
           docker pull -q redis:7-alpine
 
+      # --locked-mode: falha se algum .csproj divergir do packages.lock.json versionado.
       - name: Restore
         if: steps.mudanca.outputs.so_docs != 'true'
-        run: dotnet restore Tratoo.sln
+        run: |
+          dotnet restore Tratoo.sln --locked-mode
+          dotnet tool restore
+
+      # High/Critical bloqueiam; Moderate/Low viram aviso (critério no próprio script).
+      - name: Pacotes vulneráveis
+        if: steps.mudanca.outputs.so_docs != 'true'
+        run: .github/scripts/verificar-vulnerabilidades.sh Tratoo.sln
 
       - name: Build
         if: steps.mudanca.outputs.so_docs != 'true'
         run: dotnet build Tratoo.sln -c Release --no-restore
+
+      # Modelo do EF alterado sem migration correspondente. NÃO olha banco nenhum (o
+      # TratooContextFactory fixa a versão do Postgres e não abre conexão): migration já
+      # criada mas ainda não aplicada no Neon não é assunto deste passo (Docs/CICD.md).
+      - name: Migrations em dia com o modelo
+        if: steps.mudanca.outputs.so_docs != 'true'
+        run: >
+          dotnet ef migrations has-pending-model-changes
+          --project Tratoo.Domain --startup-project Tratoo.Domain
+          --context TratooContext --configuration Release --no-build
 
       - name: Testes
         if: steps.mudanca.outputs.so_docs != 'true'
@@ -152,3 +163,75 @@ jobs:
           name: resultados-testes
           path: TestResults/
           if-no-files-found: ignore
+
+
+  # Constrói a MESMA imagem que a Railway constrói (Dockerfile da raiz), sem publicar, e
+  # varre com o Trivy. Pega Dockerfile/.dockerignore quebrado antes do deploy.
+  imagem:
+    name: Imagem Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Versão e digest juntos: a tag sozinha pode ser movida no Docker Hub.
+      TRIVY_IMAGEM: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classificar a mudança
+        id: mudanca
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          ANTES_PUSH: ${{ github.event.before }}
+        run: .github/scripts/classificar-mudanca.sh
+
+      - uses: docker/setup-buildx-action@v4
+        if: steps.mudanca.outputs.so_docs != 'true'
+
+      # load: a imagem vai para o Docker local do runner, só para o Trivy. Nada é publicado.
+      - name: Build da imagem
+        if: steps.mudanca.outputs.so_docs != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: tratoo:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Base de vulnerabilidades do Trivy: uma por dia, para não baixar a cada execução.
+      - name: Data da base do Trivy
+        if: steps.mudanca.outputs.so_docs != 'true'
+        id: hoje
+        run: echo "data=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache da base do Trivy
+        if: steps.mudanca.outputs.so_docs != 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ steps.hoje.outputs.data }}
+          restore-keys: trivy-db-
+
+      # CRITICAL e HIGH com correção disponível falham o job. Sem correção (--ignore-unfixed)
+      # não há o que fazer neste repositório: some quando a Microsoft ou a distro corrigir e
+      # a imagem base for atualizada (Dependabot docker). Sem .trivyignore: exceção só com
+      # o CVE e a justificativa (Docs/CICD.md).
+      # Roda com o usuário do runner (e o grupo do socket do Docker): a pasta da base fica
+      # do runner, e o actions/cache consegue salvá-la.
+      - name: Varredura da imagem (Trivy)
+        if: steps.mudanca.outputs.so_docs != 'true'
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm \
+            --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)" \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/cache" \
+            "$TRIVY_IMAGEM" \
+            image --cache-dir /cache --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed \
+            --exit-code 1 --no-progress tratoo:ci

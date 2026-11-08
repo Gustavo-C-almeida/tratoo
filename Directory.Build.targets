@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    O SDK Web inclui todo *.json do projeto como Content e o copia para o publish: sem isto,
+    o packages.lock.json (Directory.Build.props) iria parar em /app na imagem. Fica aqui, e
+    não no .props, porque o Remove precisa ser avaliado DEPOIS dos globs padrão do SDK.
+  -->
+  <ItemGroup>
+    <Content Remove="packages.lock.json" />
+    <None Remove="packages.lock.json" />
+  </ItemGroup>
+</Project>
