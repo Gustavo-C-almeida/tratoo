@@ -57,8 +57,28 @@ mostram o campo.
 | 1 transferência, `PENDING` / `IN_BANK_PROCESSING` / `BLOCKED` | Vincular o `id`, limpar `RESULTADO_INCERTO` | `TransferenciaEmProgresso` (aguarda webhook) |
 | 1 transferência, `FAILED` / `CANCELLED` | Vincular o `id` | `FalhaTransferencia` (o reprocessamento admin passa a ser seguro, porque a anterior é terminal) |
 | 2 ou mais com o mesmo `externalReference` | **Não mexer.** Alerta: duplicidade real | Intervenção manual |
-| Nenhuma, dentro da janela segura | Manter e voltar a consultar | `TransferenciaEmProgresso` |
-| Nenhuma, depois da janela segura | Voltar para `Retido`, com a entrada `[CONCILIADO – NÃO ENCONTRADA]` no ledger | `Retido` (a próxima varredura tenta de novo) |
+| Nenhuma, com menos de 30 min | Não investigar ainda (o Asaas pode não ter notificado) | `TransferenciaEmProgresso` |
+| Nenhuma, com 30 min ou mais | **Investigar** (§3) e alertar. O tempo **não prova** nada | `TransferenciaEmProgresso` |
+| Evidência conclusiva de que **não** foi criada (§4.1) | **Propor** o retorno a um admin, com a evidência anexada. **Nunca automático** | `TransferenciaEmProgresso` até o admin aprovar; depois `Retido`, com a entrada `[CONCILIADO – NÃO CRIADA, aprovado por <admin>]` no ledger |
+
+### 4.1 Retorno para `Retido`: só com evidência conclusiva e aprovação de um admin
+
+Decisão do dono (08/11/2026): **30 minutos** é o prazo mínimo para **começar a investigar**, não
+prova de que a transferência não foi criada. O retorno para `Retido`, que reabre a possibilidade
+de uma nova transferência, exige as duas coisas:
+
+1. **Evidência conclusiva** de que a transferência não aconteceu. Proposta de critério, a validar
+   antes da implementação:
+   - nenhum evento `TRANSFER_*` com `transfer.externalReference = Pagamento.Id` em `WebhookLogs`
+     (com `TRANSFER_CREATED` habilitado, toda transferência criada gera ao menos esse evento);
+   - **e** nenhuma transferência com esse `externalReference` em `GET /v3/transfers`, paginada até o
+     fim, cobrindo do dia da tentativa até depois do fim do dia seguinte;
+   - **e** a tentativa é posterior ao commit `3870065` (antes dele não há `externalReference`, e
+     a ausência não prova nada: esses casos são sempre manuais).
+2. **Aprovação administrativa**, registrada no ledger com o id do admin e um resumo da evidência.
+   O job propõe; quem decide é o admin.
+
+Fora isso, o pagamento continua em `TransferenciaEmProgresso`, por mais tempo que passe.
 
 Toda transição é um `UPDATE … WHERE Id = @id AND Status = 'TransferenciaEmProgresso' AND
 AsaasTransferenciaId IS NULL`, com a mesma disciplina da reivindicação atômica. Assim um webhook
@@ -68,10 +88,13 @@ que chega no meio da conciliação não é sobrescrito.
 
 - `PagamentoConciliacaoService`, sob `ExecucaoExclusiva` com uma chave nova (`…_0004`). Ele lê a
   API em lote, então rodar em dobro custa chamadas.
-- Intervalo curto (ex.: 30 min), porque o custo de um pagamento parado é o prestador sem receber.
+- Intervalo curto (ex.: 15 min), porque o custo de um pagamento parado é o prestador sem receber.
+  Só entram candidatos com **30 min ou mais** desde a tentativa.
+- O retorno para `Retido` **não** é feito pelo job: ele grava a proposta com a evidência, e um
+  endpoint de admin aplica a transição (condicional) depois da aprovação.
 - Ordem: (1) WebhookLogs, (2) API, (3) decisão da tabela acima.
 - Observabilidade: log em Information por pagamento conciliado (sem chave PIX nem dado pessoal) e
-  um aviso em Error para todo candidato **mais velho que X horas**. Isso vale mesmo antes do job:
+  um aviso em Error para todo candidato **com 30 min ou mais**. Isso vale mesmo antes do job:
   é o alarme para a conciliação manual.
 
 ## 6. Testes necessários
@@ -82,14 +105,26 @@ que chega no meio da conciliação não é sobrescrito.
 - Duas réplicas conciliando ao mesmo tempo, com a trava e a escrita condicional.
 - Valor divergente com o mesmo `externalReference`: não vincula, só alerta.
 
-## 7. Decisões em aberto
+## 7. Decisões
 
-1. **Janela segura** antes de concluir "não foi criada": quanto tempo sem webhook e sem a
-   transferência aparecer na listagem?
-2. **Retorno automático para `Retido`** depois da janela, ou só com aprovação de um admin?
-3. Habilitar o evento **`TRANSFER_CREATED`** no painel do Asaas, se ele ainda não estiver no
-   webhook configurado. Ele chega logo depois da criação e fecha a maior parte dos casos.
-4. **Webhook de validação de saque** (§8).
+**Tomadas pelo dono em 08/11/2026:**
+1. **30 minutos** é o prazo mínimo para iniciar a investigação, não prova de que a transferência
+   não foi criada (§4.1).
+2. O retorno para `Retido` exige **evidência conclusiva** de que a transferência não aconteceu
+   **e** aprovação administrativa. Nunca acontece só pelo tempo decorrido (§4.1).
+3. O evento **`TRANSFER_CREATED`** foi **habilitado** no webhook do Asaas, depois de conferido o
+   comportamento na documentação. Consequência para a implementação: no fluxo normal ele pode
+   chegar **antes** de o Tratoo gravar o `AsaasTransferenciaId`. Nesse caso cai em `WebhookLogs`
+   como "Pagamento não encontrado", e a conciliação precisa tratar isso como evidência válida,
+   não como anomalia. Hoje o evento não tem tratamento próprio no `ProcessarEventoAsync` (cai no
+   `default`, só log em Debug). Não muda estado.
+4. **`externalReference = Pagamento.Id`**: aprovado e implementado (`3870065`).
+5. **Teste do webhook de validação de saque no sandbox**: aprovado, **só registrando o payload**
+   (§8.1). Não implementar em produção.
+
+**Ainda em aberto:**
+- O critério exato de "evidência conclusiva" do §4.1, que precisa ser validado no sandbox.
+- Se `transfer.externalReference` aparece de fato nos payloads de webhook (§2).
 
 ## 8. Webhook de validação de saque: o que a documentação diz e o que falta provar
 
@@ -124,5 +159,20 @@ Fonte: "Mecanismo para validação de saque via webhooks" (atualizada em 27/10/2
   Neon que a validação consultar) **cancela todos os saques**, inclusive operações que não são
   liberações de contrato.
 
-**Próximo passo proposto:** um teste no **sandbox** com uma URL de validação que só registra o
-payload, para responder às três primeiras perguntas. Só depois disso decidir se vale implementar.
+### 8.1 Teste aprovado no sandbox: só registrar o payload
+
+Aprovado pelo dono em 08/11/2026, **não executado ainda**. Objetivo: responder às três perguntas
+acima com payloads reais, sem decidir saque nenhum.
+
+- **Onde:** só na conta **sandbox** do Asaas. Nada em produção, nada no Tratoo de produção.
+- **O que o endpoint faz:** valida o `asaas-access-token`, grava o payload recebido (com chave PIX
+  e CPF/CNPJ **mascarados** antes de gravar) e responde **sem** `APPROVED`/`REFUSED`.
+- **Efeito esperado, segundo a documentação:** sem status válido, o Asaas **cancela** a
+  transferência de teste. Isso é aceitável no sandbox e, de quebra, responde se o cancelamento
+  gera `TRANSFER_CANCELLED`.
+- **O que observar:** (1) se `transfer.externalReference` vem no payload de validação; (2) o tempo
+  entre a criação e a chamada, e quantas vezes ela se repete; (3) os eventos `TRANSFER_*` que
+  chegam depois do cancelamento.
+- **Depende de:** uma URL pública para o endpoint de teste (exige código e deploy fora de
+  produção, a aprovar à parte) e da configuração em "Mecanismos de segurança" no painel do
+  sandbox, feita pelo dono. Só depois do resultado se decide se vale implementar.

@@ -1250,6 +1250,14 @@ No resultado incerto, `PagamentoService.RegistrarResultadoIncertoAsync`:
 - registra em Error "REQUER CONCILIAÇÃO" e devolve ao chamador (liberação manual) uma mensagem
   dizendo que o pagamento aguarda conciliação.
 
+**Logs e ledger sem o corpo da resposta.** O corpo de uma resposta do Asaas pode ecoar chave PIX,
+CPF/CNPJ e dados do favorecido, então nunca vai para log, mensagem de exceção ou ledger. No lugar
+dele vai `AsaasIntegracaoException.ResumirResposta`: os `code` de `errors[]` (identificadores
+validados) e o tamanho do corpo. A chave do pedido aparece só mascarada (últimos 4 caracteres).
+As mensagens distinguem "Asaas **recusou** a criação (nada foi criado)" de "resposta
+**inconclusiva** (resultado incerto)". `AsaasLogSemDadosSensiveisTests` e um teste de ponta a
+ponta com Postgres real conferem isso.
+
 Nenhuma migração: `StatusGateway` já é `text`, e o estado reaproveita um status existente.
 
 **Limitações.**
@@ -1276,11 +1284,14 @@ manual:
    `externalReference`, comparar valor e chave PIX.
 3. **Encontrou:** vincular o `id` (`AsaasTransferenciaId`) e deixar o webhook `TRANSFER_DONE` (ou
    o status da transferência) concluir.
-4. **Não encontrou, depois de uma janela segura:** devolver para `Retido`, com registro no ledger.
-   Só então uma nova tentativa é legítima.
+4. **Não encontrou:** o tempo decorrido **não prova** que a transferência não foi criada. Os 30
+   minutos depois da tentativa só marcam o início da investigação. O retorno para `Retido`, que
+   reabre a possibilidade de uma nova transferência, exige **evidência conclusiva** de que ela não
+   aconteceu **e** aprovação de um admin, registradas no ledger
+   ([critério proposto](RECONCILIACAO-PAGAMENTOS.md#41-retorno-para-retido-só-com-evidência-conclusiva-e-aprovação-de-um-admin)).
 
-Uma reconciliação automática precisa decidir a janela do passo 4 e o critério de casamento do
-passo 2, e por isso fica fora desta correção.
+A conciliação automática fica fora desta correção. Mesmo quando existir, ela **propõe** o retorno
+para `Retido`, e quem aprova é o admin.
 
 **Idempotência no Asaas (verificado na documentação oficial em 08/11/2026).**
 - **Não existe** cabeçalho de idempotência documentado para transferências. O Asaas não deduplica
@@ -1306,7 +1317,8 @@ incerto. `AsaasTransferenciaClassificacaoTests`: a classificação de cada respo
 1. Conciliação automática ([plano](RECONCILIACAO-PAGAMENTOS.md)), a prioridade técnica deste fluxo.
 2. Classificação por `code` dos erros 400 do Asaas ([§6.6](#66-duas-réplicas-em-produção),
    "Riscos").
-3. Teste no sandbox do webhook de validação de saque.
+3. Teste no sandbox do webhook de validação de saque: aprovado, só registrando o payload, ainda
+   não executado ([protocolo](RECONCILIACAO-PAGAMENTOS.md#81-teste-aprovado-no-sandbox-só-registrar-o-payload)).
 
 ### 6.5 Escala horizontal
 
@@ -1685,6 +1697,7 @@ Evidência coletada em 31/10/2026.
 | `ExecucaoExclusiva` + escritas condicionais nos jobs | Confirmado (testes) | `JobsConcorrenciaTests`; `pg_try_advisory_xact_lock` no log de produção |
 | Reivindicação atômica na liberação de pagamento | Confirmado (testes) | Teste de duas réplicas; `ExecucaoExclusivaTests` (8 disputas, 1 vencedor) |
 | Transferência sem resposta conclusiva não é repetida | Confirmado (testes) | `LiberacaoReproducaoTests`, `AsaasTransferenciaClassificacaoTests`. Conciliação: **pendente** |
+| Corpo das respostas do Asaas fora de log, exceção e ledger | Confirmado (testes) | `AsaasLogSemDadosSensiveisTests`; teste de ponta a ponta em `LiberacaoReproducaoTests` |
 | `DataProtector` com chave por configuração | Confirmado | Exit 1 sem chave (testes); `DataProtector__Chave` configurada |
 | Check `dados-cifrados` | Confirmado | Healthy em produção |
 | Rotação de chave (`--recifrar-dados`) | Confirmado (testes) | `RotacaoChaveDadosTests`, `RecifragemTests` |
