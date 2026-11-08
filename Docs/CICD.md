@@ -14,6 +14,7 @@ em [ARQUITETURA.md §4](ARQUITETURA.md#4-infraestrutura-e-deploy) e a de CI em
 | `fix/*` | Temporária | Correções de bugs |
 | `hotfix/*` | Temporária | Correções urgentes em produção |
 | `revert-*` | Temporária | Criada pelo botão **Revert** do GitHub para retirar algo da `staging` |
+| `dependabot/*` | Temporária | Criada pelo Dependabot para atualizar uma dependência, sempre para a `staging` ([Dependências](#dependências)) |
 
 Toda branch de trabalho sai da `main`.
 
@@ -128,25 +129,108 @@ Nunca use force push em `main` ou `staging`.
 
 | Job | Quando | O que faz |
 |---|---|---|
-| `Build e testes` | Sempre | Build e testes, com Postgres (pgvector) e Redis reais. Se a mudança é **só documentação** (todos os arquivos em `Docs/` ou `.md` na raiz), passa em segundos sem build nem testes |
 | `Origem do PR` | Em PRs | Recusa origens fora das regras abaixo |
+| `Build e testes` | Sempre | Restore travado nos lock files, verificação de pacotes vulneráveis, build, verificação de migrations e testes com Postgres (pgvector) e Redis reais |
+| `Imagem Docker` | Sempre | Constrói a imagem pelo `Dockerfile` da raiz, a mesma que a Railway constrói, sem publicar, e faz a varredura com o Trivy |
 
 | Destino | Origens aceitas |
 |---|---|
-| `staging` | `feature/*`, `fix/*`, `hotfix/*`, `revert-*` |
+| `staging` | `feature/*`, `fix/*`, `hotfix/*`, `revert-*`, `dependabot/*` |
 | `main` | `staging`, `hotfix/*` |
 
-O atalho de documentação não usa `paths-ignore` de propósito: os dois checks são obrigatórios e
-sem bypass, então um workflow que não roda deixaria o PR preso em "Expected". Qualquer outro arquivo
-alterado, ou não conseguir calcular a diferença, roda a CI completa. Como o check passa, o Railway
-(*Wait for CI*) ainda faz deploy num push só de docs; para evitar, configure *Watch Paths* no
-serviço.
+Em todos os casos o PR precisa sair deste repositório; PR de fork é recusado.
+
+### Passos do `Build e testes`
+
+1. **Restore** com `--locked-mode` e `dotnet tool restore`. Falha se algum `.csproj` divergir do
+   `packages.lock.json` dele ([Lock files](#lock-files)).
+2. **Pacotes vulneráveis** ([`verificar-vulnerabilidades.sh`](../.github/scripts/verificar-vulnerabilidades.sh)):
+   diretos e transitivos, pela base de avisos do nuget.org. **High** e **Critical** falham o job;
+   **Moderate** e **Low** viram aviso. O `dotnet list package --vulnerable` sai com 0 mesmo achando
+   algo, por isso a decisão é tomada no script, sobre a saída JSON.
+3. **Build** em Release.
+4. **Migrations em dia com o modelo**: `dotnet ef migrations has-pending-model-changes` falha se o
+   modelo do `TratooContext` mudou sem migration correspondente. Não abre conexão: o
+   `TratooContextFactory` fixa a versão do Postgres e nenhum banco é necessário. Isso **não** é o
+   mesmo que migration pendente de aplicação: uma migration já criada e ainda não aplicada no Neon
+   passa aqui e continua sendo aplicada à mão ([Migrations](#homologação-e-produção-na-railway)).
+   O `VectorContext` não tem migrations (o schema vem do `VectorDbInitializer`) e fica de fora.
+5. **Testes**, com `TRATOO_EXIGIR_DOCKER=1`: sem Docker, os testes de integração falham em vez de
+   serem ignorados.
+
+### Passos do `Imagem Docker`
+
+1. **Build** com Buildx e cache do GitHub Actions (`type=gha`). A imagem vai só para o Docker local
+   do runner (`load`), nunca para um registro.
+2. **Trivy**, fixado por versão e digest na variável `TRIVY_IMAGEM` do job. Falha em **CRITICAL**
+   e **HIGH** que tenham correção disponível (`--ignore-unfixed`). Vulnerabilidade sem correção
+   some quando a Microsoft ou a distro corrigir e a imagem base for atualizada. A base de dados do
+   Trivy fica em cache por um dia.
+
+Não há `.trivyignore` nem lista de exceções de pacotes. Uma exceção só entra com o identificador
+(CVE ou GHSA), o motivo de ser falso positivo ou de não se aplicar e um prazo para rever.
+
+### Atalho de documentação
+
+Se a mudança é **só documentação** (todos os arquivos em `Docs/` ou `.md` na raiz), `Build e
+testes` e `Imagem Docker` passam em segundos, sem build nem testes. A decisão fica em
+[`classificar-mudanca.sh`](../.github/scripts/classificar-mudanca.sh), chamado como primeiro
+passo de cada job. Qualquer outro arquivo alterado, ou não conseguir calcular a diferença, roda a
+CI completa.
+
+O atalho não usa `paths-ignore` de propósito: os checks são obrigatórios e sem bypass, então um
+workflow que não roda deixaria o PR preso em "Expected". Também não é um job separado ligado por
+`needs`: se ele falhasse, os jobs dependentes seriam pulados, e um check obrigatório pulado conta
+como aprovado. Como o check passa, o Railway (*Wait for CI*) ainda faz deploy num push só de docs;
+para evitar, configure *Watch Paths* no serviço.
+
+### Versões fixadas
+
+| O quê | Como |
+|---|---|
+| Actions | Tag de major (`actions/checkout@v7`, `docker/build-push-action@v7`…), atualizadas pelo Dependabot |
+| Trivy | Versão e digest (`aquasec/trivy:0.76.2@sha256:…`). Nunca `latest`. Atualização manual: troque os dois juntos |
+| `dotnet-ef` | [`.config/dotnet-tools.json`](../.config/dotnet-tools.json), na mesma versão do EF Core dos `.csproj` |
+| SDK .NET | `8.0.x` no `setup-dotnet` e `sdk:8.0` no `Dockerfile`, as duas na mesma major |
 
 [`monitor-recifragem.yml`](../.github/workflows/monitor-recifragem.yml) roda a cada 2 h e lê o
 `/health/ready` público de produção e homologação ([ROTACAO-CHAVES.md](ROTACAO-CHAVES.md#6-recifragem-automática-e-monitoramento)).
 
 CodeQL segue em *default setup*, que o GitHub executa na branch padrão, nas protegidas e nos PRs
 para elas. Não há workflow dele no repositório.
+
+## Dependências
+
+### Lock files
+
+Cada projeto tem um `packages.lock.json` versionado com a árvore completa de pacotes, diretos e
+transitivos, com hash. O [`Directory.Build.props`](../Directory.Build.props) liga isso para todos os
+projetos, e a CI e o `Dockerfile` restauram com `--locked-mode`. O
+[`Directory.Build.targets`](../Directory.Build.targets) tira o lock file do publish, para ele não ir
+para a imagem.
+
+Depois de adicionar, remover ou mudar a versão de um `PackageReference`:
+
+```bash
+dotnet restore Tratoo.sln
+git add '**/packages.lock.json'
+```
+
+Sem isso, a CI falha no restore com `NU1004`.
+
+### Dependabot
+
+[`dependabot.yml`](../.github/dependabot.yml) abre PRs semanais (segunda de manhã) para a
+`staging`, para NuGet (incluindo o `dotnet-ef`), actions e imagens do `Dockerfile`. Os PRs saem
+de `dependabot/*`, por isso o check `Origem do PR` aceita essa origem só para a `staging`.
+
+- A família Microsoft/System e o `dotnet-ef` vêm num PR só, com minor e patch, para ficarem na
+  mesma versão.
+- A major de EF Core, ASP.NET Core, Npgsql EF, `dotnet-ef` e das imagens `dotnet/*` é ignorada:
+  ela exige outro runtime e sobe no PR de migração do .NET.
+- O Dependabot atualiza os lock files no mesmo PR. Ainda assim, cada PR passa pela CI completa e
+  só entra com merge manual, depois da homologação, como qualquer entrega. Leia as notas de versão
+  antes do merge: o check de compatibilidade é o build e os testes, não a ausência de conflito.
 
 ## Homologação e produção na Railway
 
@@ -157,7 +241,8 @@ deploys automáticos de PR estão desligados.
 - **Configuração efetiva:** a Railway não lê o `railway.toml`. Build pelo `Dockerfile`, health
   check `/health/ready` e *draining* de 30 s estão nas configurações de cada serviço.
 - **Migrations:** manuais nos dois serviços, sempre antes de a versão que precisa delas ser
-  promovida. Aplique primeiro em homologação:
+  promovida. A CI garante que a migration **existe** para cada mudança de modelo; aplicá-la no
+  banco continua sendo este passo. Aplique primeiro em homologação:
 
   ```bash
   railway ssh --service <servico-de-homologacao> --environment production -- sh -c "cd /app; dotnet Tratoo.API.dll --migrate-only"
@@ -217,13 +302,20 @@ Proteção de `main` e `staging`:
 
 | Regra | Valor |
 |---|---|
-| Checks obrigatórios | `Build e testes` e `Origem do PR` |
+| Checks obrigatórios | `Build e testes`, `Origem do PR` e `Imagem Docker` (este último a acrescentar, ver abaixo) |
 | *Require branches to be up to date* | Ligado |
 | PR obrigatório | Sim, com 0 aprovações: o merge manual é a aprovação humana |
 | *Do not allow bypassing* (`enforce_admins`) | Ligado: vale também para administradores |
 | Force push e exclusão | Bloqueados |
 
 No repositório: squash e merge commit ativos, *Allow rebase merging* desmarcado.
+
+**Pendente:** depois do primeiro PR em que `Imagem Docker` rodar, acrescente o check aos
+obrigatórios de `main` e `staging`. Até lá ele aparece no PR, mas não bloqueia o merge. Ele respeita
+o atalho de documentação, então não prende PRs só de docs.
+
+Em *Settings → Code security*, mantenha ligados os alertas do Dependabot (*Dependabot alerts*). Eles
+são independentes do `dependabot.yml`.
 
 ### Railway e provedores
 

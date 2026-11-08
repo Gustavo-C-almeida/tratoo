@@ -1269,21 +1269,25 @@ mesmo `Jwt:SecretKey`, e o que precisa ser visto pelas duas está no Redis, no P
 
 ### 7.1 CI: GitHub Actions
 
-O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda o job `Build e testes`:
+O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda os jobs `Origem do PR`, `Build e
+testes` e `Imagem Docker`. O detalhe de cada passo está em [CICD.md](CICD.md#workflows):
 
 - **Disparo:** PRs e pushes em `staging` e `main`. A `concurrency` cancela a execução
   anterior só em PRs, para não cancelar o check de que a Railway depende. As permissões são
   `contents: read`, e há timeout de 20 min.
-- **Etapas:** checkout, `setup-dotnet` (8.0.x), cache do NuGet, `docker pull` das imagens de teste
-  (`pgvector/pgvector:pg16`, `redis:7-alpine`), `dotnet restore Tratoo.sln`,
-  `dotnet build -c Release`, `dotnet test` com logger TRX e upload dos resultados.
+- **Etapas do `Build e testes`:** checkout, `setup-dotnet` (8.0.x), cache do NuGet, `docker pull`
+  das imagens de teste (`pgvector/pgvector:pg16`, `redis:7-alpine`), `dotnet restore Tratoo.sln
+  --locked-mode`, verificação de pacotes vulneráveis, `dotnet build -c Release`, verificação de
+  migrations (`has-pending-model-changes`), `dotnet test` com logger TRX e upload dos resultados.
+- **`Imagem Docker`:** build do `Dockerfile` com Buildx, sem publicar, e varredura com Trivy
+  (CRITICAL/HIGH com correção disponível).
 - **Sem segredos.** O CI roda isolado do ambiente de produção.
 - **`TRATOO_EXIGIR_DOCKER: "1"`:** sem Docker, os testes de integração **falham** em vez de serem
   ignorados. Assim o pipeline só fica verde depois de rodá-los.
 - **Proteção de `staging` e `main`:** exigem os checks `Build e testes` e `Origem do PR`, branch
   atualizada e PR, inclusive para administradores ([CICD.md](CICD.md#configuração-manual)).
 - **Origem do PR:** um job recusa PR para a `main` que não venha de `staging` ou `hotfix/*`, e PR
-  para a `staging` que não venha de `feature/*`, `fix/*`, `hotfix/*` ou `revert-*`.
+  para a `staging` que não venha de `feature/*`, `fix/*`, `hotfix/*`, `revert-*` ou `dependabot/*`.
 - **Execução na `main`** (05/11): run `41950621509`, commit `5905ef4`, com **288 testes**. A
   primeira tentativa falhou em um teste instável de OTP, cuja asserção era estrita demais, e a segunda
   passou. A asserção foi corrigida em seguida.
