@@ -328,7 +328,7 @@ Tratoo/
   IP do cliente atrás do proxy.
 - [Docs/TRILHA2-DECISOES.md](Docs/TRILHA2-DECISOES.md): decisões sobre Docker, Redis, réplicas e
   migrations.
-- [Docs/ROTACAO-CHAVE-DADOS.md](Docs/ROTACAO-CHAVE-DADOS.md): roteiro de rotação da chave de
-  criptografia.
+- [Docs/ROTACAO-CHAVES.md](Docs/ROTACAO-CHAVES.md): roteiro de troca de todos os segredos
+  (chave de dados, JWT, webhook do Asaas, provedores, Redis), com recifragem e reversão.
 - [Tratoo.Web/wwwroot/CONTRIBUTING.md](Tratoo.Web/wwwroot/CONTRIBUTING.md): convenções do frontend.
 - Aplicação: [www.tratoo.app.br](https://www.tratoo.app.br).
