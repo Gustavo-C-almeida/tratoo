@@ -50,7 +50,7 @@ namespace Tratoo.API.BackgroundServices
                         _logger, stoppingToken);
 
                     if (!executou)
-                        _logger.LogInformation("Reindexação batch já em andamento em outra réplica; rodada ignorada.");
+                        _logger.LogDebug("Reindexação batch já em andamento em outra réplica; rodada ignorada.");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

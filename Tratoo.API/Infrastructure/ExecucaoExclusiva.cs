@@ -25,8 +25,14 @@ namespace Tratoo.API.Infrastructure
     /// </summary>
     public static class ExecucaoExclusiva
     {
-        // Identificadores fixos (bigint) por job. "Tratoo" em ASCII + sequencial, para
-        // não colidir com advisory locks de outros sistemas no mesmo banco.
+        // ÚNICO lugar com as chaves de trava. Identificadores fixos (bigint) por job:
+        // "Tratoo" em ASCII + sequencial, sem hash (não há colisão possível entre nós) e
+        // sem colidir com advisory locks de outros sistemas no mesmo banco. Um job novo
+        // ganha o próximo sequencial; ExecucaoExclusivaTests garante que são distintas.
+        //
+        // Jobs SEM trava, de propósito (cada item é uma escrita condicional idempotente;
+        // rodar em dobro não muda o resultado — ver ARQUITETURA.md §6.3):
+        // PropostaExpiracaoService, ContratoExpiracaoService, AvaliacaoExpiracaoService.
         public const long ChavePagamentoLiberacao = 0x5472_6174_6F6F_0001;
         public const long ChaveReindexacao        = 0x5472_6174_6F6F_0002;
         public const long ChaveRecifragem         = 0x5472_6174_6F6F_0003;
@@ -55,8 +61,11 @@ namespace Tratoo.API.Infrastructure
             if (!obtida)
             {
                 await transacao.RollbackAsync(CancellationToken.None);
+                logger.LogDebug("Trava {Chave} com outra réplica; rodada pulada.", chave);
                 return false;
             }
+
+            logger.LogInformation("Trava {Chave} adquirida; esta réplica executa a rodada.", chave);
 
             try
             {

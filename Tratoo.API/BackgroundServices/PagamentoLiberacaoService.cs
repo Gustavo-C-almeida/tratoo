@@ -66,7 +66,7 @@ namespace Tratoo.API.BackgroundServices
                 _logger, ct);
 
             if (!executou)
-                _logger.LogInformation("Varredura de liberação automática já em andamento em outra réplica; rodada ignorada.");
+                _logger.LogDebug("Varredura de liberação automática já em andamento em outra réplica; rodada ignorada.");
 
             return executou;
         }

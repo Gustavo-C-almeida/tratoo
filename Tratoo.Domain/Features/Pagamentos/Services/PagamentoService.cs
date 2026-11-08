@@ -713,6 +713,52 @@ namespace Tratoo.Domain.Features.Pagamentos
             }
         }
 
+        /// <summary>Valor de <c>Pagamento.StatusGateway</c> para transferência com resultado incerto.</summary>
+        public const string MarcadorResultadoIncerto = "RESULTADO_INCERTO";
+
+        // A chamada de criação da transferência terminou sem resposta conclusiva (timeout,
+        // rede, 5xx, 2xx ilegível, status não documentado). A transferência PODE existir no
+        // Asaas. O pagamento FICA em TransferenciaEmProgresso — status que nenhuma varredura
+        // nem o reprocessamento admin pegam —, então não há nova tentativa automática.
+        // Sai daqui só por conciliação com o Asaas (pendente no roadmap; ver ARQUITETURA.md,
+        // "Resultado incerto na transferência").
+        private async Task RegistrarResultadoIncertoAsync(Pagamento pagamento, string motivo, int aprovadoPorId)
+        {
+            pagamento.Status        = StatusPagamento.TransferenciaEmProgresso; // já está assim no banco
+            pagamento.StatusGateway = MarcadorResultadoIncerto;
+
+            await _repo.AddLedgerAsync(new LedgerFinanceiro
+            {
+                PagamentoId       = pagamento.Id,
+                Tipo              = TipoEntradaLedger.LiberacaoPrestador,
+                Valor             = 0, // não se sabe se saiu; o escrow só baixa com TRANSFER_DONE
+                Descricao         = $"[RESULTADO INCERTO] Criação da transferência PIX de R$ {pagamento.ValorBruto:F2} sem resposta conclusiva do Asaas. " +
+                                    $"NÃO repetir antes de conciliar. Motivo: {motivo[..Math.Min(motivo.Length, 200)]}",
+                ReferenciaExterna = null,
+                CriadoPorId       = aprovadoPorId
+            });
+
+            try
+            {
+                await _repo.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                // A reivindicação (TransferenciaEmProgresso) já está gravada: mesmo sem esta
+                // marca, nenhuma varredura repete a transferência.
+                _logger.LogError(ex, "Falha ao gravar a marca de resultado incerto do pagamento {PagamentoId}.", pagamento.Id);
+            }
+
+            _logger.LogError(
+                "Transferência PIX com RESULTADO INCERTO. PagamentoId: {PagamentoId}, Valor: R$ {Valor}. " +
+                "Pagamento mantido em TransferenciaEmProgresso, sem nova tentativa automática. REQUER CONCILIAÇÃO com o Asaas.",
+                pagamento.Id, pagamento.ValorBruto);
+
+            throw new NegocioException(
+                "Não foi possível confirmar se a transferência foi criada no Asaas. O pagamento ficou aguardando " +
+                "conciliação e não será transferido de novo automaticamente. Acione o suporte.");
+        }
+
         // Envia e-mail ao prestador sobre falha na transferência. Best-effort: nunca interrompe o fluxo.
         private async Task NotificarFalhaTransferenciaAsync(Pagamento pagamento)
         {
@@ -959,19 +1005,31 @@ namespace Tratoo.Domain.Features.Pagamentos
                     Valor: pagamento.ValorBruto,   // Prestador recebe 100% do valor pago
                     ChavePix: chavePix,
                     TipoChavePix: tipoChavePix,
-                    Descricao: descricao
+                    Descricao: descricao,
+                    // Liga a transferência a este pagamento no Asaas (conciliação).
+                    ReferenciaExterna: pagamento.Id.ToString()
                 ));
             }
             catch (AsaasIntegracaoException asaasEx)
             {
+                // Só o resumo da resposta (códigos de erro), nunca o corpo. A mensagem distingue
+                // "o Asaas recusou" de "não se sabe se foi criada".
                 _logger.LogError(asaasEx,
-                    "Falha na integração Asaas ao criar transferência. " +
+                    (asaasEx.TipoErro == AsaasErroTipo.ResultadoIncerto
+                        ? "Criação da transferência PIX sem resposta conclusiva do Asaas (resultado incerto). "
+                        : "Asaas recusou a criação da transferência PIX. ") +
                     "PagamentoId: {PagamentoId}, ContratoId: {ContratoId}, PrestadorId: {PrestadorId}, " +
                     "Valor: R$ {Valor}, TipoPix: {TipoPix}, Chave: {Chave}, " +
-                    "HTTP: {StatusCode}, TipoErro: {TipoErro}, Resposta: {Resposta}",
+                    "HTTP: {StatusCode}, TipoErro: {TipoErro}, Resposta: {Resumo}",
                     pagamento.Id, contrato.Id, contrato.PrestadorId,
                     pagamento.ValorBruto, tipoChavePix, MascararChavePix(chavePix),
-                    (int)asaasEx.StatusCode, asaasEx.TipoErro, asaasEx.RespostaBody);
+                    (int)asaasEx.StatusCode, asaasEx.TipoErro, asaasEx.ResumoResposta);
+
+                if (asaasEx.TipoErro == AsaasErroTipo.ResultadoIncerto)
+                {
+                    await RegistrarResultadoIncertoAsync(pagamento, asaasEx.Message, aprovadoPorId);
+                    return;
+                }
 
                 await TratarFalhaTransferenciaAsync(pagamento, prestador, contrato,
                     asaasEx.TipoErro, asaasEx.Message, aprovadoPorId);
@@ -979,15 +1037,14 @@ namespace Tratoo.Domain.Features.Pagamentos
             }
             catch (Exception ex)
             {
-                // Exceção inesperada (timeout não-classificado, falha de serialização, etc.)
-                // Trata como gateway indisponível — valor permanece em escrow, permite reprocessamento.
+                // Exceção inesperada (falha de serialização, bug, cancelamento...). Não dá
+                // para afirmar que o pedido não chegou ao Asaas: resultado INCERTO.
                 _logger.LogError(ex,
                     "Exceção inesperada ao criar transferência PIX. " +
                     "PagamentoId: {PagamentoId}, ContratoId: {ContratoId}, PrestadorId: {PrestadorId}, Valor: R$ {Valor}",
                     pagamento.Id, contrato.Id, contrato.PrestadorId, pagamento.ValorBruto);
 
-                await TratarFalhaTransferenciaAsync(pagamento, prestador, contrato,
-                    AsaasErroTipo.GatewayIndisponivel, $"Exceção inesperada: {ex.Message}", aprovadoPorId);
+                await RegistrarResultadoIncertoAsync(pagamento, $"Exceção inesperada: {ex.Message}", aprovadoPorId);
                 return;
             }
 
