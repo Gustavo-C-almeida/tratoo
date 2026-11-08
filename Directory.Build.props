@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Restore determinístico: cada projeto tem um packages.lock.json versionado com a árvore
+    completa de pacotes (diretos e transitivos, com hash). A CI e o Dockerfile restauram com
+    `locked-mode`: se um .csproj mudar sem o lock file acompanhar, o restore FALHA em vez de
+    resolver outra versão em silêncio. Depois de mexer num PackageReference, rode
+    `dotnet restore Tratoo.sln` e commite os lock files junto (Docs/CICD.md).
+  -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
