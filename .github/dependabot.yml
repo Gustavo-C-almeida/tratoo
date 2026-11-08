@@ -1,0 +1,74 @@
+# Atualizações de dependências (Docs/CICD.md, seção "Dependências").
+#
+# Os PRs saem com o prefixo dependabot/… e precisam passar pelo check "Origem do PR": por
+# isso o alvo é a staging e o check aceita dependabot/* só para a staging. Nada é mesclado
+# sozinho: cada PR passa pela CI completa (lock files, testes, imagem, Trivy) e por merge
+# manual, como qualquer entrega.
+version: 2
+
+updates:
+  # NuGet: os .csproj, os packages.lock.json e a ferramenta dotnet-ef (.config/dotnet-tools.json).
+  - package-ecosystem: nuget
+    directory: /
+    target-branch: staging
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:17"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # A família Microsoft/System sai junta: EF Core, a ferramenta dotnet-ef e os pacotes de
+      # configuração precisam ficar na mesma versão (o dotnet-ef roda o check de migrations).
+      # Só minor e patch: uma major (EF 10, por exemplo) exige migrar o runtime e chega
+      # sozinha, para ser avaliada à parte.
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+          - "dotnet-ef"
+        update-types: [minor, patch]
+    # A major destes acompanha o runtime (EF Core 10 e ASP.NET Core 10 exigem net10.0): o
+    # PR viria quebrado. Sobem juntos no PR de migração do .NET, não por aqui.
+    ignore:
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.AspNetCore.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet-ef"
+        update-types: ["version-update:semver-major"]
+
+  # Actions dos workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: staging
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:17"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Imagens base do Dockerfile (sdk e aspnet). Uma major nova do .NET não entra por aqui:
+  # a troca do runtime tem PR próprio, com os .csproj e o global.json juntos.
+  - package-ecosystem: docker
+    directory: /
+    target-branch: staging
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:17"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "dotnet/*"
+        update-types: ["version-update:semver-major"]
