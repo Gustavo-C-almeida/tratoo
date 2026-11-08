@@ -128,13 +128,22 @@ Nunca use force push em `main` ou `staging`.
 
 | Job | Quando | O que faz |
 |---|---|---|
-| `Build e testes` | Sempre | Build e testes, com Postgres (pgvector) e Redis reais |
+| `Build e testes` | Sempre | Build e testes, com Postgres (pgvector) e Redis reais. Se a mudança é **só documentação** (todos os arquivos em `Docs/` ou `.md` na raiz), passa em segundos sem build nem testes |
 | `Origem do PR` | Em PRs | Recusa origens fora das regras abaixo |
 
 | Destino | Origens aceitas |
 |---|---|
 | `staging` | `feature/*`, `fix/*`, `hotfix/*`, `revert-*` |
 | `main` | `staging`, `hotfix/*` |
+
+O atalho de documentação não usa `paths-ignore` de propósito: os dois checks são obrigatórios e
+sem bypass, então um workflow que não roda deixaria o PR preso em "Expected". Qualquer outro arquivo
+alterado, ou não conseguir calcular a diferença, roda a CI completa. Como o check passa, o Railway
+(*Wait for CI*) ainda faz deploy num push só de docs; para evitar, configure *Watch Paths* no
+serviço.
+
+[`monitor-recifragem.yml`](../.github/workflows/monitor-recifragem.yml) roda a cada 2 h e lê o
+`/health/ready` público de produção e homologação ([ROTACAO-CHAVES.md](ROTACAO-CHAVES.md#6-recifragem-automática-e-monitoramento)).
 
 CodeQL segue em *default setup*, que o GitHub executa na branch padrão, nas protegidas e nos PRs
 para elas. Não há workflow dele no repositório.
@@ -193,7 +202,7 @@ Cada item abaixo deve ser exclusivo do serviço de homologação. Nenhum valor �
 | Banco | `ConnectionStrings__DefaultConnection`, `ConnectionStrings__VectorConnection` | Neon |
 | Redis | `Redis__ConnectionString`, `Redis__ChaveProtecao` | Railway |
 | Autenticação | `Jwt__SecretKey` | Gerado localmente |
-| Dados cifrados | `DataProtector__Chave`; troque seguindo [ROTACAO-CHAVE-DADOS.md](ROTACAO-CHAVE-DADOS.md) se já houver dados | Gerado localmente |
+| Dados cifrados | `DataProtector__Chave`; troque seguindo [ROTACAO-CHAVES.md](ROTACAO-CHAVES.md#1-chave-de-dados-dataprotector) se já houver dados | Gerado localmente |
 | Arquivos | `CloudflareR2__*`, `CloudflareR2Private__*`: buckets e token próprios | Cloudflare |
 | Pagamentos | `Asaas__ApiKey`, `Asaas__WebhookToken`: conta sandbox e webhook próprios | Asaas |
 | E-mail | `Resend__ApiKey` e remetente | Resend |
