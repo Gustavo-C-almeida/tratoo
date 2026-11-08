@@ -1256,18 +1256,24 @@ Nenhuma migração: `StatusGateway` já é `text`, e o estado reaproveita um sta
 - A trava é por banco e a reivindicação é por pagamento: nenhuma das duas sabe o que aconteceu no
   Asaas. Elas impedem a **segunda** tentativa, não resolvem a primeira.
 - Um pagamento incerto **fica parado** até alguém conciliar. O webhook `TRANSFER_DONE` não o
-  encontra sozinho, porque o lookup é por `AsaasTransferenciaId`, que nunca foi gravado.
+  encontra sozinho, porque o lookup é por `AsaasTransferenciaId`, que nunca foi gravado. O evento
+  não se perde: fica em `WebhookLogs` com o payload e "Pagamento não encontrado no sistema".
 - **Queda do processo** entre a resposta 2xx do Asaas e o `SaveChanges`: o banco fica em
   `TransferenciaEmProgresso` sem `AsaasTransferenciaId` e **sem** a marca `RESULTADO_INCERTO`.
   Também não repete (seguro), mas só é identificável por
   `Status = TransferenciaEmProgresso AND AsaasTransferenciaId IS NULL`.
 
-**Reconciliação: pendente (roadmap).** Até ela existir, o procedimento é manual:
+**Conciliação: pendente (roadmap).** O plano da versão automática está em
+[RECONCILIACAO-PAGAMENTOS.md](RECONCILIACAO-PAGAMENTOS.md). Até ela existir, o procedimento é
+manual:
 1. Listar candidatos: `Status = 'TransferenciaEmProgresso' AND (StatusGateway = 'RESULTADO_INCERTO'
    OR AsaasTransferenciaId IS NULL)`, com o horário da entrada `[RESULTADO INCERTO]` do ledger.
-2. No Asaas, `GET /v3/transfers` com `dateCreated[ge]`/`dateCreated[le]` em torno desse horário e
-   procurar valor e chave PIX iguais. A listagem **não filtra por `externalReference`** (só data
-   de criação, data de efetivação e tipo).
+2. Procurar em `WebhookLogs` um evento `TRANSFER_*` não casado com `transfer.externalReference`
+   igual ao `Pagamento.Id`. Senão, no Asaas, `GET /v3/transfers` com `dateCreated[ge]`/`[le]`
+   cobrindo o dia da tentativa e o seguinte, comparando `externalReference` com o `Pagamento.Id`.
+   A listagem **não filtra por esse campo** (só data de criação, data de efetivação e tipo), então
+   a comparação é do nosso lado. Para transferências anteriores ao commit `3870065`, que não têm
+   `externalReference`, comparar valor e chave PIX.
 3. **Encontrou:** vincular o `id` (`AsaasTransferenciaId`) e deixar o webhook `TRANSFER_DONE` (ou
    o status da transferência) concluir.
 4. **Não encontrou, depois de uma janela segura:** devolver para `Retido`, com registro no ledger.
@@ -1276,22 +1282,31 @@ Nenhuma migração: `StatusGateway` já é `text`, e o estado reaproveita um sta
 Uma reconciliação automática precisa decidir a janela do passo 4 e o critério de casamento do
 passo 2, e por isso fica fora desta correção.
 
-**Idempotência no Asaas (verificado na documentação oficial em 08/11/2026; não implementado).**
+**Idempotência no Asaas (verificado na documentação oficial em 08/11/2026).**
 - **Não existe** cabeçalho de idempotência documentado para transferências. O Asaas não deduplica
   pedidos repetidos; recomenda controle na integração.
 - `POST /v3/transfers` **aceita `externalReference`** ("Identificador da transferência no seu
   sistema"), que volta no objeto da transferência e nos webhooks.
-- Existe o "Mecanismo para validação de saque via webhooks": o Asaas consulta um endpoint nosso
-  antes de efetivar cada transferência, e a integração pode recusar duplicatas.
-- Estratégia proposta, **aguardando aprovação**: (1) enviar `externalReference = Pagamento.Id`
-  em toda transferência. Não impede duplicata, mas torna o passo 2 exato e permite casar o webhook
-  `TRANSFER_DONE` de uma transferência incerta. (2) Avaliar o webhook de validação de saque como
-  barreira real: aprovar só a primeira transferência de cada `externalReference`.
+- **Implementado:** toda liberação envia `externalReference = Pagamento.Id` (commit `3870065`).
+  Não impede duplicata, mas liga a transferência ao pagamento mesmo sem a resposta da criação.
+- **Em investigação, não implementado:** o "Mecanismo para validação de saque via webhooks". O
+  Asaas consulta um endpoint nosso cerca de 5 s depois de cada saque e só executa com
+  `APPROVED`. É fail-closed e vale para a conta inteira, e o exemplo de payload de transferência
+  não mostra `externalReference`. Análise e perguntas em aberto:
+  [RECONCILIACAO-PAGAMENTOS.md §8](RECONCILIACAO-PAGAMENTOS.md#8-webhook-de-validação-de-saque-o-que-a-documentação-diz-e-o-que-falta-provar).
 
 **Testes.** `LiberacaoReproducaoTests` (Postgres real): duas varreduras concorrentes chamam o Asaas
-uma vez; timeout e exceção inesperada não geram segunda transferência e deixam a marca; rejeição
+uma vez; a liberação envia o `Pagamento.Id` como `externalReference`; timeout e exceção
+inesperada não geram segunda transferência e deixam a marca; rejeição
 comprovada volta para `Retido` e permite nova tentativa; o reprocessamento admin recusa o pagamento
-incerto. `AsaasTransferenciaClassificacaoTests`: a classificação de cada resposta HTTP.
+incerto. `AsaasTransferenciaClassificacaoTests`: a classificação de cada resposta HTTP e o corpo enviado
+(`externalReference` só quando informado).
+
+**Pendências registradas.**
+1. Conciliação automática ([plano](RECONCILIACAO-PAGAMENTOS.md)), a prioridade técnica deste fluxo.
+2. Classificação por `code` dos erros 400 do Asaas ([§6.6](#66-duas-réplicas-em-produção),
+   "Riscos").
+3. Teste no sandbox do webhook de validação de saque.
 
 ### 6.5 Escala horizontal
 
@@ -1303,7 +1318,7 @@ incerto. `AsaasTransferenciaClassificacaoTests`: a classificação de cada respo
 | Data Protection do ASP.NET | Fica local por réplica, **de propósito**: nenhum componente o consome (o JWT é assinado com `Jwt:SecretKey`, e a autenticação não usa antiforgery, sessão nem cookie auth do ASP.NET) |
 | Cache de perfil | Local por réplica, com TTL de 2 min |
 | Duas réplicas | No compose (`API_REPLICAS=2` atrás do Nginx) e nos `RedisReplicasTests` com Redis real |
-| Produção | **2 réplicas** desde 05/11 |
+| Produção | **2 réplicas** desde 05/11 (`numReplicas: 2` em `us-east4` no serviço `tratoo-production`, conferido na Railway em 08/11; `tratoo-staging` tem 1) |
 
 ### 6.6 Duas réplicas em produção
 
@@ -1698,6 +1713,7 @@ Evidência coletada em 31/10/2026.
 | [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-CLIENTE.md) | Diagnóstico do IP do cliente, trust boundary, metodologia da validação em produção e checklist pós-deploy |
 | [`TRILHA2-DECISOES.md`](TRILHA2-DECISOES.md) | Inventário de estado em processo, jobs com N réplicas, Redis, proxy local, migrations, compose e réplicas |
 | [`ROTACAO-CHAVE-DADOS.md`](ROTACAO-CHAVE-DADOS.md) | Roteiro operacional de rotação da chave de dados, com reversão |
+| [`RECONCILIACAO-PAGAMENTOS.md`](RECONCILIACAO-PAGAMENTOS.md) | Plano da conciliação automática de transferências PIX com resultado incerto e análise do webhook de validação de saque do Asaas |
 | [`../Tratoo.Web/wwwroot/CONTRIBUTING.md`](../Tratoo.Web/wwwroot/CONTRIBUTING.md) | Convenções do frontend (Web Components, ES Modules, tema Bootstrap) |
 | [`../README.md`](../README.md) | Apresentação do projeto e como executar |
 
