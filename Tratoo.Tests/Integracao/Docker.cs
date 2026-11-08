@@ -81,6 +81,16 @@ namespace Tratoo.Tests.Integracao
         }
     }
 
+    /// <summary>[Theory] com a mesma regra do <see cref="FactComDockerAttribute"/>.</summary>
+    public sealed class TheoryComDockerAttribute : TheoryAttribute
+    {
+        public TheoryComDockerAttribute()
+        {
+            if (!DockerCli.Disponivel && !DockerCli.Exigido)
+                Skip = "Docker indisponível: teste de integração com Postgres/Redis reais. Suba o Docker para executá-lo.";
+        }
+    }
+
     internal sealed class ContainerDocker : IAsyncDisposable
     {
         public string Id { get; }
