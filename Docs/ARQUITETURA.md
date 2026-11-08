@@ -967,7 +967,7 @@ PIX, CPF/CNPJ e CPF do representante legal**:
   cifrado, não contam. A heurística `PareceTexto` separa uma decifragem real de um padding que
   casou por acaso (cerca de 1 em 256 com a chave errada). Como `/health/ready` é o health check de
   deploy, uma versão com a chave errada não é promovida.
-- **Rotação sem indisponibilidade** ([`ROTACAO-CHAVE-DADOS.md`](ROTACAO-CHAVE-DADOS.md)):
+- **Rotação sem indisponibilidade** ([`ROTACAO-CHAVES.md`](ROTACAO-CHAVES.md#1-chave-de-dados-dataprotector)):
   `DataProtector:Chave` recebe a chave nova e `DataProtector:ChaveAnterior` a antiga. A leitura
   tenta as duas e a escrita usa só a nova. Depois, `--recifrar-dados --aplicar` regrava tudo numa
   transação, conferindo cada valor e abortando se algum mudou durante o processo.
@@ -1725,7 +1725,7 @@ Evidência coletada em 31/10/2026.
 | [`HISTORICO.md`](HISTORICO.md) | Linha do tempo e contexto das decisões arquiteturais |
 | [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-CLIENTE.md) | Diagnóstico do IP do cliente, trust boundary, metodologia da validação em produção e checklist pós-deploy |
 | [`TRILHA2-DECISOES.md`](TRILHA2-DECISOES.md) | Inventário de estado em processo, jobs com N réplicas, Redis, proxy local, migrations, compose e réplicas |
-| [`ROTACAO-CHAVE-DADOS.md`](ROTACAO-CHAVE-DADOS.md) | Roteiro operacional de rotação da chave de dados, com reversão |
+| [`ROTACAO-CHAVES.md`](ROTACAO-CHAVES.md) | Roteiro de troca de todos os segredos (chave de dados, JWT, webhook do Asaas, provedores, Redis), recifragem automática, monitoramento e reversão |
 | [`RECONCILIACAO-PAGAMENTOS.md`](RECONCILIACAO-PAGAMENTOS.md) | Plano da conciliação automática de transferências PIX com resultado incerto e análise do webhook de validação de saque do Asaas |
 | [`../Tratoo.Web/wwwroot/CONTRIBUTING.md`](../Tratoo.Web/wwwroot/CONTRIBUTING.md) | Convenções do frontend (Web Components, ES Modules, tema Bootstrap) |
 | [`../README.md`](../README.md) | Apresentação do projeto e como executar |
