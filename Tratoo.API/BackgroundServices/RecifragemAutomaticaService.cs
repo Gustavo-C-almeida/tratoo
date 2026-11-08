@@ -93,7 +93,7 @@ namespace Tratoo.API.BackgroundServices
                 _logger, ct);
 
             if (!executou)
-                _logger.LogInformation("Recifragem automática já em andamento em outra réplica; rodada ignorada.");
+                _logger.LogDebug("Recifragem automática já em andamento em outra réplica; rodada ignorada.");
 
             return executou;
         }

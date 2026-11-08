@@ -1060,7 +1060,9 @@ Nenhum desses pontos monta SQL com entrada de usuário.
   `Asaas__WebhookToken`. A idempotência é garantida por `WebhookLog.ChaveIdempotencia`, com índice
   único.
 - **Liberação de pagamento:** o pagamento só sai de `Retido` por uma reivindicação atômica no banco
-  ([§6.4](#64-idempotência-financeira)). A chave PIX é validada (`ChavePixValidator`), o
+  ([§6.4](#64-idempotência-financeira)). Se a criação da transferência no Asaas termina sem resposta
+  conclusiva, o pagamento **não** volta para `Retido`: fica aguardando conciliação
+  ([§6.4.1](#641-resultado-incerto-na-transferência-pix)). A chave PIX é validada (`ChavePixValidator`), o
   prestador precisa estar ativo, e cada liberação gera um `AuditLog` (`pagamento_liberado`, com o
   IP) e uma entrada no ledger.
 - **Limite diário:** R$ 5.000 por contratante (`PagamentoService.LimiteDiarioContratante`).
@@ -1121,6 +1123,21 @@ StackExchange.Redis em `redis.railway.internal:6379` (`Standalone v8.2.11, prima
 | `AvaliacaoExpiracaoService` | 24 h (3 min) | Finaliza só se ainda pendente e no estado lido. Lembrete D+3 com marca atômica (`DefinirSeAusente`) | "Avaliação pendente é finalizada uma única vez" |
 | `ReindexacaoBackgroundService` | Segunda, 02:00 UTC (2 min) | `ExecucaoExclusiva`, para não pagar a OpenAI em dobro | Trava de um job não bloqueia outro |
 
+**Por que os três jobs de expiração não usam a trava.** Cada item é uma escrita condicional
+(`UPDATE … WHERE` com o estado esperado), então rodar a mesma varredura em duas réplicas dá o mesmo
+resultado que rodar uma vez: o segundo `UPDATE` afeta 0 linhas. Nenhum deles chama serviço externo
+pago nem move dinheiro. O único efeito externo é o lembrete D+3 de avaliação (e-mail), protegido
+pela marca atômica no Redis; **sem Redis e com 2 réplicas ele sairia em dobro** (dev/testes rodam
+com 1 réplica e estado em memória). A trava fica para os jobs em que a rodada inteira tem custo:
+liberação (Asaas), reindexação (OpenAI) e recifragem.
+
+**Chaves das travas.** Todas são constantes em `ExecucaoExclusiva` (um único lugar), sem hash:
+`0x5472_6174_6F6F_0001` liberação, `…_0002` reindexação, `…_0003` recifragem.
+`ExecucaoExclusivaTests` garante que são distintas.
+
+**Logs.** A réplica que adquire a trava registra `Trava {Chave} adquirida` em Information; a que
+pula registra em Debug. Nenhum dado pessoal.
+
 Os logs do deploy `ebf57cde` mostram as rodadas de expiração de contratos, liberação de pagamentos
 (com `pg_try_advisory_xact_lock`) e expiração de avaliações.
 
@@ -1133,13 +1150,26 @@ conexão dedicada enquanto a rodada roda em outro escopo:
 - **Por que no Postgres, e não no Redis?** O Postgres já é a fonte da verdade, e a correção dos jobs
   não passa a depender do Redis.
 - **E se o processo morrer?** A transação é desfeita e a trava cai sozinha.
+- **E se o Postgres estiver fora do ar?** Abrir a transação falha, o laço do job registra o erro e
+  espera o próximo intervalo. A rodada **nunca** roda sem a trava.
+- **E no cancelamento (deploy, SIGTERM)?** O `stoppingToken` interrompe a rodada e a transação da
+  trava é encerrada no `finally`. O `Task.Delay` entre rodadas fica fora da trava.
+- **Por que não a `TravaDistribuida` de sessão (`pg_try_advisory_lock`) proposta no roadmap?** As
+  connection strings de produção passam pelo endpoint `-pooler` do Neon ([§3.1](#31-topologia)), e
+  o PgBouncer em modo *transaction* não suporta advisory lock de sessão. Ela exigiria uma conexão
+  direta só para a trava. A variante de transação já resolve, sem configuração nova.
+- **O que a trava não resolve.** Ela só elege quem varre. A garantia contra PIX em dobro é a
+  reivindicação atômica por pagamento ([§6.4](#64-idempotência-financeira)), e nenhuma das duas
+  cobre uma chamada ao Asaas sem resposta conclusiva ([§6.4.1](#641-resultado-incerto-na-transferência-pix)).
 
 Cada réplica acorda os próprios jobs. Nos logs de produção de 05/11 (deploy `b1716275`), as duas
 rodaram as varreduras de propostas e de contratos no mesmo segundo, cada uma identificada pelo
 nome, e nenhuma encontrou o que expirar. Uma reindexação repetida logo depois da primeira não paga a
 OpenAI em dobro: o lote pula o que foi indexado nos últimos 7 dias.
 
-**Status:** **Confirmado** por testes (`JobsConcorrenciaTests`, com Postgres real). Em produção, as
+**Status:** **Confirmado** por testes (`JobsConcorrenciaTests` e `ExecucaoExclusivaTests`, com
+Postgres real: disputa, liberação no fim, conexão derrubada com `pg_terminate_backend`,
+cancelamento e banco inacessível). Em produção, as
 rodadas das duas réplicas foram **observadas** nos logs, mas ainda sem um item real a expirar ou
 liberar ao mesmo tempo.
 
@@ -1154,8 +1184,9 @@ liberar ao mesmo tempo.
   um pagamento: os eventos do Asaas, a sincronização e a simulação em sandbox. Teste:
   `WebhookConcorrenciaTests`, com Postgres real.
 - **Liberação:** `UPDATE Pagamentos SET Status='TransferenciaEmProgresso' WHERE Id=@id AND Status='Retido'`
-  (`ExecuteUpdate`). Só um processo vence; o outro registra "liberação concorrente" e sai. Se a
-  transferência falhar, o status volta para `Retido` de forma condicional. Isso fica em
+  (`ExecuteUpdate`). Só um processo vence; o outro registra "liberação concorrente" e sai. O status
+  só volta para `Retido`, de forma condicional, quando o Asaas **comprovadamente recusou** o pedido.
+  Sem resposta conclusiva, fica em `TransferenciaEmProgresso` ([§6.4.1](#641-resultado-incerto-na-transferência-pix)). Isso fica em
   `ExecutarLiberacaoAsync` e cobre **todas** as vias de liberação: manual, automática, disputa e
   reprocessamento.
 - **Cancelamento de contrato ativo sem entrega:** estorno integral ao contratante
@@ -1167,7 +1198,8 @@ stateDiagram-v2
     Aguardando --> Retido: webhook PAYMENT_RECEIVED
     Retido --> TransferenciaEmProgresso: reivindicação atômica
     TransferenciaEmProgresso --> Liberado: TRANSFER_DONE
-    TransferenciaEmProgresso --> Retido: falha recuperável
+    TransferenciaEmProgresso --> Retido: Asaas recusou (400 com errors[], payload corrigível)
+    TransferenciaEmProgresso --> TransferenciaEmProgresso: resultado incerto (aguarda conciliação)
     TransferenciaEmProgresso --> FalhaTransferencia: TRANSFER_FAILED
     Retido --> EmDisputa: disputa aberta
     EmDisputa --> Retido: admin decide pelo prestador
@@ -1177,6 +1209,116 @@ stateDiagram-v2
 Este diagrama mostra o caminho principal. A enum `StatusPagamento` tem também `Criado`,
 `Processando`, `Cancelado` e `Falhou`. O webhook trata 12 eventos do Asaas (`PAYMENT_*` e
 `TRANSFER_*`).
+
+### 6.4.1 Resultado incerto na transferência PIX
+
+**O problema (achado 08 do roadmap, revisado).** O roadmap descrevia duas réplicas liberando o
+mesmo pagamento. Esse cenário já estava protegido (trava da rodada + reivindicação atômica) e não
+se reproduziu. O caminho que duplicava de fato funcionava **com uma única instância**: um timeout,
+erro de rede ou 5xx ao chamar `POST /v3/transfers` era classificado como falha recuperável, o
+pagamento voltava para `Retido` e a varredura seguinte (4 h depois) criava **outra** transferência,
+embora a primeira pudesse ter sido criada. `LiberacaoReproducaoTests` reproduzia isso com Postgres
+real (2 pedidos ao Asaas para o mesmo pagamento). Não há evidência de que tenha acontecido em
+produção; os dados reais não foram consultados.
+
+O próprio Asaas documenta o risco: *"Timeout não significa que a cobrança não foi criada. Verifique
+o resultado antes de tentar novamente."* (docs.asaas.com, Biblioteca de Erros, "Cobrança duplicada
+após retry sem idempotência").
+
+**A solução.** O gateway classifica o desfecho de `POST /v3/transfers`
+(`AsaasIntegracaoException.ClassificarTransferencia`):
+
+| Desfecho | Classificação | Pagamento |
+|---|---|---|
+| 2xx com `id` | sucesso | `TransferenciaEmProgresso` + `AsaasTransferenciaId`; `Liberado` no `TRANSFER_DONE` |
+| 400 com `errors[]` (documentado) | rejeição comprovada (subtipo por conteúdo) | `Retido` (se corrigível) ou `FalhaTransferencia` |
+| 401 (documentado) | rejeição comprovada | `FalhaTransferencia` |
+| Timeout, falha de rede, exceção inesperada | **`ResultadoIncerto`** | **fica em `TransferenciaEmProgresso`** |
+| 5xx | **`ResultadoIncerto`** | idem |
+| 403, 404, 408, 409, 422, 429, 400 sem `errors[]` (não documentados para o endpoint) | **`ResultadoIncerto`** | idem |
+| 2xx sem `id` legível | **`ResultadoIncerto`** | idem |
+
+A referência oficial do endpoint ("Transferir para conta de outra Instituição ou chave Pix")
+documenta só 200, 400 (`ErrorResponseDTO`) e 401. Por isso só essas respostas contam como prova de
+que nada foi criado. **Ampliar a lista exige evidência** (documentação ou resposta observada).
+
+No resultado incerto, `PagamentoService.RegistrarResultadoIncertoAsync`:
+- mantém `Status = TransferenciaEmProgresso`, que nenhuma varredura e nem o reprocessamento admin
+  (que exige `FalhaTransferencia`) pegam. Logo, **não há nova tentativa automática**;
+- grava `StatusGateway = "RESULTADO_INCERTO"`;
+- grava no ledger uma entrada de valor 0 com o prefixo `[RESULTADO INCERTO]`;
+- registra em Error "REQUER CONCILIAÇÃO" e devolve ao chamador (liberação manual) uma mensagem
+  dizendo que o pagamento aguarda conciliação.
+
+**Logs e ledger sem o corpo da resposta.** O corpo de uma resposta do Asaas pode ecoar chave PIX,
+CPF/CNPJ e dados do favorecido, então nunca vai para log, mensagem de exceção ou ledger. No lugar
+dele vai `AsaasIntegracaoException.ResumirResposta`: os `code` de `errors[]` (identificadores
+validados) e o tamanho do corpo. A chave do pedido aparece só mascarada (últimos 4 caracteres).
+As mensagens distinguem "Asaas **recusou** a criação (nada foi criado)" de "resposta
+**inconclusiva** (resultado incerto)". `AsaasLogSemDadosSensiveisTests` e um teste de ponta a
+ponta com Postgres real conferem isso.
+
+Nenhuma migração: `StatusGateway` já é `text`, e o estado reaproveita um status existente.
+
+**Limitações.**
+- A trava é por banco e a reivindicação é por pagamento: nenhuma das duas sabe o que aconteceu no
+  Asaas. Elas impedem a **segunda** tentativa, não resolvem a primeira.
+- Um pagamento incerto **fica parado** até alguém conciliar. O webhook `TRANSFER_DONE` não o
+  encontra sozinho, porque o lookup é por `AsaasTransferenciaId`, que nunca foi gravado. O evento
+  não se perde: fica em `WebhookLogs` com o payload e "Pagamento não encontrado no sistema".
+- **Queda do processo** entre a resposta 2xx do Asaas e o `SaveChanges`: o banco fica em
+  `TransferenciaEmProgresso` sem `AsaasTransferenciaId` e **sem** a marca `RESULTADO_INCERTO`.
+  Também não repete (seguro), mas só é identificável por
+  `Status = TransferenciaEmProgresso AND AsaasTransferenciaId IS NULL`.
+
+**Conciliação: pendente (roadmap).** O plano da versão automática está em
+[RECONCILIACAO-PAGAMENTOS.md](RECONCILIACAO-PAGAMENTOS.md). Até ela existir, o procedimento é
+manual:
+1. Listar candidatos: `Status = 'TransferenciaEmProgresso' AND (StatusGateway = 'RESULTADO_INCERTO'
+   OR AsaasTransferenciaId IS NULL)`, com o horário da entrada `[RESULTADO INCERTO]` do ledger.
+2. Procurar em `WebhookLogs` um evento `TRANSFER_*` não casado com `transfer.externalReference`
+   igual ao `Pagamento.Id`. Senão, no Asaas, `GET /v3/transfers` com `dateCreated[ge]`/`[le]`
+   cobrindo o dia da tentativa e o seguinte, comparando `externalReference` com o `Pagamento.Id`.
+   A listagem **não filtra por esse campo** (só data de criação, data de efetivação e tipo), então
+   a comparação é do nosso lado. Para transferências anteriores ao commit `3870065`, que não têm
+   `externalReference`, comparar valor e chave PIX.
+3. **Encontrou:** vincular o `id` (`AsaasTransferenciaId`) e deixar o webhook `TRANSFER_DONE` (ou
+   o status da transferência) concluir.
+4. **Não encontrou:** o tempo decorrido **não prova** que a transferência não foi criada. Os 30
+   minutos depois da tentativa só marcam o início da investigação. O retorno para `Retido`, que
+   reabre a possibilidade de uma nova transferência, exige **evidência conclusiva** de que ela não
+   aconteceu **e** aprovação de um admin, registradas no ledger
+   ([critério proposto](RECONCILIACAO-PAGAMENTOS.md#41-retorno-para-retido-só-com-evidência-conclusiva-e-aprovação-de-um-admin)).
+
+A conciliação automática fica fora desta correção. Mesmo quando existir, ela **propõe** o retorno
+para `Retido`, e quem aprova é o admin.
+
+**Idempotência no Asaas (verificado na documentação oficial em 08/11/2026).**
+- **Não existe** cabeçalho de idempotência documentado para transferências. O Asaas não deduplica
+  pedidos repetidos; recomenda controle na integração.
+- `POST /v3/transfers` **aceita `externalReference`** ("Identificador da transferência no seu
+  sistema"), que volta no objeto da transferência e nos webhooks.
+- **Implementado:** toda liberação envia `externalReference = Pagamento.Id` (commit `3870065`).
+  Não impede duplicata, mas liga a transferência ao pagamento mesmo sem a resposta da criação.
+- **Em investigação, não implementado:** o "Mecanismo para validação de saque via webhooks". O
+  Asaas consulta um endpoint nosso cerca de 5 s depois de cada saque e só executa com
+  `APPROVED`. É fail-closed e vale para a conta inteira, e o exemplo de payload de transferência
+  não mostra `externalReference`. Análise e perguntas em aberto:
+  [RECONCILIACAO-PAGAMENTOS.md §8](RECONCILIACAO-PAGAMENTOS.md#8-webhook-de-validação-de-saque-o-que-a-documentação-diz-e-o-que-falta-provar).
+
+**Testes.** `LiberacaoReproducaoTests` (Postgres real): duas varreduras concorrentes chamam o Asaas
+uma vez; a liberação envia o `Pagamento.Id` como `externalReference`; timeout e exceção
+inesperada não geram segunda transferência e deixam a marca; rejeição
+comprovada volta para `Retido` e permite nova tentativa; o reprocessamento admin recusa o pagamento
+incerto. `AsaasTransferenciaClassificacaoTests`: a classificação de cada resposta HTTP e o corpo enviado
+(`externalReference` só quando informado).
+
+**Pendências registradas.**
+1. Conciliação automática ([plano](RECONCILIACAO-PAGAMENTOS.md)), a prioridade técnica deste fluxo.
+2. Classificação por `code` dos erros 400 do Asaas ([§6.6](#66-duas-réplicas-em-produção),
+   "Riscos").
+3. Teste no sandbox do webhook de validação de saque: aprovado, só registrando o payload, ainda
+   não executado ([protocolo](RECONCILIACAO-PAGAMENTOS.md#81-teste-aprovado-no-sandbox-só-registrar-o-payload)).
 
 ### 6.5 Escala horizontal
 
@@ -1188,7 +1330,7 @@ Este diagrama mostra o caminho principal. A enum `StatusPagamento` tem também `
 | Data Protection do ASP.NET | Fica local por réplica, **de propósito**: nenhum componente o consome (o JWT é assinado com `Jwt:SecretKey`, e a autenticação não usa antiforgery, sessão nem cookie auth do ASP.NET) |
 | Cache de perfil | Local por réplica, com TTL de 2 min |
 | Duas réplicas | No compose (`API_REPLICAS=2` atrás do Nginx) e nos `RedisReplicasTests` com Redis real |
-| Produção | **2 réplicas** desde 05/11 |
+| Produção | **2 réplicas** desde 05/11 (`numReplicas: 2` em `us-east4` no serviço `tratoo-production`, conferido na Railway em 08/11; `tratoo-staging` tem 1) |
 
 ### 6.6 Duas réplicas em produção
 
@@ -1262,6 +1404,13 @@ mesmo `Jwt:SecretKey`, e o que precisa ser visto pelas duas está no Redis, no P
   `SIGABRT` não geraram evidência de queda. Requisições em andamento numa queda abrupta podem
   falhar, e esse número não foi medido.
 - **Carga:** nenhum teste de carga foi feito. Duas réplicas não são prova de escalabilidade.
+- **Transferência PIX com resultado incerto:** não depende do número de réplicas. Fica parada até a
+  conciliação, que ainda é manual ([§6.4.1](#641-resultado-incerto-na-transferência-pix)).
+- **Classificação dos 400 do Asaas:** `Classificar` procura `"descri"` no corpo inteiro, e todo erro
+  do Asaas tem o campo `description`. Por isso todo 400 vira `PayloadInvalido` (volta para
+  `Retido` e é retentado a cada 4 h), em vez de `ChavePixInvalida` ou `SaldoInsuficiente`
+  (`FalhaTransferencia`). Não duplica dinheiro, já que o Asaas recusou. A correção depende dos
+  códigos de erro oficiais.
 
 ---
 
@@ -1426,8 +1575,10 @@ Cada decisão registra o que é e por que é assim. O contexto de cada uma está
   custo (liberação de pagamento e reindexação).
 - **Por quê:** escritas condicionais eliminam corridas mesmo com 1 réplica; uma trava de transação
   funciona pelo PgBouncer em modo *transaction*, e o Postgres já é a fonte da verdade.
-- **Evidência:** `JobsConcorrenciaTests` com Postgres real; `pg_try_advisory_xact_lock` nos logs
-  de produção.
+- **Evidência:** `JobsConcorrenciaTests` e `ExecucaoExclusivaTests` com Postgres real;
+  `pg_try_advisory_xact_lock` nos logs de produção.
+- **Limite:** nem a trava nem a escrita condicional sabem o que aconteceu no gateway. Uma chamada
+  ao Asaas sem resposta conclusiva é tratada à parte ([§6.4.1](#641-resultado-incerto-na-transferência-pix)).
 
 #### D9 — Migrations em um modo separado
 
@@ -1544,7 +1695,9 @@ Evidência coletada em 31/10/2026.
 | Proteção AES-GCM/HMAC do estado no Redis | Confirmado (testes) | `ProtecaoEstadoEfemero`; `EstadoEfemeroTests`; `Redis__ChaveProtecao` configurada |
 | OTP de uso único atômico | Confirmado (testes) | `OtpConcorrenciaTests`, `RedisReplicasTests` |
 | `ExecucaoExclusiva` + escritas condicionais nos jobs | Confirmado (testes) | `JobsConcorrenciaTests`; `pg_try_advisory_xact_lock` no log de produção |
-| Reivindicação atômica na liberação de pagamento | Confirmado (testes) | Teste de duas réplicas |
+| Reivindicação atômica na liberação de pagamento | Confirmado (testes) | Teste de duas réplicas; `ExecucaoExclusivaTests` (8 disputas, 1 vencedor) |
+| Transferência sem resposta conclusiva não é repetida | Confirmado (testes) | `LiberacaoReproducaoTests`, `AsaasTransferenciaClassificacaoTests`. Conciliação: **pendente** |
+| Corpo das respostas do Asaas fora de log, exceção e ledger | Confirmado (testes) | `AsaasLogSemDadosSensiveisTests`; teste de ponta a ponta em `LiberacaoReproducaoTests` |
 | `DataProtector` com chave por configuração | Confirmado | Exit 1 sem chave (testes); `DataProtector__Chave` configurada |
 | Check `dados-cifrados` | Confirmado | Healthy em produção |
 | Rotação de chave (`--recifrar-dados`) | Confirmado (testes) | `RotacaoChaveDadosTests`, `RecifragemTests` |
@@ -1573,6 +1726,7 @@ Evidência coletada em 31/10/2026.
 | [`REVERSE-PROXY-IP-CLIENTE.md`](REVERSE-PROXY-IP-CLIENTE.md) | Diagnóstico do IP do cliente, trust boundary, metodologia da validação em produção e checklist pós-deploy |
 | [`TRILHA2-DECISOES.md`](TRILHA2-DECISOES.md) | Inventário de estado em processo, jobs com N réplicas, Redis, proxy local, migrations, compose e réplicas |
 | [`ROTACAO-CHAVES.md`](ROTACAO-CHAVES.md) | Roteiro de troca de todos os segredos (chave de dados, JWT, webhook do Asaas, provedores, Redis), recifragem automática, monitoramento e reversão |
+| [`RECONCILIACAO-PAGAMENTOS.md`](RECONCILIACAO-PAGAMENTOS.md) | Plano da conciliação automática de transferências PIX com resultado incerto e análise do webhook de validação de saque do Asaas |
 | [`../Tratoo.Web/wwwroot/CONTRIBUTING.md`](../Tratoo.Web/wwwroot/CONTRIBUTING.md) | Convenções do frontend (Web Components, ES Modules, tema Bootstrap) |
 | [`../README.md`](../README.md) | Apresentação do projeto e como executar |
 

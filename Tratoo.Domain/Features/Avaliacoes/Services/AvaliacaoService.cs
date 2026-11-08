@@ -467,8 +467,8 @@ namespace Tratoo.Domain.Features.Avaliacoes
                         projetoTitulo);
 
                     _logger.LogInformation(
-                        "Lembrete D+3 enviado para {Email} — avaliação {Id}.",
-                        avaliador.Email, av.Id);
+                        "Lembrete D+3 enviado ao avaliador {AvaliadorId} — avaliação {Id}.", // sem e-mail no log
+                        av.AvaliadorId, av.Id);
                 }
                 catch (Exception ex)
                 {
