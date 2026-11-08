@@ -2,9 +2,12 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY Tratoo.Domain/Tratoo.Domain.csproj Tratoo.Domain/
-COPY Tratoo.API/Tratoo.API.csproj Tratoo.API/
-RUN dotnet restore Tratoo.API/Tratoo.API.csproj
+# Restore determinístico, igual ao da CI: o Directory.Build.props liga os lock files e o
+# --locked-mode falha se um .csproj divergir do packages.lock.json versionado.
+COPY Directory.Build.props Directory.Build.targets ./
+COPY Tratoo.Domain/Tratoo.Domain.csproj Tratoo.Domain/packages.lock.json Tratoo.Domain/
+COPY Tratoo.API/Tratoo.API.csproj Tratoo.API/packages.lock.json Tratoo.API/
+RUN dotnet restore Tratoo.API/Tratoo.API.csproj --locked-mode
 
 COPY Tratoo.Domain/ Tratoo.Domain/
 COPY Tratoo.API/ Tratoo.API/
