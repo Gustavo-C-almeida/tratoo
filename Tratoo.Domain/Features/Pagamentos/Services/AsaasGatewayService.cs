@@ -248,21 +248,22 @@ namespace Tratoo.Domain.Features.Pagamentos
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
             {
-                // Falha de rede ou timeout — gateway pode estar processando, não marcar como falha definitiva.
+                // Falha de rede ou timeout: o pedido pode ter chegado e a transferência pode
+                // ter sido criada. Resultado INCERTO — nunca repetir sem conciliar.
                 _logger.LogError(ex,
-                    "Timeout ou falha de rede ao criar transferência PIX. Valor: R$ {Valor}, Tipo: {Tipo}, Chave: {Chave}",
+                    "Timeout ou falha de rede ao criar transferência PIX (resultado incerto). Valor: R$ {Valor}, Tipo: {Tipo}, Chave: {Chave}",
                     request.Valor, request.TipoChavePix, MascararChave(request.ChavePix));
 
                 throw new AsaasIntegracaoException(
                     HttpStatusCode.ServiceUnavailable,
                     ex.Message,
-                    AsaasErroTipo.GatewayIndisponivel,
+                    AsaasErroTipo.ResultadoIncerto,
                     $"Falha de rede/timeout ao contactar o Asaas: {ex.Message}");
             }
 
             if (!httpResp.IsSuccessStatusCode)
             {
-                var tipoErro = AsaasIntegracaoException.Classificar(httpResp.StatusCode, responseBody);
+                var tipoErro = AsaasIntegracaoException.ClassificarTransferencia(httpResp.StatusCode, responseBody);
 
                 _logger.LogError(
                     "Asaas rejeitou a transferência PIX. Status: {StatusCode}, Tipo: {TipoErro}, " +
@@ -293,21 +294,30 @@ namespace Tratoo.Domain.Features.Pagamentos
                     $"Asaas [{(int)httpResp.StatusCode}]: {mensagemErro}");
             }
 
-            JsonNode responseNode;
+            // 2xx: o Asaas aceitou o pedido. Se não der para ler o id, a transferência
+            // provavelmente EXISTE — resultado incerto, nunca "falha recuperável".
+            string id;
+            string status;
             try
             {
-                responseNode = JsonNode.Parse(responseBody)
+                var responseNode = JsonNode.Parse(responseBody)
                     ?? throw new InvalidOperationException("Resposta vazia do Asaas.");
+                id = responseNode["id"]?.GetValue<string>()
+                    ?? throw new InvalidOperationException("Asaas não retornou ID da transferência.");
+                status = responseNode["status"]?.GetValue<string>() ?? "PENDING";
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Falha ao deserializar resposta de transferência do Asaas. Body: {Body}", responseBody);
-                throw;
+                // Sem o corpo no log: ele traz a chave PIX sem máscara.
+                _logger.LogError(ex,
+                    "Resposta {StatusCode} do Asaas sem ID de transferência legível (resultado incerto). Valor: R$ {Valor}",
+                    (int)httpResp.StatusCode, request.Valor);
+                throw new AsaasIntegracaoException(
+                    httpResp.StatusCode,
+                    string.Empty,
+                    AsaasErroTipo.ResultadoIncerto,
+                    $"Asaas respondeu {(int)httpResp.StatusCode}, mas sem ID de transferência legível: {ex.Message}");
             }
-
-            var id     = responseNode["id"]?.GetValue<string>()
-                ?? throw new InvalidOperationException("Asaas não retornou ID da transferência.");
-            var status = responseNode["status"]?.GetValue<string>() ?? "PENDING";
 
             _logger.LogInformation(
                 "Transferência PIX criada no Asaas: {TransId}, status: {StatusAsaas}, " +
