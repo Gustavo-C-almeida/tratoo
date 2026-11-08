@@ -1,8 +1,11 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Tratoo.API.BackgroundServices;
 using Tratoo.API.Infrastructure;
 using Tratoo.Domain.Data;
@@ -71,10 +74,10 @@ namespace Tratoo.Tests.Integracao
             "{\"errors\":[{\"code\":\"invalid_description\",\"description\":\"A descrição excede o limite\"}]}",
             AsaasErroTipo.PayloadInvalido, "Asaas [400]: A descrição excede o limite");
 
-        private static ServiceProvider Servicos(string conexao, IAsaasGatewayService gateway)
+        private static ServiceProvider Servicos(string conexao, IAsaasGatewayService gateway, CapturaDeLog? log = null)
         {
             var s = new ServiceCollection();
-            s.AddLogging();
+            s.AddLogging(b => { if (log is not null) b.AddProvider(log); });
             s.AddDbContext<TratooContext>(o => o.UseNpgsql(conexao));
             s.AddScoped<IPagamentoRepository, PagamentoRepository>();
             s.AddScoped<IContratoServicoRepository, ContratoServicoRepository>();
@@ -198,6 +201,70 @@ namespace Tratoo.Tests.Integracao
 
             var pedido = Assert.Single(asaas.Pedidos);
             Assert.Equal(cenario.PagamentoId!.Value.ToString(), pedido.ReferenciaExterna);
+        }
+
+        // ── Sem dados sensíveis em log e ledger, de ponta a ponta ──────────────
+
+        private const string ChaveEcoada = "fulano.secreto@exemplo.com.br";
+        private const string CpfEcoado = "98765432100";
+
+        private sealed class HandlerFixo : HttpMessageHandler
+        {
+            private readonly HttpStatusCode _status;
+            private readonly string _corpo;
+            public HandlerFixo(HttpStatusCode status, string corpo) { _status = status; _corpo = corpo; }
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) =>
+                Task.FromResult(new HttpResponseMessage(_status) { Content = new StringContent(_corpo, Encoding.UTF8, "application/json") });
+        }
+
+        /// <summary>Gateway REAL (AsaasGatewayService) com o HTTP do Asaas simulado.</summary>
+        private static IAsaasGatewayService GatewayReal(HttpStatusCode status, string corpo, CapturaDeLog log) =>
+            new AsaasGatewayService(new HttpClient(new HandlerFixo(status, corpo)),
+                Options.Create(new AsaasConfig { BaseUrl = "https://sandbox.invalid/api/v3", ApiKey = "chave-de-teste" }),
+                log.Para<AsaasGatewayService>());
+
+        private static void SemVazamento(string texto)
+        {
+            Assert.DoesNotContain(ChaveEcoada, texto);
+            Assert.DoesNotContain(CpfEcoado, texto);
+        }
+
+        [TheoryComDocker]
+        [InlineData(HttpStatusCode.InternalServerError, true)]
+        [InlineData(HttpStatusCode.BadRequest, false)]
+        public async Task Liberacao_nao_grava_o_corpo_da_resposta_em_log_nem_no_ledger(HttpStatusCode status, bool incerto)
+        {
+            var conexao = await _pg.CriarBancoMigradoAsync();
+            var cenario = await SeedIntegracao.CriarAsync(conexao, comPagamentoRetidoVencido: true);
+            var log = new CapturaDeLog();
+            var corpo = incerto
+                ? "<html>upstream error for key " + ChaveEcoada + " cpf " + CpfEcoado + "</html>"
+                : "{\"errors\":[{\"code\":\"invalid_description\",\"description\":\"description inválida para " +
+                  ChaveEcoada + " / " + CpfEcoado + "\"}]}";
+            await using var servicos = Servicos(conexao, GatewayReal(status, corpo, log), log);
+
+            Assert.True(await Job(servicos).ExecutarRodadaAsync(CancellationToken.None));
+
+            var (statusFinal, _, ledger) = await EstadoAsync(conexao, cenario.PagamentoId!.Value);
+            SemVazamento(log.Tudo);
+            foreach (var linha in ledger) SemVazamento(linha);
+
+            var linhasDoPagamento = string.Join("\n", log.Linhas
+                .Where(l => l.Categoria.EndsWith(nameof(PagamentoService)) || l.Categoria.EndsWith(nameof(AsaasGatewayService)))
+                .Select(l => l.Texto));
+            if (incerto)
+            {
+                Assert.Equal(StatusPagamento.TransferenciaEmProgresso, statusFinal);
+                Assert.Contains("resultado incerto", linhasDoPagamento);
+                Assert.DoesNotContain("recusou", linhasDoPagamento);
+                Assert.DoesNotContain("rejeitou", linhasDoPagamento);
+            }
+            else
+            {
+                Assert.Equal(StatusPagamento.Retido, statusFinal);
+                Assert.Contains("recusou", linhasDoPagamento);
+                Assert.DoesNotContain("resultado incerto", linhasDoPagamento);
+            }
         }
 
         [FactComDocker]

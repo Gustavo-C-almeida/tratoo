@@ -164,12 +164,12 @@ namespace Tratoo.Domain.Features.Pagamentos
                 if (!resp.IsSuccessStatusCode)
                 {
                     _logger.LogWarning(
-                        "Asaas [tentativa {T}/{Max}] erro ao obter QR Code para {CobrancaId}: {Status} {Body}",
-                        tentativa, maxTentativas, cobrancaId, resp.StatusCode, body);
+                        "Asaas [tentativa {T}/{Max}] erro ao obter QR Code para {CobrancaId}: {Status}, {Resumo}",
+                        tentativa, maxTentativas, cobrancaId, resp.StatusCode, AsaasIntegracaoException.ResumirResposta(body));
 
                     if (tentativa == maxTentativas)
                         throw new InvalidOperationException(
-                            $"Erro ao obter QR Code PIX após {maxTentativas} tentativas: {resp.StatusCode} — {body}");
+                            $"Erro ao obter QR Code PIX após {maxTentativas} tentativas: {resp.StatusCode} — {AsaasIntegracaoException.ResumirResposta(body)}");
 
                     continue;
                 }
@@ -205,8 +205,8 @@ namespace Tratoo.Domain.Features.Pagamentos
                 if (string.IsNullOrEmpty(payload))
                 {
                     _logger.LogWarning(
-                        "Asaas [tentativa {T}/{Max}] QR Code disponível mas payload vazio para {CobrancaId}. Resposta: {Body}",
-                        tentativa, maxTentativas, cobrancaId, body);
+                        "Asaas [tentativa {T}/{Max}] QR Code disponível mas payload vazio para {CobrancaId}. Resposta com {Bytes} bytes.",
+                        tentativa, maxTentativas, cobrancaId, body.Length);
 
                     if (tentativa < maxTentativas) continue;
                 }
@@ -266,34 +266,34 @@ namespace Tratoo.Domain.Features.Pagamentos
             if (!httpResp.IsSuccessStatusCode)
             {
                 var tipoErro = AsaasIntegracaoException.ClassificarTransferencia(httpResp.StatusCode, responseBody);
+                // Só códigos e tamanho: o corpo pode ecoar chave PIX e dados do favorecido.
+                var resumo = AsaasIntegracaoException.ResumirResposta(responseBody);
 
-                _logger.LogError(
-                    "Asaas rejeitou a transferência PIX. Status: {StatusCode}, Tipo: {TipoErro}, " +
-                    "Valor: R$ {Valor}, TipoPix: {TipoPix}, Chave: {Chave}, Resposta: {Body}",
-                    (int)httpResp.StatusCode, tipoErro,
-                    request.Valor, request.TipoChavePix, MascararChave(request.ChavePix),
-                    responseBody);
-
-                // Extrai a primeira mensagem de erro do Asaas para a exceção
-                string mensagemErro;
-                try
+                if (tipoErro == AsaasErroTipo.ResultadoIncerto)
                 {
-                    using var doc  = JsonDocument.Parse(responseBody);
-                    var erros      = doc.RootElement.TryGetProperty("errors", out var e) ? e : default;
-                    mensagemErro   = erros.ValueKind == JsonValueKind.Array && erros.GetArrayLength() > 0
-                        ? erros[0].TryGetProperty("description", out var d) ? d.GetString() ?? responseBody : responseBody
-                        : responseBody;
+                    // NÃO é uma rejeição: o status não comprova que nada foi criado.
+                    _logger.LogError(
+                        "Resposta inconclusiva do Asaas à criação da transferência PIX (resultado incerto). " +
+                        "HTTP {StatusCode}, {Resumo}. Valor: R$ {Valor}, TipoPix: {TipoPix}, Chave: {Chave}",
+                        (int)httpResp.StatusCode, resumo,
+                        request.Valor, request.TipoChavePix, MascararChave(request.ChavePix));
                 }
-                catch
+                else
                 {
-                    mensagemErro = responseBody;
+                    _logger.LogError(
+                        "Asaas recusou a criação da transferência PIX (nada foi criado). " +
+                        "HTTP {StatusCode}, Tipo: {TipoErro}, {Resumo}. Valor: R$ {Valor}, TipoPix: {TipoPix}, Chave: {Chave}",
+                        (int)httpResp.StatusCode, tipoErro, resumo,
+                        request.Valor, request.TipoChavePix, MascararChave(request.ChavePix));
                 }
 
                 throw new AsaasIntegracaoException(
                     httpResp.StatusCode,
                     responseBody,
                     tipoErro,
-                    $"Asaas [{(int)httpResp.StatusCode}]: {mensagemErro}");
+                    tipoErro == AsaasErroTipo.ResultadoIncerto
+                        ? $"Asaas [{(int)httpResp.StatusCode}] sem resposta conclusiva: {resumo}"
+                        : $"Asaas [{(int)httpResp.StatusCode}] recusou: {resumo}");
             }
 
             // 2xx: o Asaas aceitou o pedido. Se não der para ler o id, a transferência
@@ -352,8 +352,9 @@ namespace Tratoo.Domain.Features.Pagamentos
 
             if (!resp.IsSuccessStatusCode)
             {
-                _logger.LogError("Falha ao estornar cobrança {CobrancaId} no Asaas: {Body}", cobrancaId, respBody);
-                throw new InvalidOperationException($"Erro ao processar estorno: {resp.StatusCode} - {respBody}");
+                var resumo = AsaasIntegracaoException.ResumirResposta(respBody);
+                _logger.LogError("Falha ao estornar cobrança {CobrancaId} no Asaas: {Status}, {Resumo}", cobrancaId, resp.StatusCode, resumo);
+                throw new InvalidOperationException($"Erro ao processar estorno: {resp.StatusCode} - {resumo}");
             }
 
             _logger.LogInformation("Estorno solicitado para cobrança Asaas: {CobrancaId}", cobrancaId);
@@ -397,8 +398,8 @@ namespace Tratoo.Domain.Features.Pagamentos
             if (!resp.IsSuccessStatusCode)
             {
                 _logger.LogError(
-                    "Falha ao simular pagamento para cobrança {CobrancaId}: {Body}",
-                    cobrancaId, respBody);
+                    "Falha ao simular pagamento para cobrança {CobrancaId}: {Status}, {Resumo}",
+                    cobrancaId, resp.StatusCode, AsaasIntegracaoException.ResumirResposta(respBody));
                 throw new InvalidOperationException(
                     $"Não foi possível simular o pagamento no Asaas Sandbox: {resp.StatusCode}");
             }
@@ -420,23 +421,26 @@ namespace Tratoo.Domain.Features.Pagamentos
 
             if (!response.IsSuccessStatusCode)
             {
+                var resumo = AsaasIntegracaoException.ResumirResposta(responseBody);
                 _logger.LogError(
-                    "Asaas API error {Status} em POST {Endpoint}: {Body}",
-                    response.StatusCode, endpoint, responseBody);
+                    "Asaas API error {Status} em POST {Endpoint}: {Resumo}",
+                    response.StatusCode, endpoint, resumo);
 
-                // Tenta extrair mensagem de erro do Asaas
+                // A descrição do Asaas vai para o usuário que fez a operação (ex.: "CPF
+                // inválido"). Sem descrição, nunca o corpo bruto: só o resumo.
                 string mensagem;
                 try
                 {
                     using var doc = JsonDocument.Parse(responseBody);
                     var erros = doc.RootElement.TryGetProperty("errors", out var e) ? e : default;
                     mensagem = erros.ValueKind == JsonValueKind.Array && erros.GetArrayLength() > 0
-                        ? erros[0].TryGetProperty("description", out var d) ? d.GetString() ?? responseBody : responseBody
-                        : responseBody;
+                        && erros[0].TryGetProperty("description", out var d) && d.GetString() is { } desc
+                        ? desc
+                        : resumo;
                 }
                 catch
                 {
-                    mensagem = responseBody;
+                    mensagem = resumo;
                 }
 
                 throw new InvalidOperationException($"Asaas API [{response.StatusCode}]: {mensagem}");

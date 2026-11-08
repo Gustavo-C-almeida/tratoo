@@ -50,15 +50,19 @@ namespace Tratoo.Domain.Features.Pagamentos
 
     /// <summary>
     /// Exceção lançada pelo AsaasGatewayService quando a API Asaas retorna erro.
-    /// Carrega o contexto completo para log estruturado e para o PagamentoService
-    /// decidir o estado de falha correto.
+    /// Carrega o contexto para log estruturado e para o PagamentoService decidir o estado
+    /// de falha correto. O corpo bruto da resposta NÃO é guardado: ele pode trazer chave
+    /// PIX, CPF/CNPJ e dados do favorecido, e esta exceção chega a logs e ao ledger.
     /// </summary>
     public class AsaasIntegracaoException : Exception
     {
         public HttpStatusCode StatusCode { get; }
-        public string RespostaBody { get; }
+        /// <summary>Resumo seguro do corpo (<see cref="ResumirResposta"/>), nunca o corpo.</summary>
+        public string ResumoResposta { get; }
         public AsaasErroTipo TipoErro { get; }
 
+        /// <param name="respostaBody">Corpo bruto; usado só para o resumo, não é guardado.</param>
+        /// <param name="message">Não deve conter o corpo nem dado pessoal.</param>
         public AsaasIntegracaoException(
             HttpStatusCode statusCode,
             string respostaBody,
@@ -66,10 +70,56 @@ namespace Tratoo.Domain.Features.Pagamentos
             string message)
             : base(message)
         {
-            StatusCode   = statusCode;
-            RespostaBody = respostaBody;
-            TipoErro     = tipoErro;
+            StatusCode     = statusCode;
+            ResumoResposta = ResumirResposta(respostaBody);
+            TipoErro       = tipoErro;
         }
+
+        /// <summary>
+        /// Descrição de uma resposta do Asaas segura para log, exceção e ledger: só os
+        /// <c>code</c> de <c>errors[]</c> (identificadores fixos da API) e o tamanho do corpo.
+        /// Nunca o texto: <c>description</c> e os demais campos podem ecoar chave PIX,
+        /// CPF/CNPJ, nome ou e-mail.
+        /// </summary>
+        public static string ResumirResposta(string? body)
+        {
+            if (string.IsNullOrEmpty(body))
+                return "corpo vazio";
+
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("errors", out var erros)
+                    && erros.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var codigos = erros.EnumerateArray()
+                        .Select(e => e.ValueKind == System.Text.Json.JsonValueKind.Object
+                                     && e.TryGetProperty("code", out var c)
+                                     && c.ValueKind == System.Text.Json.JsonValueKind.String
+                                ? CodigoSeguro(c.GetString())
+                                : "?")
+                        .Take(5)
+                        .ToList();
+                    return codigos.Count == 0
+                        ? $"errors[] vazio ({body.Length} bytes)"
+                        : $"códigos de erro: {string.Join(", ", codigos)} ({body.Length} bytes)";
+                }
+                return $"JSON sem errors[] ({body.Length} bytes)";
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return $"corpo não-JSON ({body.Length} bytes)";
+            }
+        }
+
+        // Um code da API é um identificador (ex.: invalid_value). Qualquer outra coisa
+        // — inclusive um valor ecoado — não passa.
+        private static string CodigoSeguro(string? codigo) =>
+            !string.IsNullOrEmpty(codigo) && codigo.Length <= 60
+            && codigo.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '_' or '-' or '.')
+                ? codigo
+                : "?";
 
         /// <summary>
         /// Classificação de uma resposta não-2xx de <c>POST /v3/transfers</c>, onde o erro

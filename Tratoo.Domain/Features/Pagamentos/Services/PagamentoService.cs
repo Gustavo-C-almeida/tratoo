@@ -1012,14 +1012,18 @@ namespace Tratoo.Domain.Features.Pagamentos
             }
             catch (AsaasIntegracaoException asaasEx)
             {
+                // Só o resumo da resposta (códigos de erro), nunca o corpo. A mensagem distingue
+                // "o Asaas recusou" de "não se sabe se foi criada".
                 _logger.LogError(asaasEx,
-                    "Falha na integração Asaas ao criar transferência. " +
+                    (asaasEx.TipoErro == AsaasErroTipo.ResultadoIncerto
+                        ? "Criação da transferência PIX sem resposta conclusiva do Asaas (resultado incerto). "
+                        : "Asaas recusou a criação da transferência PIX. ") +
                     "PagamentoId: {PagamentoId}, ContratoId: {ContratoId}, PrestadorId: {PrestadorId}, " +
                     "Valor: R$ {Valor}, TipoPix: {TipoPix}, Chave: {Chave}, " +
-                    "HTTP: {StatusCode}, TipoErro: {TipoErro}, Resposta: {Resposta}",
+                    "HTTP: {StatusCode}, TipoErro: {TipoErro}, Resposta: {Resumo}",
                     pagamento.Id, contrato.Id, contrato.PrestadorId,
                     pagamento.ValorBruto, tipoChavePix, MascararChavePix(chavePix),
-                    (int)asaasEx.StatusCode, asaasEx.TipoErro, asaasEx.RespostaBody);
+                    (int)asaasEx.StatusCode, asaasEx.TipoErro, asaasEx.ResumoResposta);
 
                 if (asaasEx.TipoErro == AsaasErroTipo.ResultadoIncerto)
                 {
