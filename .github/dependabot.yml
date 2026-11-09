@@ -16,7 +16,6 @@ updates:
       day: monday
       time: "06:17"
       timezone: America/Sao_Paulo
-    open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
     groups:
