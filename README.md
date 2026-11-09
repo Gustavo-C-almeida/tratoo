@@ -87,7 +87,7 @@ flowchart LR
 | `Tratoo.API` | Host HTTP: `Program.cs`, endpoints Minimal API, middlewares, health checks, background services e infraestrutura (proxy, rate limiting, Redis, encerramento) |
 | `Tratoo.Domain` | Regras de negócio organizadas por feature, entidades e `DbContext` do EF Core, além das implementações das integrações externas |
 | `Tratoo.Web` | Frontend estático (`wwwroot`), servido pela própria API |
-| `Tratoo.Tests` | 288 testes: unidade, host em memória e integração com Postgres e Redis reais via Docker |
+| `Tratoo.Tests` | Testes de unidade, de host em memória e de integração com Postgres e Redis reais via Docker |
 
 O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda do Docker),
 `--migrate-only` (aplica migrations e sai) e `--recifrar-dados` (rotação da chave de criptografia).
@@ -177,13 +177,14 @@ completa estão em [ARQUITETURA.md §6.6](Docs/ARQUITETURA.md#66-duas-réplicas-
 ## CI e testes automatizados
 
 O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda nos PRs e pushes de
-`staging` e `main`. Ele faz restore, build em Release e roda os testes. As duas branches exigem que
-esse check passe, inclusive para administradores. O fluxo
-`main → feature/fix → staging → main`, com retirada de funcionalidades e hotfix, está em
-[Docs/CICD.md](Docs/CICD.md).
+`staging` e `main`. Ele confere a origem do PR, restaura os pacotes travados nos lock files,
+verifica pacotes vulneráveis, compila, confere se o modelo do EF tem migration, roda os testes e
+constrói a imagem Docker de produção, varrida com o Trivy. As duas branches exigem esses checks,
+inclusive para administradores. Os passos, o fluxo `main → feature/fix → staging → main`, a
+retirada de funcionalidades e o hotfix estão em [Docs/CICD.md](Docs/CICD.md).
 
-- **288 testes** com xUnit: 241 de unidade e de host em memória (TestServer) e 47 de integração
-  contra Postgres (pgvector) e Redis reais, iniciados via Docker.
+- **Testes com xUnit:** de unidade, de host em memória (TestServer) e de integração contra
+  Postgres (pgvector) e Redis reais, iniciados via Docker.
 - **No CI, a ausência de Docker é falha** (`TRATOO_EXIGIR_DOCKER=1`). Um pipeline verde garante
   que os testes de integração rodaram.
 - **Cobertura:** proxy e IP, rate limiting, health checks, porta e encerramento, estado efêmero e
