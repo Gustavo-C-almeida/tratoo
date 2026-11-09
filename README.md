@@ -59,7 +59,7 @@ mostra apenas a taxa operacional do gateway (Asaas), a título informativo.
 
 | Camada | Tecnologia |
 |---|---|
-| Backend | .NET 8 · ASP.NET Core Minimal API · EF Core 9 · Npgsql |
+| Backend | .NET 10 · ASP.NET Core Minimal API · EF Core 10 · Npgsql |
 | Banco | PostgreSQL (Neon) com pgvector (índice HNSW) |
 | Cache e estado compartilhado | Redis (StackExchange.Redis) |
 | Autenticação | JWT curto + refresh token rotativo em cookies `HttpOnly` · sessão no Redis · BCrypt · MFA por e-mail |
@@ -76,7 +76,7 @@ mostra apenas a taxa operacional do gateway (Asaas), a título informativo.
 ```mermaid
 flowchart LR
     B["Navegador"] -->|HTTPS| R["Borda da Railway"]
-    R --> API["Tratoo.API (.NET 8)<br/>API + frontend estático"]
+    R --> API["Tratoo.API (.NET 10)<br/>API + frontend estático"]
     API --> PG[("PostgreSQL / Neon<br/>tratoo + tratoo_vector")]
     API --> RD[("Redis<br/>rede privada")]
     API --> EXT["Asaas · Resend · OpenAI · R2"]
@@ -105,7 +105,7 @@ O mesmo executável tem modos extras de linha de comando: `--healthcheck` (sonda
   os checks do GitHub (CI e CodeQL) passam. A versão nova só recebe tráfego depois de passar no
   `/health/ready`. O rollback é manual, pelo histórico de deploys.
 - **Container:**
-  - imagem multi-stage (`sdk:8.0` → `aspnet:8.0`), processo rodando sem root (UID 1654);
+  - imagem multi-stage (`sdk:10.0` → `aspnet:10.0`), processo rodando sem root (UID 1654);
   - a porta vem da variável `PORT` (8080 como reserva);
   - `ENTRYPOINT` em forma exec e encerramento gracioso de até 25 s.
 - **Health checks:** `/health/live` verifica só o processo. `/health/ready` verifica PostgreSQL,
@@ -228,7 +228,7 @@ saudáveis → `migrate` aplica o schema e sai → duas réplicas da API → Ngi
 
 ### Sem Docker
 
-Pré-requisitos: .NET 8 SDK e PostgreSQL 16 com a extensão pgvector, com dois bancos (`tratoo` e
+Pré-requisitos: .NET 10 SDK e PostgreSQL 16 com a extensão pgvector, com dois bancos (`tratoo` e
 `tratoo_vector`).
 
 1. Configure os segredos com `user-secrets`, sem editar arquivos versionados:
