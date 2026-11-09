@@ -172,7 +172,7 @@ R2 são usados em fluxos específicos: busca/indexação e upload/download, resp
 | [`Tratoo.API`](../Tratoo.API) | ASP.NET Core (Minimal API) | Host HTTP. Contém `Program.cs` (composição e pipeline), 18 grupos de endpoints em `EndPoints/*Extensions.cs`, `Infrastructure/` (proxy, rate limiting, Redis, health checks, porta, encerramento, modos de linha de comando), os `BackgroundServices` e os DTOs de entrada em `Requests/`. |
 | [`Tratoo.Domain`](../Tratoo.Domain) | Class library | Regras de negócio organizadas por feature (`Features/<Feature>/{DTOs,Repositories,Services,Validators}`), entidades EF (`Domain/Models`), enums, `TratooContext`/`VectorContext` e a migration. Também contém as implementações das integrações (Asaas, R2, OpenAI, Resend) e a criptografia (`Features/Shared/DataProtector.cs`). |
 | [`Tratoo.Web`](../Tratoo.Web) | Projeto Web sem código de servidor | Só o `wwwroot` (35 HTML, 32 JS e 24 CSS fora de `vendor/`). Na imagem Docker, ele é copiado para `/Tratoo.Web/wwwroot` e servido pela API. |
-| [`Tratoo.Tests`](../Tratoo.Tests) | xUnit | 338 testes (288 antes do controle de sessão): unidade, host em memória (TestServer) e integração com Postgres e Redis reais via Docker. |
+| [`Tratoo.Tests`](../Tratoo.Tests) | xUnit | Testes de unidade, de host em memória (TestServer) e de integração com Postgres e Redis reais via Docker. |
 
 Organização:
 
@@ -1419,28 +1419,21 @@ mesmo `Jwt:SecretKey`, e o que precisa ser visto pelas duas está no Redis, no P
 
 ### 7.1 CI: GitHub Actions
 
-O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda os jobs `Origem do PR`, `Build e
-testes` e `Imagem Docker`. O detalhe de cada passo está em [CICD.md](CICD.md#workflows):
+O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda em PRs e pushes de `staging` e
+`main`, com três jobs: `Origem do PR` (só em PRs), `Build e testes` e `Imagem Docker`. Os passos,
+os critérios de bloqueio, o atalho de documentação, as versões fixadas e as regras de origem dos
+PRs estão em [CICD.md](CICD.md#workflows); aqui ficam só as decisões de arquitetura:
 
-- **Disparo:** PRs e pushes em `staging` e `main`. A `concurrency` cancela a execução
-  anterior só em PRs, para não cancelar o check de que a Railway depende. As permissões são
-  `contents: read`, e há timeout de 20 min.
-- **Etapas do `Build e testes`:** checkout, `setup-dotnet` (10.0.x), cache do NuGet, `docker pull`
-  das imagens de teste (`pgvector/pgvector:pg16`, `redis:7-alpine`), `dotnet restore Tratoo.sln
-  --locked-mode`, verificação de pacotes vulneráveis, `dotnet build -c Release`, verificação de
-  migrations (`has-pending-model-changes`), `dotnet test` com logger TRX e upload dos resultados.
-- **`Imagem Docker`:** build do `Dockerfile` com Buildx, sem publicar, e varredura com Trivy
-  (CRITICAL/HIGH com correção disponível).
-- **Sem segredos.** O CI roda isolado do ambiente de produção.
-- **`TRATOO_EXIGIR_DOCKER: "1"`:** sem Docker, os testes de integração **falham** em vez de serem
-  ignorados. Assim o pipeline só fica verde depois de rodá-los.
-- **Proteção de `staging` e `main`:** exigem os checks `Build e testes` e `Origem do PR`, branch
-  atualizada e PR, inclusive para administradores ([CICD.md](CICD.md#configuração-manual)).
-- **Origem do PR:** um job recusa PR para a `main` que não venha de `staging` ou `hotfix/*`, e PR
-  para a `staging` que não venha de `feature/*`, `fix/*`, `hotfix/*`, `revert-*` ou `dependabot/*`.
-- **Execução na `main`** (05/11): run `41950621509`, commit `5905ef4`, com **288 testes**. A
-  primeira tentativa falhou em um teste instável de OTP, cuja asserção era estrita demais, e a segunda
-  passou. A asserção foi corrigida em seguida.
+- **Sem segredos e com permissões mínimas** (`contents: read`). O CI roda isolado do ambiente de
+  produção.
+- **Integração com serviços reais:** os testes sobem Postgres (pgvector) e Redis via Docker, e
+  `TRATOO_EXIGIR_DOCKER: "1"` faz eles **falharem** em vez de serem ignorados sem Docker.
+- **A imagem testada é a de produção:** o job `Imagem Docker` constrói o mesmo `Dockerfile` que a
+  Railway constrói, sem publicar, e o varre com o Trivy.
+- **O check do push é o que libera o deploy:** a `concurrency` cancela execuções anteriores só em
+  PRs; em `staging` e `main`, um check cancelado impediria a Railway de publicar o commit.
+- **Proteção de `staging` e `main`:** checks obrigatórios, branch atualizada e PR, inclusive para
+  administradores ([CICD.md](CICD.md#github)).
 
 ### 7.2 Testes
 
@@ -1463,20 +1456,20 @@ testes` e `Imagem Docker`. O detalhe de cada passo está em [CICD.md](CICD.md#wo
 
 ### 7.3 Outras verificações do GitHub
 
-| Recurso | Estado em 31/10 |
-|---|---|
-| CodeQL | *Default setup* (Actions, C#, JS/TS); análises do commit `b134922` com sucesso; 0 alertas abertos |
-| Checks obrigatórios em `main` e `staging` (02/11) | `Build e testes` e `Origem do PR` |
+O CodeQL roda em *default setup* (Actions, C#, JS/TS), sem workflow no repositório. A situação
+registrada em cada auditoria está na
+[matriz de rastreabilidade](#apêndice-a--matriz-de-rastreabilidade) e no [HISTORICO.md](HISTORICO.md).
 
 ### 7.4 Fluxo automatizado
 
 ```
-PR → CI (build + 288 testes) + CodeQL ──► merge na main ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
+PR → CI (Origem do PR, Build e testes, Imagem Docker) + CodeQL ──► merge ──► push na branch
+   ──► CI do push ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
 ```
 
-A `main` recebe código pelo PR `staging` → `main` ou, em urgências, por um PR de `hotfix/*`, com a
-mesma sequência publicando a `staging` em homologação. O fluxo completo e as configurações manuais
-estão em [CICD.md](CICD.md).
+A mesma sequência publica a `staging` em homologação e a `main` em produção. A `main` recebe código
+pelo PR `staging` → `main` ou, em urgências, por um PR de `hotfix/*`. O fluxo completo e as
+configurações manuais estão em [CICD.md](CICD.md).
 
 ---
 
