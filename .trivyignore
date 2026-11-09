@@ -1,0 +1,9 @@
+# Exceções do Trivy (job "Imagem Docker" do ci.yml). Política em Docs/CICD.md: cada linha leva
+# o identificador, o motivo e uma validade (exp:). Vencida a validade, o Trivy volta a reportar
+# a vulnerabilidade e a CI falha — a exceção precisa ser revista, não renovada no automático.
+
+# apt / libapt-pkg6.0t64 (HIGH). Corrigida no Ubuntu em 2.8.4ubuntu0.1, ainda não incorporada
+# na mcr.microsoft.com/dotnet/aspnet:10.0 (Ubuntu 24.04) em 09/11/2026. A falha está no apt ao
+# baixar pacotes; o container de produção nunca executa apt, e o processo roda como UID 1654,
+# sem permissão para instalar nada. Remover assim que a imagem base trouxer a versão corrigida.
+CVE-2026-109518 exp:2026-11-23

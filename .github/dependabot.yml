@@ -22,7 +22,7 @@ updates:
     groups:
       # A família Microsoft/System sai junta: EF Core, a ferramenta dotnet-ef e os pacotes de
       # configuração precisam ficar na mesma versão (o dotnet-ef roda o check de migrations).
-      # Só minor e patch: uma major (EF 10, por exemplo) exige migrar o runtime e chega
+      # Só minor e patch: uma major (EF 11, por exemplo) exige migrar o runtime e chega
       # sozinha, para ser avaliada à parte.
       microsoft:
         patterns:
@@ -30,7 +30,7 @@ updates:
           - "System.*"
           - "dotnet-ef"
         update-types: [minor, patch]
-    # A major destes acompanha o runtime (EF Core 10 e ASP.NET Core 10 exigem net10.0): o
+    # A major destes acompanha o runtime (EF Core 11 e ASP.NET Core 11 exigirão net11.0): o
     # PR viria quebrado. Sobem juntos no PR de migração do .NET, não por aqui.
     ignore:
       - dependency-name: "Microsoft.EntityFrameworkCore*"

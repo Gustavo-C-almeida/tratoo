@@ -6,7 +6,7 @@ namespace Tratoo.API.Infrastructure
     /// <summary>
     /// Encerramento gracioso alinhado ao orçamento que a Railway concede.
     ///
-    /// O que já vem do .NET 8 e NÃO é reimplementado aqui: o ConsoleLifetime trata
+    /// O que já vem do .NET e NÃO é reimplementado aqui: o ConsoleLifetime trata
     /// SIGTERM (o processo é PID 1 via ENTRYPOINT em forma exec, sem shell no meio),
     /// o Kestrel para de aceitar conexões e espera as requisições em andamento, os
     /// BackgroundServices recebem o stoppingToken e o container de DI descarta

@@ -63,7 +63,7 @@ namespace Tratoo.Tests
             Assert.False(rede.Vazio);
             Assert.Contains("100.64.0.0/10", rede.FaixasConfiguradas);
             Assert.Empty(opcoes.KnownProxies);
-            Assert.Empty(opcoes.KnownNetworks);
+            Assert.Empty(opcoes.KnownIPNetworks);
         }
 
         [Fact]
@@ -105,9 +105,27 @@ namespace Tratoo.Tests
                 ("ForwardedHeaders:KnownNetworks:0", "100.64.0.0/10"),
                 ("ForwardedHeaders:KnownProxies:0", "198.51.100.200"));
 
-            Assert.Single(opcoes.KnownNetworks);
+            Assert.Single(opcoes.KnownIPNetworks);
             Assert.Single(opcoes.KnownProxies);
             Assert.Equal("198.51.100.200", opcoes.KnownProxies[0].ToString());
+        }
+
+        /// <summary>
+        /// CIDR com bits de host ligados ("100.64.1.0/10") é aceito pelo RedeConfiavel, que não
+        /// normaliza o endereço. O System.Net.IPNetwork (KnownIPNetworks, .NET 10) não pode
+        /// derrubar a subida por isso e precisa cobrir a mesma faixa que o HttpOverrides.IPNetwork
+        /// antigo cobria.
+        /// </summary>
+        [Fact]
+        public void KnownNetworksComBitsDeHost_CobreAFaixaInteira()
+        {
+            var (opcoes, _, _) = Resolver(("ForwardedHeaders:KnownNetworks:0", "100.64.1.0/10"));
+
+            var rede = Assert.Single(opcoes.KnownIPNetworks);
+            Assert.Equal(10, rede.PrefixLength);
+            Assert.True(rede.Contains(System.Net.IPAddress.Parse("100.64.0.1")));
+            Assert.True(rede.Contains(System.Net.IPAddress.Parse("100.127.255.254")));
+            Assert.False(rede.Contains(System.Net.IPAddress.Parse("100.128.0.1")));
         }
 
         /// <summary>CIDR inválido não pode derrubar a aplicação — é ignorado e reportado.</summary>

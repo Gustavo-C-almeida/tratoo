@@ -1,5 +1,5 @@
 # Build: compila e publica o Tratoo.API (referencia Tratoo.Domain)
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Restore determinístico, igual ao da CI: o Directory.Build.props liga os lock files e o
@@ -14,7 +14,7 @@ COPY Tratoo.API/ Tratoo.API/
 RUN dotnet publish Tratoo.API/Tratoo.API.csproj -c Release -o /app/publish --no-restore
 
 # Runtime: imagem final enxuta
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
 
@@ -23,7 +23,7 @@ COPY --from=build /app/publish .
 COPY Tratoo.Web/wwwroot /Tratoo.Web/wwwroot
 
 # ─── Usuário não-root ────────────────────────────────────────────────────────
-# A imagem aspnet:8.0 já traz o usuário `app` (UID em $APP_UID = 1654, HOME
+# A imagem aspnet:10.0 (Ubuntu 24.04) já traz o usuário `app` (UID em $APP_UID = 1654, HOME
 # /home/app), mas roda como root por padrão. Binários e wwwroot continuam do
 # root e só-leitura para o processo: a aplicação não consegue alterar o próprio
 # código. O único lugar em que ela grava dentro de /app é logs/ (sink de arquivo
@@ -51,7 +51,7 @@ EXPOSE 8080
 # quem avalia isso é a Railway via healthcheckPath=/health/ready (railway.toml).
 #
 # A sonda é o próprio binário (`--healthcheck`), não curl: a imagem
-# mcr.microsoft.com/dotnet/aspnet:8.0 não traz curl nem wget, e instalá-los só
+# mcr.microsoft.com/dotnet/aspnet:10.0 não traz curl nem wget, e instalá-los só
 # para isto adicionaria pacotes e superfície de ataque ao runtime. A sonda lê
 # ASPNETCORE_URLS/PORT/ASPNETCORE_HTTP_PORTS na mesma precedência do Kestrel
 # (PortaHttpSetup), então acompanha a porta configurada.

@@ -56,7 +56,7 @@ namespace Tratoo.API.EndPoints
                         forwardedHeaders   = opcoes.ForwardedHeaders.ToString(),
                         forwardLimit       = opcoes.ForwardLimit,
                         knownProxies       = opcoes.KnownProxies.Select(p => p.ToString()).ToArray(),
-                        knownNetworksCount = opcoes.KnownNetworks.Count
+                        knownNetworksCount = opcoes.KnownIPNetworks.Count
                     }
                 });
             });

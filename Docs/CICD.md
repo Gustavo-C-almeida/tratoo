@@ -167,8 +167,16 @@ Em todos os casos o PR precisa sair deste repositório; PR de fork é recusado.
    some quando a Microsoft ou a distro corrigir e a imagem base for atualizada. A base de dados do
    Trivy fica em cache por um dia.
 
-Não há `.trivyignore` nem lista de exceções de pacotes. Uma exceção só entra com o identificador
-(CVE ou GHSA), o motivo de ser falso positivo ou de não se aplicar e um prazo para rever.
+Exceções ficam no [`.trivyignore`](../.trivyignore), uma por linha, cada uma com o identificador
+(CVE), o motivo de não se aplicar e uma validade (`exp:AAAA-MM-DD`). Vencida a validade, o Trivy
+volta a reportar a vulnerabilidade e o job falha: a exceção é revista, nunca renovada no automático.
+Para pacotes NuGet não há lista de exceções.
+
+Exceções em vigor:
+
+| CVE | Pacote | Motivo | Validade |
+|---|---|---|---|
+| CVE-2026-109518 | `apt`, `libapt-pkg6.0t64` (Ubuntu 24.04 da `aspnet:10.0`) | A falha está no apt ao baixar pacotes; o container nunca executa apt e roda como UID 1654. Corrigida no Ubuntu (2.8.4ubuntu0.1), ainda não na imagem da Microsoft | 23/11/2026 |
 
 ### Atalho de documentação
 
@@ -191,7 +199,7 @@ para evitar, configure *Watch Paths* no serviço.
 | Actions | Tag de major (`actions/checkout@v7`, `docker/build-push-action@v7`…), atualizadas pelo Dependabot |
 | Trivy | Versão e digest (`aquasec/trivy:0.76.2@sha256:…`). Nunca `latest`. Atualização manual: troque os dois juntos |
 | `dotnet-ef` | [`.config/dotnet-tools.json`](../.config/dotnet-tools.json), na mesma versão do EF Core dos `.csproj` |
-| SDK .NET | `8.0.x` no `setup-dotnet` e `sdk:8.0` no `Dockerfile`, as duas na mesma major |
+| SDK .NET | `10.0.x` no `setup-dotnet` e `sdk:10.0` no `Dockerfile`, as duas na mesma major |
 
 [`monitor-recifragem.yml`](../.github/workflows/monitor-recifragem.yml) roda a cada 2 h e lê o
 `/health/ready` público de produção e homologação ([ROTACAO-CHAVES.md](ROTACAO-CHAVES.md#6-recifragem-automática-e-monitoramento)).
