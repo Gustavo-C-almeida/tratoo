@@ -6,6 +6,5 @@
   -->
   <ItemGroup>
     <Content Remove="packages.lock.json" />
-    <None Remove="packages.lock.json" />
   </ItemGroup>
 </Project>
