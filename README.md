@@ -179,9 +179,10 @@ completa estão em [ARQUITETURA.md §6.6](Docs/ARQUITETURA.md#66-duas-réplicas-
 O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda nos PRs e pushes de
 `staging` e `main`. Ele confere a origem do PR, restaura os pacotes travados nos lock files,
 verifica pacotes vulneráveis, compila, confere se o modelo do EF tem migration, roda os testes e
-constrói a imagem Docker de produção, varrida com o Trivy. As duas branches exigem esses checks,
-inclusive para administradores. Os passos, o fluxo `main → feature/fix → staging → main`, a
-retirada de funcionalidades e o hotfix estão em [Docs/CICD.md](Docs/CICD.md).
+constrói a imagem Docker de produção, varrida com o Trivy. As duas branches exigem os checks
+obrigatórios, inclusive para administradores. Os passos, a lista dos checks obrigatórios, o fluxo
+`main → feature/fix → staging → main`, a retirada de funcionalidades e o hotfix estão em
+[Docs/CICD.md](Docs/CICD.md).
 
 - **Testes com xUnit:** de unidade, de host em memória (TestServer) e de integração contra
   Postgres (pgvector) e Redis reais, iniciados via Docker.

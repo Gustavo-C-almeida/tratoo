@@ -1424,7 +1424,8 @@ O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda em PRs e pushes
 os critérios de bloqueio, o atalho de documentação, as versões fixadas e as regras de origem dos
 PRs estão em [CICD.md](CICD.md#workflows); aqui ficam só as decisões de arquitetura:
 
-- **Sem segredos.** O CI roda isolado do ambiente de produção.
+- **Sem segredos e com permissões mínimas** (`contents: read`). O CI roda isolado do ambiente de
+  produção.
 - **Integração com serviços reais:** os testes sobem Postgres (pgvector) e Redis via Docker, e
   `TRATOO_EXIGIR_DOCKER: "1"` faz eles **falharem** em vez de serem ignorados sem Docker.
 - **A imagem testada é a de produção:** o job `Imagem Docker` constrói o mesmo `Dockerfile` que a
