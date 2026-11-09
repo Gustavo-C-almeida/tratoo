@@ -14,7 +14,7 @@ namespace Tratoo.API.Infrastructure
     /// Por construção não há Kestrel nem BackgroundServices — impossível este processo
     /// expirar contrato ou liberar pagamento enquanto migra.
     ///
-    /// Corrida entre instâncias: o <c>MigrateAsync</c> do EF Core 9 + Npgsql 9 adquire
+    /// Corrida entre instâncias: o <c>MigrateAsync</c> do EF Core 9+ com Npgsql 9+ adquire
     /// <c>LOCK TABLE "__EFMigrationsHistory" IN ACCESS EXCLUSIVE MODE</c> dentro de uma
     /// transação. Dois processos simultâneos se serializam; o segundo encontra tudo
     /// aplicado. Por ser trava de transação (não advisory de sessão), funciona inclusive
@@ -101,7 +101,7 @@ namespace Tratoo.API.Infrastructure
                         pendentes.Count, pendentes.Count > 0 ? ": " + string.Join(", ", pendentes) : "");
 
                     // Adquire a trava, aplica o que faltar (cada migration em transação) e
-                    // falha se o modelo tiver mudanças sem migration (regra do EF Core 9).
+                    // falha se o modelo tiver mudanças sem migration (regra do EF Core 9+).
                     await db.Database.MigrateAsync();
                 }
 

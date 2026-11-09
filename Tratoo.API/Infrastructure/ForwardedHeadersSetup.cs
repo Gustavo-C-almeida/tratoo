@@ -134,7 +134,7 @@ namespace Tratoo.API.Infrastructure
             // Quem restringe a origem aqui é o PeerConfiavelMiddleware, não estas listas
             // (ver comentário em ForwardedHeadersSettings.KnownProxies).
             options.KnownProxies.Clear();
-            options.KnownNetworks.Clear();
+            options.KnownIPNetworks.Clear();
 
             foreach (var proxy in settings.KnownProxies)
             {
@@ -145,7 +145,7 @@ namespace Tratoo.API.Infrastructure
             foreach (var rede in settings.KnownNetworks)
             {
                 if (RedeConfiavel.TentarConverter(rede, out var prefixo, out var bits))
-                    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefixo!, bits));
+                    options.KnownIPNetworks.Add(new System.Net.IPNetwork(prefixo!, bits));
             }
         }
     }

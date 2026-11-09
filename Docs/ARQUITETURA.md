@@ -98,20 +98,20 @@ A suíte automatizada cobre a infraestrutura e os pontos de concorrência indica
 
 | Camada | Tecnologia | Versão |
 |---|---|---|
-| Runtime | .NET 8 (SDK fixado no [`global.json`](../global.json)) | SDK `8.0.408` (`rollForward: latestFeature`) |
-| API | ASP.NET Core Minimal API | 8.0 |
-| ORM | EF Core + Npgsql | EF Core `9.0.10`; `Npgsql.EntityFrameworkCore.PostgreSQL` `9.0.4` |
+| Runtime | .NET 10 LTS (SDK fixado no [`global.json`](../global.json)) | SDK `10.0.100` ou superior (`rollForward: latestFeature`); runtime `10.0.14` |
+| API | ASP.NET Core Minimal API | 10.0 |
+| ORM | EF Core + Npgsql | EF Core `10.0.14`; `Npgsql.EntityFrameworkCore.PostgreSQL` `10.0.3` |
 | Banco | PostgreSQL gerenciado (Neon) com pgvector | Neon: PostgreSQL `18`, extensão `vector` `0.8.1`. Compose e CI: `pgvector/pgvector:pg16`. `Pgvector.EntityFrameworkCore` `0.3.0` |
 | Cache e estado compartilhado | Redis + StackExchange.Redis | Produção: imagem `redis:8.2`, servidor `8.2.11` (log de conexão). Cliente `2.13.17`. Compose e CI: `redis:7-alpine` |
-| Autenticação | JWT Bearer, BCrypt | `Microsoft.AspNetCore.Authentication.JwtBearer` `8.0.0`; `BCrypt.Net-Next` `4.0.3` |
+| Autenticação | JWT Bearer, BCrypt | `Microsoft.AspNetCore.Authentication.JwtBearer` `10.0.14`; IdentityModel `8.19.2`; `BCrypt.Net-Next` `4.0.3` |
 | E-mail | SDK do Resend (HTTPS) | `Resend` `0.8.0` |
 | Storage | AWS SDK S3 apontado para o Cloudflare R2 | `AWSSDK.S3` `3.7.100.0` |
 | PDF | QuestPDF (licença Community) | `2025.1.0` |
 | Logs | Serilog (console + arquivo) | `Serilog.AspNetCore` `8.0.1` |
-| Documentação da API | Swashbuckle (só em Development) | `6.5.0` |
+| Documentação da API | Swashbuckle (só em Development) | `6.5.0` (sem o `Microsoft.AspNetCore.OpenApi`, que não era usado) |
 | Frontend | HTML/CSS/JS sem framework, Web Components, ES Modules, Bootstrap 5.3 vendorizado | — |
-| Testes | xUnit + TestServer + Docker CLI | xUnit `2.9.2`; `Microsoft.AspNetCore.TestHost` `8.0.11` |
-| Imagem | `mcr.microsoft.com/dotnet/sdk:8.0` → `aspnet:8.0` | — |
+| Testes | xUnit + TestServer + Docker CLI | xUnit `2.9.2`; `Microsoft.AspNetCore.TestHost` `10.0.14` |
+| Imagem | `mcr.microsoft.com/dotnet/sdk:10.0` → `aspnet:10.0` | Base Ubuntu 24.04 (até o .NET 8 era Debian 12) |
 
 O `TratooContextFactory` (design-time) e o compose usam PostgreSQL 16; o servidor do Neon roda a
 versão 18.
@@ -121,7 +121,7 @@ versão 18.
 ```mermaid
 flowchart LR
     U["Navegador<br/>HTML + ES Modules"] -->|"HTTPS www.tratoo.app.br"| E["Borda da Railway<br/>TLS, HTTP/2, 301 http→https<br/>balanceia entre as réplicas"]
-    E -->|"HTTP :8080 + X-Forwarded-For/Proto"| A["Serviço tratoo: 2 réplicas iguais<br/>Tratoo.API (.NET 8)<br/>+ wwwroot do Tratoo.Web"]
+    E -->|"HTTP :8080 + X-Forwarded-For/Proto"| A["Serviço tratoo: 2 réplicas iguais<br/>Tratoo.API (.NET 10)<br/>+ wwwroot do Tratoo.Web"]
     A -->|"Npgsql, pooler, SSL"| N1[("Neon PostgreSQL<br/>banco tratoo")]
     A -->|"pgvector"| N2[("Neon PostgreSQL<br/>banco tratoo_vector")]
     A -->|"rede privada, redis.railway.internal:6379"| R[("Redis 8.2<br/>serviço Railway + volume")]
@@ -445,7 +445,8 @@ banco errado.
 | Aplicação em produção | Manual, por `dotnet ef database update` a partir de uma máquina de desenvolvimento: o `TratooContextFactory` (design-time) lê o `appsettings.json` local | **No código** (procedimento) |
 | Modo `--migrate-only` | Banco vazio aplica a migration e o schema vetorial; segunda execução não faz nada; duas instâncias simultâneas se serializam pela trava do EF | **Confirmado** (testes) |
 
-Detalhe técnico: no EF Core 9 com Npgsql 9.0.4, o `MigrateAsync` usa
+Detalhe técnico: desde o EF Core 9 com Npgsql 9 (confirmado de novo no EF Core 10.0.14 com Npgsql
+10.0.3, em 09/11/2026), o `MigrateAsync` usa
 `LOCK TABLE "__EFMigrationsHistory" IN ACCESS EXCLUSIVE MODE` dentro de uma transação. Como é
 uma trava de transação, e não um *advisory lock* de sessão, ela funciona pelo pooler.
 
@@ -598,9 +599,9 @@ A borda da Railway responde `301` de `http://` para `https://` e envia
 
 O [`Dockerfile`](../Dockerfile) tem duas etapas:
 
-- **Build:** `sdk:8.0`. Restaura os pacotes a partir dos `.csproj` (camada cacheável) e publica
+- **Build:** `sdk:10.0`. Restaura os pacotes a partir dos `.csproj` e dos lock files (camada cacheável) e publica
   `Tratoo.API` em Release.
-- **Runtime:** `aspnet:8.0` com o publish da API e `Tratoo.Web/wwwroot` em `/Tratoo.Web/wwwroot`.
+- **Runtime:** `aspnet:10.0` (Ubuntu 24.04) com o publish da API e `Tratoo.Web/wwwroot` em `/Tratoo.Web/wwwroot`.
   O `Program.cs` procura o frontend em `../Tratoo.Web/wwwroot` a partir de `/app`.
 
 | Decisão | Motivo | Status |
@@ -1424,7 +1425,7 @@ testes` e `Imagem Docker`. O detalhe de cada passo está em [CICD.md](CICD.md#wo
 - **Disparo:** PRs e pushes em `staging` e `main`. A `concurrency` cancela a execução
   anterior só em PRs, para não cancelar o check de que a Railway depende. As permissões são
   `contents: read`, e há timeout de 20 min.
-- **Etapas do `Build e testes`:** checkout, `setup-dotnet` (8.0.x), cache do NuGet, `docker pull`
+- **Etapas do `Build e testes`:** checkout, `setup-dotnet` (10.0.x), cache do NuGet, `docker pull`
   das imagens de teste (`pgvector/pgvector:pg16`, `redis:7-alpine`), `dotnet restore Tratoo.sln
   --locked-mode`, verificação de pacotes vulneráveis, `dotnet build -c Release`, verificação de
   migrations (`has-pending-model-changes`), `dotnet test` com logger TRX e upload dos resultados.
