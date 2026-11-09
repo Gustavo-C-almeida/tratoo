@@ -236,9 +236,55 @@ de `dependabot/*`, por isso o check `Origem do PR` aceita essa origem só para a
   mesma versão.
 - A major de EF Core, ASP.NET Core, Npgsql EF, `dotnet-ef` e das imagens `dotnet/*` é ignorada:
   ela exige outro runtime e sobe no PR de migração do .NET.
-- O Dependabot atualiza os lock files no mesmo PR. Ainda assim, cada PR passa pela CI completa e
-  só entra com merge manual, depois da homologação, como qualquer entrega. Leia as notas de versão
-  antes do merge: o check de compatibilidade é o build e os testes, não a ausência de conflito.
+- O Dependabot atualiza o lock file **do projeto que ele mexeu**, mas não o dos projetos que
+  dependem dele. Quando isso acontece, o PR falha; veja
+  [Lock files em PR do Dependabot](#lock-files-em-pr-do-dependabot).
+- Cada PR passa pela CI completa e só entra com merge manual, depois da homologação, como qualquer
+  entrega. Leia as notas de versão antes do merge: o check de compatibilidade é o build e os
+  testes, não a ausência de conflito.
+
+#### Lock files em PR do Dependabot
+
+**Quando:** o check `Build e testes` de um PR do Dependabot falha no passo **Restore** com
+`NU1004` (*"The project references … whose dependencies has changed"*), e o `Imagem Docker` falha no
+`dotnet restore --locked-mode` do build. Acontece quando o pacote atualizado está no
+`Tratoo.Domain` ou no `Tratoo.API`: o `Tratoo.API` referencia o Domain, e o `Tratoo.Tests` referencia
+os dois, então os lock files deles continuam com a versão antiga como dependência transitiva. Um PR
+que só mexe no `Tratoo.Tests` não tem dependentes e não passa por isso.
+
+**Como corrigir**, na própria branch do PR:
+
+```bash
+git fetch origin
+git switch --track origin/dependabot/nuget/<caminho-da-branch-do-PR>
+dotnet restore Tratoo.sln --force-evaluate
+git status --short
+git diff -- '*/packages.lock.json'
+```
+
+**O que revisar antes do commit:**
+
+- `git status` mostra **só** arquivos `packages.lock.json`, normalmente dos projetos que dependem
+  do projeto que o Dependabot alterou. Qualquer `.csproj` ou outro arquivo alterado é sinal de que
+  algo saiu do esperado: pare e investigue.
+- No diff, a única mudança de versão é a do pacote do PR (e as dependências que ele mesmo traz).
+  Outro pacote mudando de versão também é motivo para parar.
+
+```bash
+git add '*/packages.lock.json'
+git commit -m "chore(deps): atualiza os lock files dos projetos dependentes"
+git push
+```
+
+**Como validar:**
+
+- Localmente: `dotnet restore Tratoo.sln --locked-mode` passa, e `dotnet build Tratoo.sln -c Release`
+  e `dotnet test Tratoo.sln` ficam verdes.
+- No PR: os três checks (`Origem do PR`, `Build e testes`, `Imagem Docker`) ficam verdes.
+
+Depois de um commit manual, o Dependabot deixa de rebasear a branch sozinho. Se ele precisar
+recriar o PR (`@dependabot recreate`), o commit manual se perde e o procedimento é repetido. Não há
+automação para isso de propósito: ela precisaria de um token com escrita nos PRs do Dependabot.
 
 ## Homologação e produção na Railway
 
