@@ -5,7 +5,7 @@ namespace Tratoo.API.Infrastructure
     /// <c>/health/live</c> no próprio processo que está servindo e encerra com
     /// código 0 (saudável) ou 1 (não saudável).
     ///
-    /// POR QUE ISTO EXISTE: a imagem <c>mcr.microsoft.com/dotnet/aspnet:8.0</c> não
+    /// POR QUE ISTO EXISTE: a imagem <c>mcr.microsoft.com/dotnet/aspnet:10.0</c> não
     /// traz curl nem wget, e instalá-los só para o HEALTHCHECK adicionaria pacotes
     /// e superfície de ataque à imagem de runtime. O binário da aplicação já está
     /// lá e já tem HttpClient — usá-lo custa zero dependência.

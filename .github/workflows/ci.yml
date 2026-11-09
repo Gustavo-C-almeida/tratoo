@@ -98,11 +98,11 @@ jobs:
           ANTES_PUSH: ${{ github.event.before }}
         run: .github/scripts/classificar-mudanca.sh
 
-      # Mesma major do Dockerfile (sdk:8.0); global.json aceita qualquer 8.0.4xx+.
+      # Mesma major do Dockerfile (sdk:10.0); global.json aceita qualquer 10.0.1xx+.
       - uses: actions/setup-dotnet@v6
         if: steps.mudanca.outputs.so_docs != 'true'
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       # A chave segue os lock files: eles mudam sempre que qualquer pacote, direto ou
       # transitivo, muda.
@@ -220,8 +220,8 @@ jobs:
 
       # CRITICAL e HIGH com correção disponível falham o job. Sem correção (--ignore-unfixed)
       # não há o que fazer neste repositório: some quando a Microsoft ou a distro corrigir e
-      # a imagem base for atualizada (Dependabot docker). Sem .trivyignore: exceção só com
-      # o CVE e a justificativa (Docs/CICD.md).
+      # a imagem base for atualizada. Exceções só no .trivyignore, cada uma com o CVE, o
+      # motivo e uma validade (exp:) — vencida, a CI volta a falhar (Docs/CICD.md).
       # Roda com o usuário do runner (e o grupo do socket do Docker): a pasta da base fica
       # do runner, e o actions/cache consegue salvá-la.
       - name: Varredura da imagem (Trivy)
@@ -232,6 +232,7 @@ jobs:
             --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)" \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$HOME/.cache/trivy:/cache" \
+            -v "$PWD/.trivyignore:/trivyignore:ro" \
             "$TRIVY_IMAGEM" \
             image --cache-dir /cache --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed \
-            --exit-code 1 --no-progress tratoo:ci
+            --ignorefile /trivyignore --exit-code 1 --no-progress tratoo:ci
