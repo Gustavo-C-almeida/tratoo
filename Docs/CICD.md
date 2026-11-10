@@ -23,9 +23,9 @@ Toda branch de trabalho sai da `main`.
 ```mermaid
 flowchart LR
     M[main] -->|"nova branch"| F["feature/* ou fix/*"]
-    F -->|"PR + CI, squash"| S[staging]
+    F -->|"PR + CI, merge commit"| S[staging]
     S -->|"PR + CI + aprovação humana, merge commit"| M
-    M -->|"antes da promoção: fix/*, merge commit"| S
+    M -->|"se necessário, antes da promoção: fix/*, merge commit"| S
     S -.->|"Railway, depois dos checks"| H[(Homologação)]
     M -.->|"Railway, depois dos checks"| P[(Produção)]
 ```
@@ -33,32 +33,51 @@ flowchart LR
 1. Crie a branch a partir da `main` atualizada.
 2. Abra o PR para a `staging` e espere o CI. Se o GitHub indicar que a branch está desatualizada,
    use **Update branch**.
-3. Faça o merge com **squash**. A Railway publica em homologação depois dos checks.
+3. Faça o merge com **merge commit**. A Railway publica em homologação depois dos checks.
 4. Homologue. Retire da `staging` o que for reprovado.
-5. [Leve a `main` para a `staging`](#levar-a-main-para-a-staging).
+5. Se a `main` tiver algo que a `staging` não tem,
+   [leve a `main` para a `staging`](#levar-a-main-para-a-staging).
 6. Abra o PR `staging` → `main` e espere o CI.
 7. Faça o merge com **merge commit**. A Railway publica em produção depois dos checks.
 
 Nenhum merge é automático. Produção só recebe código quando uma pessoa faz o merge de um PR.
 
-### Por que cada método de merge
+### Método de merge
 
-| PR | Método | Motivo |
-|---|---|---|
-| `feature/*`, `fix/*` e `revert-*` → `staging` | **Squash** | Cada entrega vira um commit, fácil de reverter. A branch preservada continua apta a um novo PR depois da retirada |
-| `staging` → `main` | **Merge commit** | Registra o que já foi promovido. Com squash, a próxima promoção tentaria aplicar tudo de novo |
-| `fix/*` que leva a `main` para a `staging` | **Merge commit** | A regra de branch atualizada olha o histórico. Com squash, a `staging` continua desatualizada |
-| `hotfix/*` → `main` e `staging` | **Squash** | O mesmo commit de correção entra nas duas, e a promoção seguinte não gera conflito |
+**Todo PR entra com merge commit**: `feature/*`, `fix/*`, `hotfix/*`, `revert-*` e `dependabot/*`
+na `staging`, e `staging` e `hotfix/*` na `main`. Com uma regra só, não há método a escolher em
+cada PR.
 
-O GitHub não permite escolher o método por branch, então isso é uma regra de processo. Por isso
-também `Require linear history` deve ficar desligado.
+- **Os commits mantêm a mesma identidade nas duas branches.** O que foi promovido não é aplicado de
+  novo na promoção seguinte, e um `hotfix/*` mesclado na `main` e na `staging` é o mesmo commit nas
+  duas, sem conflito depois.
+- **A `main` chega à `staging` sem passo extra.** Toda branch de trabalho sai da `main`; quando ela
+  entra na `staging` com merge commit, leva junto o merge da última promoção. Por isso
+  [levar a `main` para a `staging`](#levar-a-main-para-a-staging) só é necessário quando nenhuma
+  branch criada depois da promoção entrou na `staging`.
+- **O custo é na retirada:** reverter um merge commit desfaz a entrega inteira, mas um novo PR da
+  mesma branch não a traz de volta sozinho. Veja
+  [Retirar uma funcionalidade reprovada](#retirar-uma-funcionalidade-reprovada).
+
+O squash continua habilitado no repositório, mas não é usado. `Require linear history` precisa
+ficar desligado, porque merge commit não é linear.
 
 ### Levar a `main` para a `staging`
 
 `main` e `staging` exigem *Require branches to be up to date*: a origem de um PR precisa conter a
 ponta do destino. Cada promoção cria um merge commit que só existe na `main`, e o botão **Update
 branch** não resolve no PR `staging` → `main`, porque tentaria gravar direto na `staging`
-protegida. Antes de cada promoção, depois da homologação:
+protegida.
+
+Normalmente esse merge chega à `staging` sozinho, junto com a próxima branch de trabalho (ver
+[Método de merge](#método-de-merge)). Antes de promover, confira:
+
+```bash
+git fetch origin
+git rev-list --count origin/staging..origin/main   # 0: nada a fazer
+```
+
+Se der mais que 0, depois da homologação:
 
 ```bash
 git fetch origin
@@ -86,11 +105,25 @@ entregas que estavam lá. Isso não atrapalha o merge para a `staging`, mas tem 
 A promoção leva tudo o que está na `staging`, então o que foi reprovado sai antes dela.
 
 1. Abra o PR já mergeado da funcionalidade e clique em **Revert**. O GitHub cria a branch
-   `revert-<número>-<nome>` e abre um PR para a `staging`.
-2. Faça o merge com **squash**. Só essa funcionalidade sai, e a Railway publica a `staging` sem ela.
-3. **Não apague a branch da funcionalidade.** Ajuste-a nela mesma e abra um novo PR para a
-   `staging` quando estiver pronta. O PR traz a funcionalidade inteira de novo. Confira o
-   [efeito do Update branch](#efeito-do-update-branch) se ela já tiver recebido outras entregas.
+   `revert-<número>-<nome>`, com um commit que desfaz o merge inteiro, e abre um PR para a
+   `staging`.
+2. Faça o merge com **merge commit**. Só essa funcionalidade sai, e a Railway publica a `staging`
+   sem ela.
+3. **Não apague a branch da funcionalidade.** Para trazê-la de volta, **não basta** ajustar a branch
+   e abrir um novo PR: os commits dela já constam como mesclados, e só o ajuste entraria, sem a
+   funcionalidade e sem nenhum aviso. Na branch da funcionalidade, nesta ordem:
+
+   ```bash
+   git fetch origin
+   git switch <branch-da-funcionalidade>
+   git merge origin/staging            # traz o revert: a funcionalidade some da branch
+   git revert <sha-do-commit-de-revert> # devolve a funcionalidade
+   # ajustes, commit, push e novo PR para a staging
+   ```
+
+   O `<sha-do-commit-de-revert>` é o commit da branch `revert-*` (não o merge do PR de revert).
+   Confira o [efeito do Update branch](#efeito-do-update-branch): o merge da `staging` traz também as
+   outras entregas.
 
 Se outra entrega tiver alterado as mesmas linhas depois, o botão Revert acusa conflito. Nesse caso,
 faça a reversão em uma branch `fix/*`, a partir da `staging`, e resolva lá.
@@ -105,10 +138,10 @@ git switch -c hotfix/descricao origin/main
 ```
 
 1. Faça o commit, envie a branch e abra o PR para a `main`. Espere o CI, faça o merge com
-   **squash** e confira a produção.
+   **merge commit** e confira a produção.
 2. Abra um segundo PR da **mesma branch** para a `staging`, use **Update branch** e faça o merge
-   também com squash. Sem isso, a correção não estará na homologação, e a próxima promoção pode gerar
-   conflito.
+   também com merge commit. Sem isso, a correção não estará na homologação. Como o commit da
+   correção é o mesmo nas duas branches, a próxima promoção não gera conflito.
 
 Siga essa ordem: depois do Update branch, a branch contém o que está na `staging` e não pode mais
 ir para a `main`.
@@ -117,6 +150,7 @@ ir para a `main`.
 
 - **PR de `feature/*` ou `fix/*` para a `staging`:** faça `git merge origin/staging` na sua branch,
   resolva e envie. O resultado é o mesmo do [Update branch](#efeito-do-update-branch).
+- **PR do Dependabot:** veja [Conflito em PR do Dependabot](#conflito-em-pr-do-dependabot).
 - **PR `staging` → `main`:** não use o editor de conflitos do GitHub, que tentaria gravar na
   `main` ou na `staging`. Resolva no `git merge origin/main` de
   [levar a `main` para a `staging`](#levar-a-main-para-a-staging).
@@ -201,8 +235,9 @@ para evitar, configure *Watch Paths* no serviço.
 | `dotnet-ef` | [`.config/dotnet-tools.json`](../.config/dotnet-tools.json), na mesma versão do EF Core dos `.csproj` |
 | SDK .NET | `10.0.x` no `setup-dotnet` e `sdk:10.0` no `Dockerfile`, as duas na mesma major |
 
-[`monitor-recifragem.yml`](../.github/workflows/monitor-recifragem.yml) roda a cada 2 h e lê o
-`/health/ready` público de produção e homologação ([ROTACAO-CHAVES.md](ROTACAO-CHAVES.md#6-recifragem-automática-e-monitoramento)).
+[`monitor-recifragem.yml`](../.github/workflows/monitor-recifragem.yml) é agendado a cada 2 h (o
+GitHub atrasa e às vezes pula execuções agendadas) e lê o `/health/ready` público de produção e
+homologação ([ROTACAO-CHAVES.md](ROTACAO-CHAVES.md#6-recifragem-automática-e-monitoramento)).
 
 CodeQL segue em *default setup*, que o GitHub executa na branch padrão, nas protegidas e nos PRs
 para elas. Não há workflow dele no repositório.
@@ -242,15 +277,21 @@ de `dependabot/*`, por isso o check `Origem do PR` aceita essa origem só para a
 - Cada PR passa pela CI completa e só entra com merge manual, depois da homologação, como qualquer
   entrega. Leia as notas de versão antes do merge: o check de compatibilidade é o build e os
   testes, não a ausência de conflito.
+- Os testes não exercitam as integrações externas (R2, Asaas, Resend, OpenAI). Atualização de
+  pacote que fala com uma delas, ou que muda de major, precisa de teste manual em homologação antes
+  da promoção. Exemplos: o AWSSDK 4 mudou o padrão de checksum dos uploads do R2, e o QuestPDF 2026.9
+  passou a recusar fonte ausente (o PDF do contrato hoje tem teste próprio, o `ContratosPdfTests`).
 
 #### Lock files em PR do Dependabot
 
 **Quando:** o check `Build e testes` de um PR do Dependabot falha no passo **Restore** com
-`NU1004` (*"The project references … whose dependencies has changed"*), e o `Imagem Docker` falha no
-`dotnet restore --locked-mode` do build. Acontece quando o pacote atualizado está no
-`Tratoo.Domain` ou no `Tratoo.API`: o `Tratoo.API` referencia o Domain, e o `Tratoo.Tests` referencia
-os dois, então os lock files deles continuam com a versão antiga como dependência transitiva. Um PR
-que só mexe no `Tratoo.Tests` não tem dependentes e não passa por isso.
+`NU1004` (*"The project references … whose dependencies has changed"*). Acontece quando o pacote
+atualizado está no `Tratoo.Domain` ou no `Tratoo.API`: o `Tratoo.API` referencia o Domain, e o
+`Tratoo.Tests` referencia os dois, então os lock files deles continuam com a versão antiga como
+dependência transitiva. Se o lock file desatualizado for o do `Tratoo.API`, o `Imagem Docker` também
+falha, no `dotnet restore --locked-mode` do build; o do `Tratoo.Tests` não afeta a imagem, porque o
+`Dockerfile` não restaura os testes. Um PR que só mexe no `Tratoo.Tests` não tem dependentes e não
+passa por isso.
 
 **Como corrigir**, na própria branch do PR:
 
@@ -285,6 +326,35 @@ git push
 Depois de um commit manual, o Dependabot deixa de rebasear a branch sozinho. Se ele precisar
 recriar o PR (`@dependabot recreate`), o commit manual se perde e o procedimento é repetido. Não há
 automação para isso de propósito: ela precisaria de um token com escrita nos PRs do Dependabot.
+
+#### Conflito em PR do Dependabot
+
+Acontece quando outro PR de dependência entra na `staging` antes e muda a mesma linha de um
+`.csproj` (pacotes vizinhos, ou o mesmo pacote numa versão diferente) ou os mesmos lock files. Um
+merge na `staging` deixa os demais PRs do Dependabot desatualizados.
+
+```bash
+git fetch origin
+git switch --track origin/dependabot/nuget/<caminho-da-branch-do-PR>
+git merge origin/staging
+```
+
+- **`.csproj`:** fique com as duas mudanças: a versão que veio da `staging` para os outros pacotes e
+  a versão deste PR para o pacote dele. Quando é o mesmo pacote, fica a versão do PR.
+- **Lock files:** não junte o JSON à mão. Pegue a versão da `staging` de todos eles (isso também
+  resolve os que estão em conflito) e regenere a partir dos `.csproj` resolvidos:
+
+  ```bash
+  git checkout origin/staging -- '*/packages.lock.json'
+  dotnet restore Tratoo.sln --force-evaluate
+  git diff origin/staging --stat
+  git add '*/*.csproj' '*/packages.lock.json'
+  git commit --no-edit
+  ```
+
+  O `git diff origin/staging` deve mostrar só o pacote do PR, nos `.csproj` e nos lock files.
+  Valide como em [Lock files em PR do Dependabot](#lock-files-em-pr-do-dependabot) e envie com
+  `git push`, sem force.
 
 ## Homologação e produção na Railway
 
@@ -362,7 +432,8 @@ Proteção de `main` e `staging`:
 | *Do not allow bypassing* (`enforce_admins`) | Ligado: vale também para administradores |
 | Force push e exclusão | Bloqueados |
 
-No repositório: squash e merge commit ativos, *Allow rebase merging* desmarcado.
+No repositório: merge commit ativo, *Allow rebase merging* desmarcado. O squash está ativo, mas
+não é usado ([Método de merge](#método-de-merge)).
 
 Os três checks respeitam o [atalho de documentação](#atalho-de-documentação): um PR só de docs não
 fica preso esperando build.
@@ -413,8 +484,10 @@ CONFIG GET maxmemory-policy      # NÃO pode ser allkeys-* (apagaria sessões vi
 gh pr create --base main --head staging --title "release: staging → main" --body "Homologado em <data>."
 ```
 
-1. [Leve a `main` para a `staging`](#levar-a-main-para-a-staging) antes de abrir o PR.
+1. Confira se a `main` tem algo que a `staging` não tem
+   (`git rev-list --count origin/staging..origin/main`). Se tiver,
+   [leve a `main` para a `staging`](#levar-a-main-para-a-staging) antes de abrir o PR.
 2. Confirme a versão em homologação e aplique as migrations pendentes em produção, se houver.
-3. Espere `Build e testes` e `Origem do PR`.
+3. Espere os três checks: `Origem do PR`, `Build e testes` e `Imagem Docker`.
 4. Faça o merge com **merge commit**. A Railway publica depois dos checks da `main`.
 5. Confira `/health/ready` em produção. O rollback é feito pelo histórico de deploys da Railway.
