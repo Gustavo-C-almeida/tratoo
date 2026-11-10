@@ -37,15 +37,15 @@
       },
       "AWSSDK.Core": {
         "type": "Transitive",
-        "resolved": "3.7.100",
-        "contentHash": "YS+BRSjLtiTSyT7S+1F+305mXU0qmWIXQ85RULMiPvA20/xp9zO9aOjfWQMAKaQb1vwLGsGuMN/AHmJEnx0K+w=="
+        "resolved": "4.0.102.19",
+        "contentHash": "Hb6P2ui6y0U+UNUjcC4ASFFoTLzCijhMzfOCXfoFTXq/o0YWQsO1oSH1NG2GQ9dlIT693xeeih0yAcfeL1dphg=="
       },
       "AWSSDK.S3": {
         "type": "Transitive",
-        "resolved": "3.7.100",
-        "contentHash": "5VpSinXuf5DRQ1Yeeg/q/rPlCkCIHymcH5OJA94FiRcAZMMHz1OQ0kpiGcgrJCMluY0mWgm2I5r8RrDZUQgaQg==",
+        "resolved": "4.0.104.11",
+        "contentHash": "leP2ZC3gVaNHXZleKOMHmedex6fTrr6u1ZQFuezIGjT01oPwP0j6YI00jlPwlakTC0Uo5a0eOOY2Q/eYzsU9wg==",
         "dependencies": {
-          "AWSSDK.Core": "[3.7.100, 4.0.0)"
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
         }
       },
       "BCrypt.Net-Next": {
@@ -402,7 +402,7 @@
       "tratoo.api": {
         "type": "Project",
         "dependencies": {
-          "AWSSDK.S3": "[3.7.100, )",
+          "AWSSDK.S3": "[4.0.104.11, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.14, )",
           "Microsoft.IdentityModel.JsonWebTokens": "[8.19.2, )",
           "QuestPDF": "[2025.1.0, )",
@@ -418,7 +418,7 @@
       "tratoo.domain": {
         "type": "Project",
         "dependencies": {
-          "AWSSDK.S3": "[3.7.100, )",
+          "AWSSDK.S3": "[4.0.104.11, )",
           "BCrypt.Net-Next": "[4.2.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.14, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.14, )",
