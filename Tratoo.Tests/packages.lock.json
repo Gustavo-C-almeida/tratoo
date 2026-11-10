@@ -218,8 +218,8 @@
       },
       "QuestPDF": {
         "type": "Transitive",
-        "resolved": "2025.1.0",
-        "contentHash": "9dXmOqAV6HhECwneUpG9k11K0JueOmhkv6jWe1cZPVtICeb9uK2bZK4MMPo827FlHN2Tg6ieusAAennetru0aQ=="
+        "resolved": "2026.9.1",
+        "contentHash": "i2BT/v+Ui6Hg9+BZbOci/VfsyvmtY8nlQqAOmFt8iOZ4Hm9aKZZRgZZ+LfrKWYXAHRb3l1EjDcMVfjRaZTt+Cw=="
       },
       "Resend": {
         "type": "Transitive",
@@ -405,7 +405,7 @@
           "AWSSDK.S3": "[4.0.104.11, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.14, )",
           "Microsoft.IdentityModel.JsonWebTokens": "[8.23.0, )",
-          "QuestPDF": "[2025.1.0, )",
+          "QuestPDF": "[2026.9.1, )",
           "Serilog.AspNetCore": "[8.0.1, )",
           "StackExchange.Redis": "[2.13.17, )",
           "Swashbuckle.AspNetCore": "[6.5.0, )",
@@ -425,7 +425,7 @@
           "Microsoft.IdentityModel.JsonWebTokens": "[8.23.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Pgvector.EntityFrameworkCore": "[0.3.0, )",
-          "QuestPDF": "[2025.1.0, )",
+          "QuestPDF": "[2026.9.1, )",
           "Resend": "[0.8.0, )",
           "System.IdentityModel.Tokens.Jwt": "[8.23.0, )"
         }
