@@ -356,7 +356,7 @@ Proteção de `main` e `staging`:
 
 | Regra | Valor |
 |---|---|
-| Checks obrigatórios | `Build e testes`, `Origem do PR` e `Imagem Docker` (este último a acrescentar, ver abaixo) |
+| Checks obrigatórios | `Build e testes`, `Origem do PR` e `Imagem Docker` |
 | *Require branches to be up to date* | Ligado |
 | PR obrigatório | Sim, com 0 aprovações: o merge manual é a aprovação humana |
 | *Do not allow bypassing* (`enforce_admins`) | Ligado: vale também para administradores |
@@ -364,9 +364,8 @@ Proteção de `main` e `staging`:
 
 No repositório: squash e merge commit ativos, *Allow rebase merging* desmarcado.
 
-**Pendente:** depois do primeiro PR em que `Imagem Docker` rodar, acrescente o check aos
-obrigatórios de `main` e `staging`. Até lá ele aparece no PR, mas não bloqueia o merge. Ele respeita
-o atalho de documentação, então não prende PRs só de docs.
+Os três checks respeitam o [atalho de documentação](#atalho-de-documentação): um PR só de docs não
+fica preso esperando build.
 
 Em *Settings → Code security*, mantenha ligados os alertas do Dependabot (*Dependabot alerts*). Eles
 são independentes do `dependabot.yml`.
