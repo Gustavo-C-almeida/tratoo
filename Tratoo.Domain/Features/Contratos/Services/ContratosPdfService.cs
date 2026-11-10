@@ -8,6 +8,8 @@ namespace Tratoo.Domain.Features.Contratos
 {
     public class ContratosPdfService : IContratosPdfService
     {
+        private const string FonteDoContrato = "Lato";
+
         private static readonly JsonSerializerOptions _jsonOpts = new()
         {
             PropertyNameCaseInsensitive = true
@@ -26,7 +28,11 @@ namespace Tratoo.Domain.Features.Contratos
                 {
                     page.Size(PageSizes.A4);
                     page.Margin(2.5f, Unit.Centimetre);
-                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
+                    // Lato é a fonte que acompanha o QuestPDF. "Arial" e "Courier New" não existem
+                    // na imagem de produção (aspnet:10.0, Ubuntu): até a 2025.1 o QuestPDF trocava
+                    // as duas em silêncio pela Lato; a partir da 2026.9 a geração falharia.
+                    // ContratosPdfTests confere que o PDF sai e só embute Lato.
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(FonteDoContrato));
 
                     page.Header().Element(c => CabecalhoDoc(c, contrato));
                     page.Content().Element(c => CorpoDoc(c, conteudo, contrato, snapshot));
@@ -166,7 +172,7 @@ namespace Tratoo.Domain.Features.Contratos
                 col.Item().PaddingTop(16).Background(Colors.Grey.Lighten3).Padding(8).Column(integ =>
                 {
                     integ.Item().Text("CERTIFICADO DE INTEGRIDADE DIGITAL").Bold().FontSize(9);
-                    integ.Item().PaddingTop(4).Text($"Hash SHA-256: {contrato.ConteudoHash}").FontSize(7).FontFamily("Courier New");
+                    integ.Item().PaddingTop(4).Text($"Hash SHA-256: {contrato.ConteudoHash}").FontSize(7).FontFamily(FonteDoContrato);
                     integ.Item().PaddingTop(2).Text(
                         $"Documento gerado em: {snapshot.CongeladoEm:dd/MM/yyyy HH:mm} UTC  |  " +
                         $"Contrato ID: {contrato.Id}")
