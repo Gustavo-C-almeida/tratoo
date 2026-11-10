@@ -1417,22 +1417,41 @@ mesmo `Jwt:SecretKey`, e o que precisa ser visto pelas duas está no Redis, no P
 
 ## 7. CI/CD e qualidade
 
+Esta seção resume as decisões; os procedimentos (passo a passo, comandos e configuração manual)
+estão em [CICD.md](CICD.md).
+
 ### 7.1 CI: GitHub Actions
 
 O [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda em PRs e pushes de `staging` e
-`main`, com três jobs: `Origem do PR` (só em PRs), `Build e testes` e `Imagem Docker`. Os passos,
-os critérios de bloqueio, o atalho de documentação, as versões fixadas e as regras de origem dos
-PRs estão em [CICD.md](CICD.md#workflows); aqui ficam só as decisões de arquitetura:
+`main`, com três jobs, todos checks obrigatórios das duas branches:
+
+| Job | O que garante |
+|---|---|
+| `Origem do PR` (só em PRs) | O fluxo de branches: PR para a `staging` só de `feature/*`, `fix/*`, `hotfix/*`, `revert-*` ou `dependabot/*`; para a `main`, só de `staging` ou `hotfix/*`. PR de fork é recusado |
+| `Build e testes` | Restore travado nos lock files, pacotes sem vulnerabilidade High/Critical, build, modelo do EF com migration correspondente e testes com Postgres (pgvector) e Redis reais |
+| `Imagem Docker` | A imagem de produção constrói e passa no Trivy |
+
+Decisões:
 
 - **Sem segredos e com permissões mínimas** (`contents: read`). O CI roda isolado do ambiente de
-  produção.
+  produção, e o nome da branch (entrada não confiável) entra nos scripts só por variável de
+  ambiente.
 - **Integração com serviços reais:** os testes sobem Postgres (pgvector) e Redis via Docker, e
   `TRATOO_EXIGIR_DOCKER: "1"` faz eles **falharem** em vez de serem ignorados sem Docker.
 - **A imagem testada é a de produção:** o job `Imagem Docker` constrói o mesmo `Dockerfile` que a
-  Railway constrói, sem publicar, e o varre com o Trivy.
+  Railway constrói, sem publicar. O Trivy, fixado por versão e digest, barra CRITICAL e HIGH com
+  correção disponível; exceções só no `.trivyignore`, com motivo e validade
+  ([CICD.md](CICD.md#passos-do-imagem-docker)).
+- **Migration existe ≠ migration aplicada:** a CI garante que toda mudança de modelo do
+  `TratooContext` tem migration (`has-pending-model-changes`, sem banco). Aplicá-la no Neon continua
+  manual, antes da promoção.
+- **Atalho de documentação dentro de cada job:** PR só de docs passa em segundos, mas os checks
+  continuam sendo reportados. Nem `paths-ignore` (o check obrigatório ficaria preso em "Expected")
+  nem um job separado com `needs` (se ele falhasse, os checks seriam pulados, e pulado conta como
+  aprovado) ([CICD.md](CICD.md#atalho-de-documentação)).
 - **O check do push é o que libera o deploy:** a `concurrency` cancela execuções anteriores só em
   PRs; em `staging` e `main`, um check cancelado impediria a Railway de publicar o commit.
-- **Proteção de `staging` e `main`:** checks obrigatórios, branch atualizada e PR, inclusive para
+- **Proteção de `staging` e `main`:** os três checks, branch atualizada e PR, inclusive para
   administradores ([CICD.md](CICD.md#github)).
 
 ### 7.2 Testes
@@ -1442,9 +1461,11 @@ PRs estão em [CICD.md](CICD.md#workflows); aqui ficam só as decisões de arqui
 | Proxy, IP e rate limit | `ForwardedHeadersTests`, `RateLimitingPorIpTests`, `CapturaIpAuditoriaTests`, `ClientRequestInfoTests`, `BindingConfiguracaoTests` |
 | Health checks e runtime | `HealthCheckTests`, `PortaHttpTests`, `ShutdownTests`, `LogArquivoSetupTests`, `ModoMigracaoTests` |
 | Estado efêmero e OTP | `EstadoEfemeroTests`, `OtpConcorrenciaTests` |
-| Sessão (host em memória) | `SessaoTests`, `SessaoConfigTests` |
-| Criptografia | `DataProtectorTests`, `RotacaoChaveDadosTests`, `ChaveDeDadosNaSubidaTests` |
-| **Integração (Docker)** | `RedisReplicasTests`, `SessaoRedisTests`, `JobsConcorrenciaTests`, `WebhookConcorrenciaTests`, `DatasPersistenciaTests`, `DadosCifradosHealthCheckTests`, `RecifragemTests` |
+| Sessão e JWT (host em memória) | `SessaoTests`, `SessaoConfigTests`, `ChavesJwtTests` |
+| Criptografia | `DataProtectorTests`, `DataProtectorV2Tests`, `RotacaoChaveDadosTests`, `ChaveDeDadosNaSubidaTests` |
+| Pagamentos (Asaas) | `AsaasTransferenciaClassificacaoTests`, `AsaasLogSemDadosSensiveisTests`, `WebhookAsaasObrigatorioTests` |
+| Datas, logs e PDF | `DatasUtcTests`, `OpenAiLoggingHandlerTests`, `ContratosPdfTests` (gera o PDF do contrato com o QuestPDF real) |
+| **Integração (Docker)** | `RedisReplicasTests`, `SessaoRedisTests`, `RotacaoJwtRedisTests`, `JobsConcorrenciaTests`, `ExecucaoExclusivaTests`, `WebhookConcorrenciaTests`, `LiberacaoReproducaoTests`, `DatasPersistenciaTests`, `DadosCifradosHealthCheckTests`, `RecifragemTests`, `RecifragemFormatoTests`, `RecifragemAutomaticaTests`, `VetoresTests` (busca semântica com pgvector) |
 
 - **Como a integração roda:** os testes chamam a **CLI do Docker** diretamente
   (`Integracao/Docker.cs`) e marcam os containers com o rótulo `tratoo-testes=1`. O atributo
@@ -1453,23 +1474,56 @@ PRs estão em [CICD.md](CICD.md#workflows); aqui ficam só as decisões de arqui
   Docker Desktop pesa demais); o CI continua exigindo o Docker.
 - **Testes de processo:** `ProcessoApi` executa o binário real para provar recusas de subida e os
   modos de linha de comando.
+- **Lacuna:** as integrações externas (R2, Asaas, Resend, OpenAI) usam falsos nos testes. Uma
+  atualização de pacote que fala com elas precisa de teste manual em homologação
+  ([CICD.md](CICD.md#dependabot)).
 
-### 7.3 Outras verificações do GitHub
+### 7.3 Dependências
 
-O CodeQL roda em *default setup* (Actions, C#, JS/TS), sem workflow no repositório. A situação
-registrada em cada auditoria está na
+- **Restore determinístico:** cada projeto tem um `packages.lock.json` versionado (pacotes diretos e
+  transitivos, com hash), ligado pelo `Directory.Build.props`. A CI e o `Dockerfile` restauram com
+  `--locked-mode`: um `.csproj` que diverge do lock file falha com `NU1004` em vez de resolver outra
+  versão em silêncio. O `Directory.Build.targets` mantém o lock file fora da imagem.
+- **Versões fixadas:** SDK pelo `global.json` (10.0.x), `dotnet-ef` pelo
+  `.config/dotnet-tools.json` (mesma versão do EF Core), actions por tag de major e Trivy por versão
+  e digest ([CICD.md](CICD.md#versões-fixadas)).
+- **Dependabot:** PRs semanais para a `staging` (NuGet, actions e imagens do `Dockerfile`), com a
+  família Microsoft/System agrupada e as majors que exigem outro runtime ignoradas. Cada PR passa
+  pela CI e por merge manual. O Dependabot não atualiza o lock file dos projetos dependentes, e por
+  isso alguns PRs precisam de um ajuste manual; conflitos entre PRs dele têm procedimento próprio
+  ([CICD.md](CICD.md#lock-files-em-pr-do-dependabot)).
+- **Vulnerabilidades:** pacotes NuGet diretos e transitivos na CI (High/Critical bloqueiam) e a
+  imagem pelo Trivy; os alertas do Dependabot ficam ligados no GitHub.
+
+### 7.4 Branches, merge e promoção
+
+- **Branches:** `main` é produção e `staging` é homologação; toda branch de trabalho sai da `main` e
+  entra na `staging` por PR ([CICD.md](CICD.md#fluxo)).
+- **Todo PR entra com merge commit.** Os commits mantêm a mesma identidade nas duas branches, então
+  o que foi promovido não é aplicado de novo e um `hotfix/*` não gera conflito depois. O merge de uma
+  branch criada a partir da `main` também leva a última promoção para a `staging`. O custo é na
+  retirada de uma entrega reprovada: o revert desfaz o merge inteiro, e reintroduzir a entrega exige
+  reverter o revert ([CICD.md](CICD.md#retirar-uma-funcionalidade-reprovada)).
+- **Promoção:** PR `staging` → `main` depois da homologação, com merge manual; nenhum merge é
+  automático ([CICD.md](CICD.md#promover-para-produção)).
+
+### 7.5 Outras verificações do GitHub
+
+O CodeQL roda em *default setup* (Actions, C#, JS/TS), sem workflow no repositório. O
+[`monitor-recifragem.yml`](../.github/workflows/monitor-recifragem.yml), agendado a cada 2 h, lê o
+`/health/ready` público dos dois ambientes e falha se a chave de dados não decifra os dados ou se a
+recifragem precisa de atenção. A situação registrada em cada auditoria está na
 [matriz de rastreabilidade](#apêndice-a--matriz-de-rastreabilidade) e no [HISTORICO.md](HISTORICO.md).
 
-### 7.4 Fluxo automatizado
+### 7.6 Fluxo automatizado
 
 ```
-PR → CI (Origem do PR, Build e testes, Imagem Docker) + CodeQL ──► merge ──► push na branch
+PR → CI (Origem do PR, Build e testes, Imagem Docker) + CodeQL ──► merge commit ──► push na branch
    ──► CI do push ──► Railway espera os checks ──► build ──► /health/ready ──► deploy
 ```
 
 A mesma sequência publica a `staging` em homologação e a `main` em produção. A `main` recebe código
-pelo PR `staging` → `main` ou, em urgências, por um PR de `hotfix/*`. O fluxo completo e as
-configurações manuais estão em [CICD.md](CICD.md).
+pelo PR `staging` → `main` ou, em urgências, por um PR de `hotfix/*`.
 
 ---
 
