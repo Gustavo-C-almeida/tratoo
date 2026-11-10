@@ -235,7 +235,7 @@ São **12 de 114** rotas com rate limit.
 
 ## Divergências encontradas (intenção × código)
 
-Severidades **preliminares**. Serão confirmadas com teste nas Fases 2 a 4.
+Severidades e evidências finais, confirmadas por teste contra a API real nas Fases 2 a 4: ver [`REPORT.md`](REPORT.md).
 
 | # | Sev. | Rota(s) | Divergência | Evidência |
 |---|---|---|---|---|
@@ -246,10 +246,13 @@ Severidades **preliminares**. Serão confirmadas com teste nas Fases 2 a 4.
 | D5 | Média | ver ⚠️ D5 na matriz + todos os uploads | Não há `GlobalLimiter`: 102 rotas não têm limite. As mais relevantes: `cadastro/confirmar` e `assinar` (mitigadas por 5 tentativas por código), uploads, mensagens de chat, `pagamentos/iniciar` e `sincronizar` (chamam o Asaas), CEP e endpoints admin. | `RateLimiterSetup.cs` |
 | D6 | Baixa | 8 rotas de competências, `entrega/aprovar`, `entrega/rejeitar` | O papel não é exigido na rota, só checado no serviço ou no handler. Funciona, mas sem defesa em profundidade, e a recusa vem como **400** (`NegocioException`) em vez de **403**. | `CompetenciaExtensions.cs`, `CompetenciaRelacionamentoExtensions.cs`, `ContratoExtensions.cs:213-243` |
 | D7 | Média | `POST /usuarios/login` | O limite é só por IP (10/min) e não há bloqueio por conta após falhas. Um ataque distribuído contra uma conta não é contido. Admin é mitigado pelo MFA obrigatório. | `LoginService.cs:30-57` |
-| D8 | Baixa | `POST /usuarios/cadastro*` | Body `{}` dá **500** (`NullReferenceException`) em vez de 400. | Varredura runtime + log da API |
+| D8 | Baixa | `POST /usuarios/cadastro*` | Body `{}` dá **500** (`NullReferenceException`) em vez de 400. `tipo: "admin"` também dá 500 (`ArgumentException`), sem criar usuário. | Varredura runtime + log da API + `Cadastro_NaoCriaAdmin_…` |
 | D9 | Média | `POST /api/admin/pagamentos/{id}/reprocessar-transferencia` | Ação financeira de admin sem `ExigirReautenticacaoRecente`, ao contrário de `resolver` disputa. | `PagamentoExtensions.cs:167` |
 | D10 | Baixa | `/api/dev/seed-admin` | Em Development, promove qualquer e-mail a Admin **sem autenticação**. Hoje é seguro: Dockerfile e railway.toml não definem Development, e o padrão é Production. Mas basta um `ASPNETCORE_ENVIRONMENT=Development` exposto para virar escalada total. | `DevSeedExtensions.cs:21-41` |
 | I1 | Info | rate limit | Se o Redis cair, o contador degrada para memória **por réplica** (o limite efetivo multiplica pelo número de réplicas). É o comportamento documentado. | `LimitadorJanelaFixaRedis` |
+| D11 | Baixa | sessão aberta | *(achado na Fase 2)* Usuário bloqueado no banco segue acessando com a sessão aberta. O refresh relê a conta e corta, então a janela é ≤ 15 min. | `UsuarioBloqueadoComSessaoAberta_PerdeOAcesso` |
+| D12 | Baixa | `/api/admin/*` | *(achado na Fase 3)* Admin com `IsAdmin=false` no banco segue acessando por até um access token (≤ 10 min). | `AdminRebaixadoNoBanco_PerdeOAcessoAdministrativo` |
+| I3 | Info | rate limit | *(Fase 4)* A janela do Redis é alinhada ao minuto: 2 × limite passam em ~1 s na virada do minuto. | `LimitadorJanelaFixaRedis` |
 | I2 | Info | rate limit | Spoofing de `X-Forwarded-For`: o gate e o `ForwardLimit=2` estão corretos para a topologia documentada da Railway, mas **não dá para verificar daqui** se a borda sobrescreve ou acrescenta o XFF. Não verificado em produção. | `Docs/REVERSE-PROXY-IP-CLIENTE.md` |
 
 ### Sem divergência
