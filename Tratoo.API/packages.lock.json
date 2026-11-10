@@ -48,9 +48,9 @@
       },
       "QuestPDF": {
         "type": "Direct",
-        "requested": "[2025.1.0, )",
-        "resolved": "2025.1.0",
-        "contentHash": "9dXmOqAV6HhECwneUpG9k11K0JueOmhkv6jWe1cZPVtICeb9uK2bZK4MMPo827FlHN2Tg6ieusAAennetru0aQ=="
+        "requested": "[2026.9.1, )",
+        "resolved": "2026.9.1",
+        "contentHash": "i2BT/v+Ui6Hg9+BZbOci/VfsyvmtY8nlQqAOmFt8iOZ4Hm9aKZZRgZZ+LfrKWYXAHRb3l1EjDcMVfjRaZTt+Cw=="
       },
       "Serilog.AspNetCore": {
         "type": "Direct",
@@ -480,7 +480,7 @@
           "Microsoft.IdentityModel.JsonWebTokens": "[8.23.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Pgvector.EntityFrameworkCore": "[0.3.0, )",
-          "QuestPDF": "[2025.1.0, )",
+          "QuestPDF": "[2026.9.1, )",
           "Resend": "[0.8.0, )",
           "System.IdentityModel.Tokens.Jwt": "[8.23.0, )"
         }

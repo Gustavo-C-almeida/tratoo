@@ -36,7 +36,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
-    <PackageReference Include="QuestPDF" Version="2025.1.0" />
+    <PackageReference Include="QuestPDF" Version="2026.9.1" />
     <PackageReference Include="Resend" Version="0.8.0" />
   </ItemGroup>
 
