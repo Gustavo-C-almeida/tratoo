@@ -48,6 +48,7 @@
 | 02/11 | — (medição) | Ficou demonstrado que a duração dos checks de banco é dominada pelo *cold start* do Neon, não pela distância: com o banco já acordado, `postgres` e `pgvector` deram 128 ms e 20 ms | Confirmado ([`ARQUITETURA.md` §3.1](ARQUITETURA.md#31-topologia)) |
 | 02/11 | — (limpeza) | Projeto `impartial-renewal`, da tentativa de rodar SQL Server em container na Railway (21/07), esvaziado: serviço, volume e proxy TCP removidos. Nunca teve um deploy | Confirmado: ambiente sem serviços nem volumes |
 | 05/11 | `5905ef4`, run `41950621509` | Execução da CI na `main` com 288 testes. A primeira tentativa falhou num teste instável de OTP, cuja asserção era estrita demais; a segunda passou, e a asserção foi corrigida em seguida | Confirmado (registro movido da `ARQUITETURA.md` §7.1 em 09/11) |
+| 09/11 | — (configuração do GitHub) | `Imagem Docker` passa a ser check obrigatório em `main` e `staging`, ao lado de `Build e testes` e `Origem do PR` | Configurado (informado em 09/11) |
 
 Antes de agosto, o histórico tem a base funcional do produto (cadastro com LGPD, perfis, projetos,
 propostas, contratos, escrow, avaliações, cancelamentos e busca semântica). Ela começa com um
