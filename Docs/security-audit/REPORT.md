@@ -6,6 +6,21 @@
 Inventário e matriz de intenção: [`endpoint-matrix.md`](endpoint-matrix.md).
 Testes: [`Tratoo.Tests/Seguranca/`](../../Tratoo.Tests/Seguranca/).
 
+## Status das correções
+
+| # | Status | Commit | Teste de regressão (vermelho → verde) |
+|---|---|---|---|
+| D2 | ✅ Corrigido | `62986b1` | `ProjetoRascunhoOuPrivado_NaoApareceParaTerceiros` + `…_ContinuaVisivelParaQuemParticipa` |
+| D3 | ✅ Corrigido | `db24107` | `Entrega_DeQuemNaoEOPrestador_NaoGravaArquivoNoBucketPrivado` + `Entrega_DoPrestadorDoContrato_ContinuaFuncionando_…` + matriz (rota com policy Prestador) |
+| D4 | ✅ Corrigido | `af9b3bb` | `BuscaPublica_ComIA_TemRateLimit` + `BuscaSemTexto_ContinuaSemLimite_…` + matriz (política `busca`) |
+| D1 | Decidido, a implementar | — | `/health/*` anônimo só com o status; `/api/admin/health` com os detalhes (Admin + reautenticação). |
+| D5, D6, D7, D9, D8, D10, D11, D12 | Em aberto | — | Testes de achado continuam ignorados por padrão. |
+
+Com `TRATOO_REPRODUZIR_ACHADOS=1`, a suíte de segurança agora dá 467 testes: 448 aprovados e 19 reprovados. Os
+19 são os achados ainda abertos: D1, D5 (8 rotas), D6 (7 rotas), D7, D11 e D12.
+
+O restante deste relatório descreve o estado **auditado** (`0c253ae`), antes das correções.
+
 ## Resumo executivo
 
 **Veredito: aprovado com ressalvas.** Os quatro requisitos centrais se sustentam nos testes contra a API real:
