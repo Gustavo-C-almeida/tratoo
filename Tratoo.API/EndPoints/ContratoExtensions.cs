@@ -108,7 +108,7 @@ namespace Tratoo.API.EndPoints
             }).RequireAuthorization();
 
             // ──────────────────────────────────────────────────────────────────────
-            // REGISTRAR ENTREGA FORMAL — apenas prestador, contrato Ativo
+            // REGISTRAR ENTREGA FORMAL — apenas prestador (policy), contrato Ativo
             // POST /api/contratos/{id}/entrega  (multipart/form-data)
             // Campos: descricaoEntrega, observacoes?, dataEntrega, links? (JSON), files[]
             // ──────────────────────────────────────────────────────────────────────
@@ -116,13 +116,18 @@ namespace Tratoo.API.EndPoints
                 Guid id,
                 HttpContext http,
                 IEntregaService service,
-                IR2PrivateStorageService storage) =>
+                IR2PrivateStorageService storage,
+                ILogger<IEntregaService> logger) =>
             {
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
                 if (!http.Request.HasFormContentType)
                     return Results.BadRequest(new { mensagem = "Envie os dados como multipart/form-data." });
+
+                // Dono, status do contrato, pagamento e entrega pendente ANTES de ler o corpo e de
+                // gravar qualquer arquivo no bucket privado (achado D3). Recusa = NegocioException → 400.
+                await service.ValidarRegistroDeEntregaAsync(id, userId.Value);
 
                 var form = await http.Request.ReadFormAsync();
 
@@ -167,28 +172,42 @@ namespace Tratoo.API.EndPoints
                         return Results.BadRequest(new { mensagem = $"Arquivo muito grande: {arquivo.FileName}. Máximo 20 MB por arquivo." });
                 }
 
-                // ── Upload ao bucket privado ──────────────────────────────────
+                // ── Upload ao bucket privado + registro ───────────────────────
+                // Qualquer falha a partir daqui (upload parcial, outra entrega gravada entre a
+                // validação e o registro, banco fora) remove o que já subiu: nada fica órfão.
                 var anexos = new List<EntregaAnexoUpload>();
-                foreach (var arquivo in arquivos)
+                try
                 {
-                    var ext = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
-                    var contentType = ContentTypePorExtensao(ext);
-                    var chave = $"entregas/{id}/{Guid.NewGuid()}{ext}";
+                    foreach (var arquivo in arquivos)
+                    {
+                        var ext = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
+                        var contentType = ContentTypePorExtensao(ext);
+                        var chave = $"entregas/{id}/{Guid.NewGuid()}{ext}";
 
-                    using var stream = arquivo.OpenReadStream();
-                    await storage.UploadAsync(stream, chave, contentType);
+                        using var stream = arquivo.OpenReadStream();
+                        await storage.UploadAsync(stream, chave, contentType);
 
-                    anexos.Add(new EntregaAnexoUpload(
-                        NomeArquivo: Path.GetFileName(arquivo.FileName),
-                        ChaveR2: chave,
-                        TipoArquivo: ext,
-                        TamanhoArquivo: arquivo.Length));
+                        anexos.Add(new EntregaAnexoUpload(
+                            NomeArquivo: Path.GetFileName(arquivo.FileName),
+                            ChaveR2: chave,
+                            TipoArquivo: ext,
+                            TamanhoArquivo: arquivo.Length));
+                    }
+
+                    var dto = new RegistrarEntregaDto(descricao, observacoes, dataEntrega, links);
+                    var resultado = await service.RegistrarEntregaAsync(id, userId.Value, dto, anexos);
+                    return Results.Ok(resultado);
                 }
-
-                var dto = new RegistrarEntregaDto(descricao, observacoes, dataEntrega, links);
-                var resultado = await service.RegistrarEntregaAsync(id, userId.Value, dto, anexos);
-                return Results.Ok(resultado);
-            }).RequireAuthorization().DisableAntiforgery();
+                catch
+                {
+                    foreach (var anexo in anexos)
+                    {
+                        try { await storage.ExcluirAsync(anexo.ChaveR2); }
+                        catch (Exception ex) { logger.LogWarning(ex, "Não foi possível remover o anexo órfão {Chave}.", anexo.ChaveR2); }
+                    }
+                    throw;
+                }
+            }).RequireAuthorization("Prestador").DisableAntiforgery();
 
             // ──────────────────────────────────────────────────────────────────────
             // OBTER ENTREGA — qualquer parte do contrato (anexos com URL assinada)

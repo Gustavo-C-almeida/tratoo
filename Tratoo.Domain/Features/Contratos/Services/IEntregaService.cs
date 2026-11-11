@@ -6,6 +6,9 @@ namespace Tratoo.Domain.Features.Contratos
         /// Prestador registra a entrega formal do serviço (descrição, anexos já enviados
         /// ao R2 e links). Move o contrato para AguardandoAprovacaoEntrega.
         /// </summary>
+        /// <summary>Confere, sem gravar nada, se o prestador pode registrar entrega no contrato (lança NegocioException se não).</summary>
+        Task ValidarRegistroDeEntregaAsync(Guid contratoId, int prestadorId);
+
         Task<EntregaDetalheDto> RegistrarEntregaAsync(
             Guid contratoId, int prestadorId, RegistrarEntregaDto dto, List<EntregaAnexoUpload> anexos);
 
