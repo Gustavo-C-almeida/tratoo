@@ -130,6 +130,39 @@ namespace Tratoo.Domain.Features.Projetos
             return p == null ? null : MapDetalhe(p);
         }
 
+        /// <summary>
+        /// Detalhe para a rota pública <c>GET /api/projects/{id}</c>. Devolve <c>null</c> (404,
+        /// sem revelar se existe) quando quem pede não pode ver o projeto:
+        ///  • publicado e público → qualquer pessoa, inclusive anônima;
+        ///  • rascunho → só o dono (e Admin);
+        ///  • privado → dono, Admin, prestador selecionado e prestador com proposta ou convite
+        ///    pendente/aceito.
+        /// <see cref="ObterDetalheAsync"/> continua sem filtro para uso interno (chat), que faz a
+        /// própria checagem de participação.
+        /// </summary>
+        public async Task<ProjetoDetalheDTO?> ObterDetalheVisivelAsync(int id, int? usuarioId, bool ehAdmin)
+        {
+            var p = await _repo.GetByIdAsync(id);
+            if (p is null || !await PodeVerAsync(p, usuarioId, ehAdmin))
+                return null;
+            return MapDetalhe(p);
+        }
+
+        private async Task<bool> PodeVerAsync(Projeto p, int? usuarioId, bool ehAdmin)
+        {
+            if (p.Status != StatusProjeto.Rascunho && p.Visibilidade == VisibilidadeProjeto.Publico)
+                return true;
+            if (usuarioId is null)
+                return false;
+            if (ehAdmin || p.ContratanteId == usuarioId)
+                return true;
+            if (p.Status == StatusProjeto.Rascunho)
+                return false;
+            if (p.FreelancerSelecionadoId == usuarioId)
+                return true;
+            return await _repo.PrestadorParticipaAsync(p.Id, usuarioId.Value);
+        }
+
         public async Task<List<ProjetoResumoDTO>> GetDoContratanteAsync(int contratanteId)
         {
             var projetos = await _repo.GetDoContratanteAsync(contratanteId);

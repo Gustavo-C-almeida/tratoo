@@ -180,7 +180,8 @@ namespace Tratoo.Tests.Seguranca
         // Achados
         // ─────────────────────────────────────────────────────────────────────
 
-        [FactAchado("D2")]
+        /// <summary>Achado D2 (corrigido): o detalhe anônimo devolvia rascunhos e projetos privados.</summary>
+        [FactApiReal]
         public async Task ProjetoRascunhoOuPrivado_NaoApareceParaTerceiros()
         {
             var m = _f.Dados;
@@ -199,6 +200,63 @@ namespace Tratoo.Tests.Seguranca
             }
             Assert.True(vazou.Count == 0, string.Join("\n", vazou));
         }
+
+        /// <summary>
+        /// Contraparte do D2: quem participa do projeto continua vendo o detalhe, e o projeto
+        /// público segue aberto — a correção não pode quebrar as telas do dono, do chat e do convite.
+        /// </summary>
+        [FactApiReal]
+        public async Task ProjetoRascunhoOuPrivado_ContinuaVisivelParaQuemParticipa()
+        {
+            var m = _f.Dados;
+            var (dono, convidado, cenario) = await _f.NovoParAsync();
+            var (_, recusou, _) = await _f.NovoParAsync();
+            var (_, comProposta, _) = await _f.NovoParAsync();
+
+            int rascunho, privado;
+            await using (var db = _f.Db())
+            {
+                var r = NovoProjeto(dono.Id, StatusProjeto.Rascunho, VisibilidadeProjeto.Publico);
+                var p = NovoProjeto(dono.Id, StatusProjeto.Aberto, VisibilidadeProjeto.Privado);
+                db.Projetos.AddRange(r, p);
+                await db.SaveChangesAsync();
+                db.ConvitesProjeto.AddRange(
+                    new ConviteProjeto { ProjetoId = p.Id, ContratanteId = dono.Id, PrestadorId = convidado.Id, MensagemInicial = "convite", Status = StatusConvite.Pendente },
+                    new ConviteProjeto { ProjetoId = p.Id, ContratanteId = dono.Id, PrestadorId = recusou.Id, MensagemInicial = "convite", Status = StatusConvite.Recusado });
+                db.PropostasProjeto.Add(new PropostaProjeto { ProjetoId = p.Id, PrestadorId = comProposta.Id, Status = StatusPropostaProjeto.Recusada, VersaoAtual = 1, ValidoAte = DateTime.UtcNow.AddDays(5) });
+                await db.SaveChangesAsync();
+                (rascunho, privado) = (r.Id, p.Id);
+            }
+
+            async Task<HttpStatusCode> Ver(int id, Domain.Models.Usuario? u)
+            {
+                using var resp = await _f.Api.EnviarAsync(HttpMethod.Get, $"/api/projects/{id}", u is null ? null : await _f.SessaoAsync(u));
+                return resp.StatusCode;
+            }
+
+            Assert.Equal(HttpStatusCode.OK, await Ver(rascunho, dono));
+            Assert.Equal(HttpStatusCode.OK, await Ver(privado, dono));
+            Assert.Equal(HttpStatusCode.OK, await Ver(privado, convidado));
+            Assert.Equal(HttpStatusCode.OK, await Ver(privado, comProposta));
+            Assert.Equal(HttpStatusCode.OK, await Ver(privado, m.Admin));
+            Assert.Equal(HttpStatusCode.NotFound, await Ver(privado, recusou));     // convite recusado não dá acesso
+            Assert.Equal(HttpStatusCode.NotFound, await Ver(rascunho, convidado));  // rascunho: só o dono
+            Assert.Equal(HttpStatusCode.OK, await Ver(cenario.ProjetoId, null));    // público publicado: aberto
+            Assert.Equal(HttpStatusCode.NotFound, await Ver(999_999, null));
+        }
+
+        private static Projeto NovoProjeto(int contratanteId, StatusProjeto status, VisibilidadeProjeto vis) => new()
+        {
+            ContratanteId = contratanteId,
+            Titulo = $"Projeto de visibilidade {status}/{vis}",
+            Descricao = "Projeto criado pelo teste de visibilidade do detalhe.",
+            Categoria = CategoriaProjet.Design,
+            OrcamentoMin = 500m, OrcamentoMax = 900m,
+            PrazoEntrega = DateTime.UtcNow.AddDays(20),
+            Status = status, Visibilidade = vis,
+            Publicado = status != StatusProjeto.Rascunho,
+            PublicadoEm = status != StatusProjeto.Rascunho ? DateTime.UtcNow : null
+        };
 
         [FactAchado("D3")]
         public async Task Entrega_DeQuemNaoEOPrestador_NaoGravaArquivoNoBucketPrivado()

@@ -40,10 +40,12 @@ namespace Tratoo.API.EndPoints
                 return Results.Ok(resultado);
             });
 
-            // GET /api/projects/{id}
-            app.MapGet("/api/projects/{id:int}", async (int id, ProjetoService service) =>
+            // GET /api/projects/{id} — público para projeto publicado e público; rascunho e
+            // privado só para quem participa (ver ProjetoService.ObterDetalheVisivelAsync).
+            // A rota segue anônima: o usuário, se houver cookie válido, vem da autenticação padrão.
+            app.MapGet("/api/projects/{id:int}", async (int id, HttpContext http, ProjetoService service) =>
             {
-                var dto = await service.ObterDetalheAsync(id);
+                var dto = await service.ObterDetalheVisivelAsync(id, ExtrairUserId(http), http.User.IsInRole("Admin"));
                 if (dto == null) return Results.NotFound(new { mensagem = "Projeto não encontrado." });
                 return Results.Ok(dto);
             });
