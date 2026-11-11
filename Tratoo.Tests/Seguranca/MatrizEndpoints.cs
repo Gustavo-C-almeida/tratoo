@@ -87,11 +87,11 @@ namespace Tratoo.Tests.Seguranca
             new("GET", "/api/cep/{cep}", Pub, N),
 
             // ── Busca ─────────────────────────────────────────────────────────
-            new("GET", "/api/busca/prestadores", Pub, N),
+            new("GET", "/api/busca/prestadores", Pub, N, "busca"),
             new("GET", "/api/busca/prestadores/{id:int}/similares", Pub, N),
-            new("GET", "/api/busca/projetos", Pub, N),
+            new("GET", "/api/busca/projetos", Pub, N, "busca"),
             new("GET", "/api/busca/projetos/{id:int}/prestadores-recomendados", Con, C),
-            new("GET", "/api/busca/projetos/recomendados", Pre, P),
+            new("GET", "/api/busca/projetos/recomendados", Pre, P, "busca"),
 
             // ── Projetos, chat e convites ─────────────────────────────────────
             new("GET", "/api/projects", Pub, N),

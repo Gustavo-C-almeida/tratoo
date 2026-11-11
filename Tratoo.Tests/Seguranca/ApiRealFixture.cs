@@ -83,6 +83,16 @@ namespace Tratoo.Tests.Seguranca
             Conexao = await CriarBancoAsync(servidorPg, $"seg_{sufixo}");
             var conexaoVetor = await CriarBancoAsync(servidorPg, $"seg_{sufixo}_vetor");
 
+            // Em produção a extensão já existe quando a API sobe (o pre-deploy roda --migrate-only).
+            // Num banco recém-criado, o Npgsql da API carregaria os tipos antes de o
+            // VectorDbInitializer criar a extensão e não reconheceria "vector" (500 na busca com q).
+            await using (var c = new NpgsqlConnection(conexaoVetor))
+            {
+                await c.OpenAsync();
+                await using var cmd = new NpgsqlCommand("CREATE EXTENSION IF NOT EXISTS vector", c);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
             await using (var db = SeedIntegracao.Contexto(Conexao))
                 await db.Database.MigrateAsync();
 

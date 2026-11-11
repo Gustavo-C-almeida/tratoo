@@ -34,6 +34,7 @@ namespace Tratoo.API.Infrastructure
         public const string PoliticaOtpAssinatura   = "otp-assinatura";
         public const string PoliticaRefresh         = "refresh";
         public const string PoliticaReautenticar    = "reautenticar";
+        public const string PoliticaBuscaIa         = "busca";
 
         /// <summary>
         /// Valor do header <c>Retry-After</c> nas respostas 429, em segundos.
@@ -71,6 +72,12 @@ namespace Tratoo.API.Infrastructure
                 // Reautenticação (senha/MFA antes de ação sensível): 5 por minuto por IP.
                 options.AdicionarPoliticaPorIp(PoliticaReautenticar, permitLimit: 5);
 
+                // Busca com texto livre (q): cada requisição gera um embedding pago na OpenAI.
+                // 30 por minuto por IP — folga para quem refina a busca e para NAT de escritório.
+                // Sem q a busca não chama a OpenAI e segue sem limite (listar/filtrar/paginar).
+                options.AdicionarPoliticaPorIp(PoliticaBuscaIa, permitLimit: 30,
+                    seAplica: http => !string.IsNullOrWhiteSpace(http.Request.Query["q"]));
+
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
                 options.OnRejected = async (context, cancellationToken) =>
                 {
@@ -99,8 +106,12 @@ namespace Tratoo.API.Infrastructure
         /// ("desconhecido") — conservador por definição: preferimos limitar demais
         /// a liberar um atacante que conseguiu esconder a origem.
         /// </summary>
+        /// <param name="seAplica">
+        /// Quando informado e falso para a requisição, ela não é contada (partição sem limite).
+        /// </param>
         private static void AdicionarPoliticaPorIp(
-            this RateLimiterOptions options, string nomePolitica, int permitLimit)
+            this RateLimiterOptions options, string nomePolitica, int permitLimit,
+            Func<HttpContext, bool>? seAplica = null)
         {
             var opcoes = new FixedWindowRateLimiterOptions
             {
@@ -112,6 +123,9 @@ namespace Tratoo.API.Infrastructure
 
             options.AddPolicy(nomePolitica, http =>
             {
+                if (seAplica is not null && !seAplica(http))
+                    return RateLimitPartition.GetNoLimiter($"{nomePolitica}|isento");
+
                 var ip = ClientRequestInfo.ObterIp(http);
 
                 // O nome da política entra na chave só para tornar a partição

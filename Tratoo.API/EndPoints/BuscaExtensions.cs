@@ -1,3 +1,4 @@
+using Tratoo.API.Infrastructure;
 using System.Security.Claims;
 
 namespace Tratoo.API.EndPoints
@@ -33,7 +34,7 @@ namespace Tratoo.API.EndPoints
 
                 var resultado = await service.BuscarPrestadoresAsync(filtros);
                 return Results.Ok(resultado);
-            });
+            }).RequireRateLimiting(RateLimiterSetup.PoliticaBuscaIa);   // só conta quando há q
 
             // ──────────────────────────────────────────────────────────────────────
             // GET /api/busca/prestadores/{id}/similares
@@ -60,7 +61,7 @@ namespace Tratoo.API.EndPoints
             {
                 var resultado = await service.BuscarProjetosAsync(q, page ?? 1, pageSize ?? 20);
                 return Results.Ok(resultado);
-            });
+            }).RequireRateLimiting(RateLimiterSetup.PoliticaBuscaIa);   // só conta quando há q
 
             // ──────────────────────────────────────────────────────────────────────
             // GET /api/busca/projetos/{id}/prestadores-recomendados
@@ -102,7 +103,8 @@ namespace Tratoo.API.EndPoints
 
                 var resultado = await service.RecomendarProjetosAsync(userId.Value, q);
                 return Results.Ok(resultado);
-            }).RequireAuthorization("Prestador");
+            }).RequireAuthorization("Prestador")
+              .RequireRateLimiting(RateLimiterSetup.PoliticaBuscaIa);   // q opcional também gera embedding
         }
 
         private static int? ExtrairUserId(HttpContext http) => ClaimsHelper.ExtrairUserId(http);

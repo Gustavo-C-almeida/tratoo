@@ -21,8 +21,12 @@ namespace Tratoo.Tests.Seguranca
         private static readonly Dictionary<string, int> Limites = new()
         {
             ["login"] = 10, ["cadastro"] = 5, ["senha"] = 3, ["otp-assinatura"] = 3,
-            ["dados-bancarios"] = 5, ["refresh"] = 30, ["reautenticar"] = 5
+            ["dados-bancarios"] = 5, ["refresh"] = 30, ["reautenticar"] = 5, ["busca"] = 30
         };
+
+        /// <summary>A política "busca" só conta requisições com texto livre (q), que geram embedding pago.</summary>
+        private static string UrlQueConta(Rota rota) =>
+            rota.RateLimit == "busca" ? rota.Url() + "?q=designer+de+interfaces" : rota.Url();
 
         private async Task<Sessao?> SessaoParaAsync(Rota rota, string ip) => rota.Guarda switch
         {
@@ -56,11 +60,11 @@ namespace Tratoo.Tests.Seguranca
 
             for (var i = 1; i <= limite; i++)
             {
-                using var r = await _f.Api.EnviarAsync(rota.Http, rota.Url(), sessao, ip: ip);
+                using var r = await _f.Api.EnviarAsync(rota.Http, UrlQueConta(rota), sessao, ip: ip);
                 Assert.True(r.StatusCode != HttpStatusCode.TooManyRequests, $"{chave}: 429 antes do limite, na requisição {i} de {limite}");
             }
 
-            using var excedente = await _f.Api.EnviarAsync(rota.Http, rota.Url(), sessao, ip: ip);
+            using var excedente = await _f.Api.EnviarAsync(rota.Http, UrlQueConta(rota), sessao, ip: ip);
             Assert.Equal(HttpStatusCode.TooManyRequests, excedente.StatusCode);
             Assert.Equal("60", excedente.Headers.GetValues("Retry-After").Single());
             var json = await ClienteApi.LerJsonAsync(excedente);
@@ -246,10 +250,12 @@ namespace Tratoo.Tests.Seguranca
         // Achados
         // ─────────────────────────────────────────────────────────────────────
 
-        [FactAchado("D4")]
+        /// <summary>Achado D4 (corrigido): 40 buscas anônimas = 40 chamadas pagas à OpenAI, sem limite.</summary>
+        [FactApiReal]
         public async Task BuscaPublica_ComIA_TemRateLimit()
         {
             var ip = ApiRealFixture.NovoIp();
+            await AguardarInicioDeJanelaAsync();
             var antes = _f.Externo.ChamadasEmbeddings;
             var status = new List<HttpStatusCode>();
             for (var i = 0; i < 40; i++)
@@ -260,6 +266,40 @@ namespace Tratoo.Tests.Seguranca
             var chamadas = _f.Externo.ChamadasEmbeddings - antes;
             Assert.True(status.Contains(HttpStatusCode.TooManyRequests),
                 $"40 buscas anônimas do mesmo IP, nenhuma 429; {chamadas} chamadas pagas à OpenAI.");
+            Assert.True(chamadas <= 30, $"{chamadas} chamadas à OpenAI a partir de um único IP num minuto (teto: 30).");
+
+            // A isenção "sem q" não pode ser usada para escapar: nome em maiúsculas e parâmetro repetido.
+            var antesContorno = _f.Externo.ChamadasEmbeddings;
+            foreach (var url in new[] { "/api/busca/prestadores?Q=designer", "/api/busca/prestadores?q=&q=designer", "/api/busca/projetos?Q=react" })
+            {
+                using var r = await _f.Api.EnviarAsync(HttpMethod.Get, url, ip: ip);
+                Assert.True(r.StatusCode == HttpStatusCode.TooManyRequests, $"{url} escapou do limite: {(int)r.StatusCode}");
+            }
+            Assert.Equal(antesContorno, _f.Externo.ChamadasEmbeddings);
+        }
+
+        /// <summary>
+        /// Contraparte do D4: o limite vale só para a busca com texto (a que custa). Listar,
+        /// filtrar e paginar sem q continuam livres, mesmo para quem já esgotou a cota.
+        /// </summary>
+        [FactApiReal]
+        public async Task BuscaSemTexto_ContinuaSemLimite_MesmoComACotaDeIaEsgotada()
+        {
+            var ip = ApiRealFixture.NovoIp();
+            await AguardarInicioDeJanelaAsync();
+            for (var i = 0; i < 31; i++)
+                using (await _f.Api.EnviarAsync(HttpMethod.Get, $"/api/busca/projetos?q=react+{i}", ip: ip)) { }
+            using (var esgotada = await _f.Api.EnviarAsync(HttpMethod.Get, "/api/busca/prestadores?q=outra+busca", ip: ip))
+                Assert.Equal(HttpStatusCode.TooManyRequests, esgotada.StatusCode);   // cota única por IP nas buscas com texto
+
+            foreach (var url in new[] { "/api/busca/prestadores", "/api/busca/prestadores?categoria=Design&page=2",
+                         "/api/busca/projetos", "/api/busca/projetos?q=", "/api/busca/projetos?q=+++", "/api/projects" })
+                for (var i = 0; i < 15; i++)
+                    using (var r = await _f.Api.EnviarAsync(HttpMethod.Get, url, ip: ip))
+                        Assert.True(r.StatusCode == HttpStatusCode.OK, $"{url}: {(int)r.StatusCode}");
+
+            using var outroIp = await _f.Api.EnviarAsync(HttpMethod.Get, "/api/busca/prestadores?q=designer");
+            Assert.True(outroIp.StatusCode == HttpStatusCode.OK, $"Outro IP: {(int)outroIp.StatusCode} {await outroIp.Content.ReadAsStringAsync()}");
         }
 
         public static IEnumerable<object[]> RotasSensiveisSemLimite => new[]
