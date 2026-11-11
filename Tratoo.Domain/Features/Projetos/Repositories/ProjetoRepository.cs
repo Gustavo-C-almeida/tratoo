@@ -17,6 +17,18 @@ namespace Tratoo.Domain.Features.Projetos
                 .Include(p => p.Contratante)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
+        public async Task<bool> PrestadorParticipaAsync(int projetoId, int prestadorId)
+        {
+            // Duas consultas em sequência (o DbContext não aceita operações paralelas).
+            if (await _context.PropostasProjeto.AsNoTracking()
+                    .AnyAsync(p => p.ProjetoId == projetoId && p.PrestadorId == prestadorId))
+                return true;
+
+            return await _context.ConvitesProjeto.AsNoTracking()
+                .AnyAsync(c => c.ProjetoId == projetoId && c.PrestadorId == prestadorId
+                            && (c.Status == StatusConvite.Pendente || c.Status == StatusConvite.Aceito));
+        }
+
         public async Task<(List<Projeto> Itens, int Total)> BuscarAsync(FiltrosProjetoDTO filtros)
         {
             var query = _context.Projetos
