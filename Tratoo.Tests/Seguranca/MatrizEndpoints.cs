@@ -128,7 +128,7 @@ namespace Tratoo.Tests.Seguranca
             new("POST", "/api/contratos/{id:guid}/assinar/solicitar-otp", Aut, A, "otp-assinatura"),
             new("POST", "/api/contratos/{id:guid}/assinar", Aut, A),
             new("GET", "/api/contratos/{id:guid}/pdf", Aut, A),
-            new("POST", "/api/contratos/{id:guid}/entrega", Pre, A),            // D3/D6
+            new("POST", "/api/contratos/{id:guid}/entrega", Pre, P),            // D3 corrigido
             new("GET", "/api/contratos/{id:guid}/entrega", Aut, A),
             new("POST", "/api/contratos/{id:guid}/entrega/aprovar", Con, A, ReautenticacaoRecente: true), // D6
             new("POST", "/api/contratos/{id:guid}/entrega/rejeitar", Con, A),   // D6

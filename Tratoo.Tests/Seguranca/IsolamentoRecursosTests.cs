@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using Microsoft.EntityFrameworkCore;
 using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
+using Tratoo.Domain.Models.Financeiro;
 using Xunit;
 
 namespace Tratoo.Tests.Seguranca
@@ -200,7 +201,8 @@ namespace Tratoo.Tests.Seguranca
             Assert.True(vazou.Count == 0, string.Join("\n", vazou));
         }
 
-        [FactAchado("D3")]
+        /// <summary>Achado D3 (corrigido): o upload ia ao bucket privado antes da checagem de dono.</summary>
+        [FactApiReal]
         public async Task Entrega_DeQuemNaoEOPrestador_NaoGravaArquivoNoBucketPrivado()
         {
             var m = _f.Dados;
@@ -224,6 +226,48 @@ namespace Tratoo.Tests.Seguranca
                 gravados.AddRange(novos.Select(o => $"{u.TipoUsuario} B → {o} (resposta {(int)r.StatusCode})"));
             }
             Assert.True(gravados.Count == 0, "Arquivos gravados no bucket privado antes da checagem de dono:\n" + string.Join("\n", gravados));
+        }
+        [FactApiReal]
+        public async Task Entrega_DoPrestadorDoContrato_ContinuaFuncionando_ESegundaEntregaNaoSobeArquivo()
+        {
+            var (_, prestador, cenario) = await _f.NovoParAsync();
+            await using (var db = _f.Db())
+            {
+                db.Pagamentos.Add(new Pagamento
+                {
+                    ContratoServicoId = cenario.ContratoId, ValorBruto = 1200m, Status = StatusPagamento.Retido,
+                    Metodo = MetodoPagamento.Pix, Gateway = "Asaas", GatewayPagamentoId = "pay_ent_" + Guid.NewGuid().ToString("N")[..8],
+                    AsaasClienteId = "cus_seg", StatusGateway = "RECEIVED", PagoEm = DateTime.UtcNow.AddDays(-1),
+                    LiberacaoAutomaticaEm = DateTime.UtcNow.AddDays(30)
+                });
+                await db.SaveChangesAsync();
+            }
+            var s = await _f.LoginAsync(prestador);
+            var prefixo = $"entregas/{cenario.ContratoId}";
+
+            using (var ok = await _f.Api.EnviarAsync(HttpMethod.Post, $"/api/contratos/{cenario.ContratoId}/entrega", s, conteudo: FormularioDeEntrega()))
+                Assert.True(ok.StatusCode == HttpStatusCode.OK, $"Entrega legítima falhou: {(int)ok.StatusCode} {await ok.Content.ReadAsStringAsync()}");
+            Assert.Single(_f.Externo.ObjetosGravados, o => o.Contains(prefixo));
+
+            await using (var db = _f.Db())
+                Assert.Equal(ContratoServicoStatus.AguardandoAprovacaoEntrega,
+                    (await db.ContratosServico.AsNoTracking().SingleAsync(x => x.Id == cenario.ContratoId)).Status);
+
+            // Segunda entrega com a primeira pendente: recusada ANTES do upload.
+            using (var deNovo = await _f.Api.EnviarAsync(HttpMethod.Post, $"/api/contratos/{cenario.ContratoId}/entrega", s, conteudo: FormularioDeEntrega()))
+                Assert.Equal(HttpStatusCode.BadRequest, deNovo.StatusCode);
+            Assert.Single(_f.Externo.ObjetosGravados, o => o.Contains(prefixo));
+        }
+
+        private static MultipartFormDataContent FormularioDeEntrega()
+        {
+            var arquivo = new ByteArrayContent(System.Text.Encoding.ASCII.GetBytes("%PDF-1.4 entrega de teste"));
+            arquivo.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            return new MultipartFormDataContent
+            {
+                { new StringContent("Entrega legítima do prestador do contrato."), "descricaoEntrega" },
+                { arquivo, "files", "entrega.pdf" }
+            };
         }
     }
 }

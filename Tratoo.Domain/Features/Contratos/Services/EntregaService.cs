@@ -50,11 +50,8 @@ namespace Tratoo.Domain.Features.Contratos
             _logger = logger;
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // REGISTRAR ENTREGA (prestador)
-        // ─────────────────────────────────────────────────────────────────────────
-        public async Task<EntregaDetalheDto> RegistrarEntregaAsync(
-            Guid contratoId, int prestadorId, RegistrarEntregaDto dto, List<EntregaAnexoUpload> anexos)
+        /// <summary>Regras para registrar entrega: dono, contrato ativo, pagamento em garantia e nenhuma entrega pendente.</summary>
+        private async Task<ContratoServico> CarregarContratoParaEntregaAsync(Guid contratoId, int prestadorId)
         {
             var contrato = await _contratoRepo.GetByIdAsync(contratoId)
                 ?? throw new NegocioException("Contrato não encontrado.");
@@ -83,6 +80,26 @@ namespace Tratoo.Domain.Features.Contratos
             var pendente = await _entregaRepo.GetPendentePorContratoAsync(contratoId);
             if (pendente != null)
                 throw new NegocioException("Já existe uma entrega aguardando aprovação para este contrato.");
+
+            return contrato;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // REGISTRAR ENTREGA (prestador)
+        // ─────────────────────────────────────────────────────────────────────────
+        /// <summary>
+        /// Confere, SEM gravar nada, se o prestador pode registrar entrega neste contrato. O
+        /// endpoint chama isto ANTES de ler o formulário e de enviar arquivos ao R2: quem não é o
+        /// prestador do contrato não consegue gravar nada no bucket privado (achado D3).
+        /// <see cref="RegistrarEntregaAsync"/> repete a mesma conferência ao gravar.
+        /// </summary>
+        public async Task ValidarRegistroDeEntregaAsync(Guid contratoId, int prestadorId)
+            => await CarregarContratoParaEntregaAsync(contratoId, prestadorId);
+
+        public async Task<EntregaDetalheDto> RegistrarEntregaAsync(
+            Guid contratoId, int prestadorId, RegistrarEntregaDto dto, List<EntregaAnexoUpload> anexos)
+        {
+            var contrato = await CarregarContratoParaEntregaAsync(contratoId, prestadorId);
 
             if (string.IsNullOrWhiteSpace(dto.DescricaoEntrega))
                 throw new NegocioException("A descrição da entrega é obrigatória.");
