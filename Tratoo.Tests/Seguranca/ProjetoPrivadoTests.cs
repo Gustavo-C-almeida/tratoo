@@ -256,5 +256,108 @@ namespace Tratoo.Tests.Seguranca
             Assert.Equal(200, (await RespostaAsync(await _f.LoginAsync(comContrato), HttpMethod.Get, $"/api/projects/{privadoComContrato}")).Status);
             Assert.Equal(200, (await RespostaAsync(await _f.LoginAsync(convidado), HttpMethod.Get, $"/api/projects/{privado}")).Status);
         }
+        // ─────────────────────────────────────────────────────────────────────
+        // 4. Expiração do convite pendente (30 dias ou projeto fora de Aberto)
+        // ─────────────────────────────────────────────────────────────────────
+
+        private async Task<(int ProjetoId, Guid ConviteId)> ConvitePendenteAsync(int dono, int prestador, DateTime criadoEm,
+            StatusProjeto statusProjeto = StatusProjeto.Aberto)
+        {
+            await using var db = _f.Db();
+            var p = NovoProjeto(dono, VisibilidadeProjeto.Privado, "CONVITE-EXPIRA", statusProjeto);
+            db.Projetos.Add(p);
+            await db.SaveChangesAsync();
+            var c = new ConviteProjeto { ProjetoId = p.Id, ContratanteId = dono, PrestadorId = prestador, MensagemInicial = "Convite para o teste de expiração.", Status = StatusConvite.Pendente, CriadoEm = criadoEm };
+            db.ConvitesProjeto.Add(c);
+            await db.SaveChangesAsync();
+            return (p.Id, c.Id);
+        }
+
+        private async Task<string?> StatusNaListaDoPrestadorAsync(Sessao s, Guid conviteId)
+        {
+            using var r = await _f.Api.EnviarAsync(HttpMethod.Get, "/api/me/convites", s);
+            return JsonDocument.Parse(await r.Content.ReadAsStringAsync()).RootElement.EnumerateArray()
+                .Single(c => c.GetProperty("id").GetGuid() == conviteId).GetProperty("status").GetString();
+        }
+
+        /// <summary>Convite pendente há mais de 30 dias: não dá acesso, não aceita, aparece como Expirado.</summary>
+        [FactApiReal]
+        public async Task ConvitePendenteHaMaisDe30Dias_Expira()
+        {
+            var (dono, prestador, _) = await _f.NovoParAsync();
+            var (projeto, convite) = await ConvitePendenteAsync(dono.Id, prestador.Id, DateTime.UtcNow.AddDays(-31));
+            var sp = await _f.LoginAsync(prestador);
+
+            Assert.Equal(404, (await RespostaAsync(sp, HttpMethod.Get, $"/api/projects/{projeto}")).Status);
+            Assert.Equal("Expirado", await StatusNaListaDoPrestadorAsync(sp, convite));
+            var aceitar = await RespostaAsync(sp, HttpMethod.Put, $"/api/convites/{convite}/aceitar");
+            Assert.Equal((400, "{\"mensagem\":\"Este convite expirou.\"}"), aceitar);
+            await using (var db = _f.Db())
+                Assert.Equal(StatusConvite.Expirado, (await db.ConvitesProjeto.AsNoTracking().SingleAsync(c => c.Id == convite)).Status);
+
+            // O dono pode convidar de novo: o convite vencido não conta como "pendente".
+            var sd = await _f.LoginAsync(dono);
+            Assert.Equal(201, (await RespostaAsync(sd, HttpMethod.Post, $"/api/projects/{projeto}/convites",
+                new { prestadorId = prestador.Id, mensagemInicial = "Novo convite depois da expiração." })).Status);
+        }
+
+        /// <summary>Convite pendente recente, mas o projeto já não está Aberto: expira.</summary>
+        [FactApiReal]
+        public async Task ConvitePendente_DeProjetoQueSaiuDeAberto_Expira()
+        {
+            var (dono, prestador, _) = await _f.NovoParAsync();
+            var (projeto, convite) = await ConvitePendenteAsync(dono.Id, prestador.Id, DateTime.UtcNow.AddDays(-1), StatusProjeto.EmAndamento);
+            var sp = await _f.LoginAsync(prestador);
+
+            Assert.Equal(404, (await RespostaAsync(sp, HttpMethod.Get, $"/api/projects/{projeto}")).Status);
+            Assert.Equal("Expirado", await StatusNaListaDoPrestadorAsync(sp, convite));
+            Assert.Equal((400, "{\"mensagem\":\"Este convite expirou.\"}"),
+                await RespostaAsync(sp, HttpMethod.Put, $"/api/convites/{convite}/recusar", new { motivo = "sem interesse" }));
+        }
+
+        /// <summary>Linha de base: convite pendente dentro do prazo, em projeto aberto, segue valendo.</summary>
+        [FactApiReal]
+        public async Task ConvitePendenteDentroDoPrazo_ContinuaValendo()
+        {
+            var (dono, prestador, _) = await _f.NovoParAsync();
+            var (projeto, convite) = await ConvitePendenteAsync(dono.Id, prestador.Id, DateTime.UtcNow.AddDays(-29));
+            var sp = await _f.LoginAsync(prestador);
+
+            Assert.Equal(200, (await RespostaAsync(sp, HttpMethod.Get, $"/api/projects/{projeto}")).Status);
+            Assert.Equal("Pendente", await StatusNaListaDoPrestadorAsync(sp, convite));
+            Assert.Equal(200, (await RespostaAsync(sp, HttpMethod.Put, $"/api/convites/{convite}/aceitar")).Status);
+        }
+        /// <summary>
+        /// O job de expiração (de hora em hora, nas duas réplicas) marca só os pendentes vencidos,
+        /// e duas execuções simultâneas não conflitam (UPDATE condicional único).
+        /// </summary>
+        [FactApiReal]
+        public async Task JobDeExpiracao_MarcaSoOsVencidos_ESuportaReplicasSimultaneas()
+        {
+            var (dono, prestador, _) = await _f.NovoParAsync();
+            var (_, vencidoPrazo) = await ConvitePendenteAsync(dono.Id, prestador.Id, DateTime.UtcNow.AddDays(-31));
+            var (_, vencidoProjeto) = await ConvitePendenteAsync(dono.Id, prestador.Id, DateTime.UtcNow.AddDays(-1), StatusProjeto.Cancelado);
+            var (_, vigente) = await ConvitePendenteAsync(dono.Id, prestador.Id, DateTime.UtcNow.AddDays(-29));
+            var (projetoAceito, aceito) = await ConvitePendenteAsync(dono.Id, prestador.Id, DateTime.UtcNow.AddDays(-90));
+            await using (var db = _f.Db())
+                await db.ConvitesProjeto.Where(c => c.Id == aceito).ExecuteUpdateAsync(c => c.SetProperty(x => x.Status, StatusConvite.Aceito));
+
+            var agora = DateTime.UtcNow;
+            await using var db1 = _f.Db();
+            await using var db2 = _f.Db();
+            var marcados = await Task.WhenAll(
+                new Tratoo.Domain.Features.Mensagens.ConviteProjetoRepository(db1).ExpirarVencidosAsync(agora),
+                new Tratoo.Domain.Features.Mensagens.ConviteProjetoRepository(db2).ExpirarVencidosAsync(agora));
+            Assert.True(marcados.Sum() >= 2, $"marcados: {string.Join("+", marcados)}");
+
+            await using var db3 = _f.Db();
+            var status = await db3.ConvitesProjeto.AsNoTracking()
+                .Where(c => c.Id == vencidoPrazo || c.Id == vencidoProjeto || c.Id == vigente || c.Id == aceito)
+                .ToDictionaryAsync(c => c.Id, c => c.Status);
+            Assert.Equal(StatusConvite.Expirado, status[vencidoPrazo]);
+            Assert.Equal(StatusConvite.Expirado, status[vencidoProjeto]);
+            Assert.Equal(StatusConvite.Pendente, status[vigente]);
+            Assert.Equal(StatusConvite.Aceito, status[aceito]);
+        }
     }
 }

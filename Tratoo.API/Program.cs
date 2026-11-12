@@ -242,6 +242,7 @@ builder.Services.AddScoped<ReindexacaoBackgroundService.IBatchReindexador,
 
 // Background services
 builder.Services.AddHostedService<PropostaExpiracaoService>();
+builder.Services.AddHostedService<ConviteExpiracaoService>();
 builder.Services.AddHostedService<ContratoExpiracaoService>();
 builder.Services.AddHostedService<PagamentoLiberacaoService>();
 builder.Services.AddHostedService<AvaliacaoExpiracaoService>();

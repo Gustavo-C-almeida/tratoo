@@ -14,7 +14,8 @@ namespace Tratoo.Domain.Features.Projetos
         Task<bool> PrestadorTemVinculoAsync(int projetoId, int prestadorId);
 
         /// <summary>
-        /// O prestador tem convite pendente ou aceito no projeto. É o único vínculo que autoriza
+        /// O prestador tem convite vigente no projeto: aceito, ou pendente dentro do prazo e com o
+        /// projeto Aberto (ver ConviteProjeto.PendenteVencido). É o único vínculo que autoriza
         /// CRIAR proposta em projeto privado (proposta anterior não conta: seria o próprio
         /// vínculo que se quer impedir de forjar).
         /// </summary>

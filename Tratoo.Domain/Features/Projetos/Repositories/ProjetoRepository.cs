@@ -28,10 +28,17 @@ namespace Tratoo.Domain.Features.Projetos
                 .AnyAsync(c => c.ProjetoId == projetoId && c.PrestadorId == prestadorId);
         }
 
-        public Task<bool> PrestadorConvidadoAsync(int projetoId, int prestadorId) =>
-            _context.ConvitesProjeto.AsNoTracking()
+        public Task<bool> PrestadorConvidadoAsync(int projetoId, int prestadorId)
+        {
+            // Pendente só vale dentro do prazo e com o projeto Aberto (ConviteProjeto.PendenteVencido).
+            var limite = DateTime.UtcNow - ConviteProjeto.ValidadePendente;
+            return _context.ConvitesProjeto.AsNoTracking()
                 .AnyAsync(c => c.ProjetoId == projetoId && c.PrestadorId == prestadorId
-                            && (c.Status == StatusConvite.Pendente || c.Status == StatusConvite.Aceito));
+                            && (c.Status == StatusConvite.Aceito
+                                || (c.Status == StatusConvite.Pendente
+                                    && c.CriadoEm > limite
+                                    && c.Projeto.Status == StatusProjeto.Aberto)));
+        }
 
         public async Task<(List<Projeto> Itens, int Total)> BuscarAsync(FiltrosProjetoDTO filtros)
         {
