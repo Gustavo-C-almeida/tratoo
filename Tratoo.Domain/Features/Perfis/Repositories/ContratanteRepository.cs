@@ -42,7 +42,9 @@ namespace Tratoo.Domain.Features.Perfis
         public async Task<(int Total, int Concluidos, decimal? ValorMedio)> GetMetricasProjetosAsync(int contratanteId)
         {
             var projetos = await _context.Projetos
-                .Where(p => p.ContratanteId == contratanteId && p.Publicado)
+                // Perfil público: só projeto público entra nas métricas (achado D2).
+                .Where(p => p.ContratanteId == contratanteId && p.Publicado
+                         && p.Visibilidade == VisibilidadeProjeto.Publico)
                 .Select(p => new { p.Status, p.OrcamentoMin, p.OrcamentoMax })
                 .ToListAsync();
 
@@ -74,10 +76,12 @@ namespace Tratoo.Domain.Features.Perfis
         public async Task<(int ProjetosAtivos, int ContratosConcluidoss, double? TempoMedioDecisaoDias)> GetMetricasAdicionaisAsync(int contratanteId)
         {
             var projetosAtivos = await _context.Projetos
-                .CountAsync(p => p.ContratanteId == contratanteId && p.Status == StatusProjeto.Aberto);
+                .CountAsync(p => p.ContratanteId == contratanteId && p.Status == StatusProjeto.Aberto
+                              && p.Visibilidade == VisibilidadeProjeto.Publico);
 
             var contratosConcluidoss = await _context.ContratosServico
-                .CountAsync(c => c.ContratanteId == contratanteId && c.Status == ContratoServicoStatus.Encerrado);
+                .CountAsync(c => c.ContratanteId == contratanteId && c.Status == ContratoServicoStatus.Encerrado
+                              && c.Projeto.Visibilidade == VisibilidadeProjeto.Publico);
 
             // Dias entre publicação do projeto e criação do contrato, para contratos do contratante
             var pares = await _context.ContratosServico
@@ -86,8 +90,8 @@ namespace Tratoo.Domain.Features.Perfis
                 .Join(_context.Projetos,
                       c => c.ProjetoId,
                       p => p.Id,
-                      (c, p) => new { c.CriadoEm, p.PublicadoEm })
-                .Where(x => x.PublicadoEm.HasValue)
+                      (c, p) => new { c.CriadoEm, p.PublicadoEm, p.Visibilidade })
+                .Where(x => x.PublicadoEm.HasValue && x.Visibilidade == VisibilidadeProjeto.Publico)
                 .ToListAsync();
 
             double? tempoMedio = pares.Count > 0
