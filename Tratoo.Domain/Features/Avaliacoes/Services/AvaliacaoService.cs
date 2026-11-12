@@ -256,18 +256,24 @@ namespace Tratoo.Domain.Features.Avaliacoes
                     {
                         Id = a.Id,
                         AvaliadorId = a.AvaliadorId,
-                        ProjetoId = a.ContratoServico?.ProjetoId ?? 0,
+                        // Projeto privado não é identificado na avaliação pública (achado D2):
+                        // a avaliação continua visível, sem ID nem título do projeto.
+                        ProjetoId = ProjetoPublico(a) ? a.ContratoServico!.ProjetoId : 0,
                         Nota = a.Nota!.Value,
                         Comentario = a.Comentario,
                         AvaliadorNome = a.Avaliador?.Nome ?? "Usuário",
                         AvaliadorFotoUrl = ObterFotoUrl(a.Avaliador),
-                        ProjetoTitulo = a.ContratoServico?.Projeto?.Titulo ?? "",
+                        ProjetoTitulo = ProjetoPublico(a) ? a.ContratoServico!.Projeto!.Titulo ?? "" : "",
                         AvaliadorEhContratante = a.AvaliadorId == (a.ContratoServico?.ContratanteId ?? -1),
                         PublicadaEm = a.PublicadaEm ?? a.CriadoEm
                     })
                     .ToList()
             };
         }
+
+        /// <summary>Só projeto público identifica a avaliação pública (projeto ausente conta como privado).</summary>
+        private static bool ProjetoPublico(Avaliacao a) =>
+            a.ContratoServico?.Projeto?.Visibilidade == VisibilidadeProjeto.Publico;
 
         // ─────────────────────────────────────────────────────────────────────────
         // EXPIRAÇÃO AUTOMÁTICA (BackgroundService — roda 1×/dia)
