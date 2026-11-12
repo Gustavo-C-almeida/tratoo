@@ -156,7 +156,8 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var projeto = await projetoService.ObterDetalheAsync(id);
+                // Projeto que o usuário não pode ver responde igual a inexistente (achado D2).
+                var projeto = await projetoService.ObterDetalheVisivelAsync(id, userId.Value, http.User.IsInRole("Admin"));
                 if (projeto == null) return Results.NotFound(new { mensagem = "Projeto não encontrado." });
 
                 int parceiroPrestadorId;
@@ -196,7 +197,8 @@ namespace Tratoo.API.EndPoints
                 var userId = ExtrairUserId(http);
                 if (userId == null) return Results.Unauthorized();
 
-                var projeto = await projetoService.ObterDetalheAsync(id);
+                // Projeto que o usuário não pode ver responde igual a inexistente (achado D2).
+                var projeto = await projetoService.ObterDetalheVisivelAsync(id, userId.Value, http.User.IsInRole("Admin"));
                 if (projeto == null) return Results.NotFound(new { mensagem = "Projeto não encontrado." });
 
                 int parceiroPrestadorId;

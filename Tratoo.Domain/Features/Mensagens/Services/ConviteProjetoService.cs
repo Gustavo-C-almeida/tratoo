@@ -28,14 +28,14 @@ namespace Tratoo.Domain.Features.Mensagens
         // ─────────────────────────────────────────────────────────────────────────
         public async Task<ConviteProjetoDTO> EnviarAsync(CriarConviteProjetoDTO dto)
         {
-            var projeto = await _projetoRepo.GetByIdAsync(dto.ProjetoId)
-                ?? throw new NegocioException("Projeto não encontrado.");
+            // Projeto alheio responde igual a inexistente, e o dono é conferido ANTES do status:
+            // senão a rota revelaria que o projeto existe e em que estado está (achado D2).
+            var projeto = await _projetoRepo.GetByIdAsync(dto.ProjetoId);
+            if (projeto is null || projeto.ContratanteId != dto.ContratanteId)
+                throw new NegocioException("Projeto não encontrado.");
 
             if (projeto.Status != StatusProjeto.Aberto)
                 throw new NegocioException("Este projeto não está aceitando convites no momento.");
-
-            if (projeto.ContratanteId != dto.ContratanteId)
-                throw new NegocioException("Apenas o contratante dono do projeto pode enviar convites.");
 
             if (dto.PrestadorId == dto.ContratanteId)
                 throw new NegocioException("Você não pode convidar a si mesmo.");
@@ -167,11 +167,9 @@ namespace Tratoo.Domain.Features.Mensagens
         // ─────────────────────────────────────────────────────────────────────────
         public async Task<List<ConviteProjetoDTO>> ListarDoProjetoAsync(int projetoId, int contratanteId)
         {
-            var projeto = await _projetoRepo.GetByIdAsync(projetoId)
-                ?? throw new NegocioException("Projeto não encontrado.");
-
-            if (projeto.ContratanteId != contratanteId)
-                throw new NegocioException("Acesso negado.");
+            var projeto = await _projetoRepo.GetByIdAsync(projetoId);
+            if (projeto is null || projeto.ContratanteId != contratanteId)
+                throw new NegocioException("Projeto não encontrado.");   // alheio = inexistente (D2)
 
             var convites = await _repo.GetDoProjetoAsync(projetoId);
             return convites.Select(MapDTO).ToList();
