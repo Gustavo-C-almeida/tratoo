@@ -366,5 +366,34 @@ namespace Tratoo.Tests.Seguranca
             Assert.Equal("Projeto não encontrado.", (await CriarPropostaAsync(await _f.LoginAsync(recusou), privado)).Mensagem);
         }
 
+        /// <summary>
+        /// Revisão do D2: o perfil público (anônimo) do contratante listava os últimos projetos
+        /// com título e descrição, inclusive privados. Só projetos públicos e publicados.
+        /// </summary>
+        [FactApiReal]
+        public async Task PerfilPublicoDoContratante_SoListaProjetosPublicosEPublicados()
+        {
+            var (dono, _, _) = await _f.NovoParAsync();
+            await using (var db = _f.Db())
+            {
+                var pub = NovoProjeto(dono.Id, StatusProjeto.Aberto, VisibilidadeProjeto.Publico);
+                pub.Titulo = "Projeto PERFIL-PUBLICO-OK"; pub.Descricao = "Descrição PERFIL-PUBLICO-OK.";
+                var pri = NovoProjeto(dono.Id, StatusProjeto.Aberto, VisibilidadeProjeto.Privado);
+                pri.Titulo = "Projeto PERFIL-PRIVADO-SIGILOSO"; pri.Descricao = "Descrição PERFIL-PRIVADO-SIGILOSO.";
+                var ras = NovoProjeto(dono.Id, StatusProjeto.Rascunho, VisibilidadeProjeto.Publico);
+                ras.Titulo = "Projeto PERFIL-RASCUNHO-SIGILOSO"; ras.Descricao = "Descrição PERFIL-RASCUNHO-SIGILOSO.";
+                db.Projetos.AddRange(pub, pri, ras);
+                await db.SaveChangesAsync();
+            }
+
+            using var r = await _f.Api.EnviarAsync(HttpMethod.Get, $"/contratantes/{dono.Id}/perfil");
+            var corpo = await r.Content.ReadAsStringAsync();
+
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+            Assert.Contains("PERFIL-PUBLICO-OK", corpo);
+            Assert.DoesNotContain("PERFIL-PRIVADO-SIGILOSO", corpo);
+            Assert.DoesNotContain("PERFIL-RASCUNHO-SIGILOSO", corpo);
+        }
+
     }
 }
