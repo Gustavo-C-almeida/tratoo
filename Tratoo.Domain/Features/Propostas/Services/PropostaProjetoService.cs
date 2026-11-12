@@ -602,7 +602,7 @@ namespace Tratoo.Domain.Features.Propostas
                 ?? throw new NegocioException("Projeto não encontrado.");
 
             if (projeto.ContratanteId != contratanteId)
-                throw new NegocioException("Você não tem permissão para ver as propostas deste projeto.");
+                throw new NegocioException("Projeto não encontrado.");   // alheio = inexistente (D2)
 
             var propostas = await _repo.GetDoProjetoAsync(projetoId);
 

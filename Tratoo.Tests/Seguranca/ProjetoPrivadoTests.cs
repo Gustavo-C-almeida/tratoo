@@ -103,5 +103,92 @@ namespace Tratoo.Tests.Seguranca
             Assert.DoesNotContain("AVAL-PRIVADO-SIGILOSO", corpo);
             Assert.DoesNotContain($"\"projetoId\":{privado},", corpo);
         }
+        // ─────────────────────────────────────────────────────────────────────
+        // 2. Oráculos de existência
+        // ─────────────────────────────────────────────────────────────────────
+
+        private async Task<(int Status, string Corpo)> RespostaAsync(Sessao s, HttpMethod m, string url, object? corpo = null)
+        {
+            using var r = await _f.Api.EnviarAsync(m, url, s, corpo);
+            return ((int)r.StatusCode, await r.Content.ReadAsStringAsync());
+        }
+
+        public static IEnumerable<object[]> RotasDeProjeto => new[]
+        {
+            new object[] { "chat: ler (prestador)", "prestador", "GET", "/api/projects/{id}/mensagens" },
+            new object[] { "chat: ler (contratante)", "contratante", "GET", "/api/projects/{id}/mensagens?prestadorId=1" },
+            new object[] { "chat: escrever (prestador)", "prestador", "POST", "/api/projects/{id}/mensagens" },
+            new object[] { "convite: criar", "contratante", "POST", "/api/projects/{id}/convites" },
+            new object[] { "convite: listar", "contratante", "GET", "/api/projects/{id}/convites" },
+            new object[] { "projeto: publicar", "contratante", "POST", "/api/projects/{id}/publish" },
+            new object[] { "projeto: cancelar", "contratante", "DELETE", "/api/projects/{id}" },
+            new object[] { "projeto: listar propostas", "contratante", "GET", "/api/projects/{id}/proposals" },
+        };
+
+        /// <summary>
+        /// Para quem não tem vínculo, projeto privado (aberto ou rascunho) de outro dono e projeto
+        /// inexistente precisam produzir exatamente a mesma resposta: senão a rota revela que o
+        /// projeto existe (e às vezes o status).
+        /// </summary>
+        [TheoryApiReal]
+        [MemberData(nameof(RotasDeProjeto))]
+        public async Task ProjetoAlheioPrivado_RespondeIgualAInexistente(string nome, string papel, string metodo, string modelo)
+        {
+            var (dono, _, _) = await _f.NovoParAsync();
+            var (outroContratante, outroPrestador, _) = await _f.NovoParAsync();
+            int privado, rascunho;
+            await using (var db = _f.Db())
+            {
+                var p = NovoProjeto(dono.Id, VisibilidadeProjeto.Privado, "ORACULO-PRIVADO");
+                var r = NovoProjeto(dono.Id, VisibilidadeProjeto.Privado, "ORACULO-RASCUNHO", StatusProjeto.Rascunho);
+                db.Projetos.AddRange(p, r);
+                await db.SaveChangesAsync();
+                (privado, rascunho) = (p.Id, r.Id);
+            }
+            var s = await _f.LoginAsync(papel == "prestador" ? outroPrestador : outroContratante);
+            object? corpo = metodo == "POST" && modelo.Contains("mensagens") ? new { texto = "Olá, tenho interesse." }
+                          : metodo == "POST" && modelo.Contains("convites") ? new { prestadorId = outroPrestador.Id, mensagemInicial = "Mensagem de convite com tamanho suficiente." }
+                          : null;
+
+            var inexistente = await RespostaAsync(s, new HttpMethod(metodo), modelo.Replace("{id}", "999999"), corpo);
+            var dePrivado = await RespostaAsync(s, new HttpMethod(metodo), modelo.Replace("{id}", privado.ToString()), corpo);
+            var deRascunho = await RespostaAsync(s, new HttpMethod(metodo), modelo.Replace("{id}", rascunho.ToString()), corpo);
+
+            Assert.True(inexistente.Status is 400 or 404, $"{nome}: inexistente respondeu {inexistente.Status}");
+            Assert.True(inexistente == dePrivado, $"{nome}: inexistente {inexistente} × privado {dePrivado}");
+            Assert.True(inexistente == deRascunho, $"{nome}: inexistente {inexistente} × rascunho {deRascunho}");
+        }
+
+        /// <summary>Contraparte: dono e participantes seguem usando chat, convites e propostas.</summary>
+        [FactApiReal]
+        public async Task DonoEParticipante_ContinuamUsandoAsRotasDoProjeto()
+        {
+            var (dono, prestador, cenario) = await _f.NovoParAsync();   // proposta convertida do prestador no projeto
+            var (_, convidavel, _) = await _f.NovoParAsync();
+            var sd = await _f.LoginAsync(dono);
+            var sp = await _f.LoginAsync(prestador);
+            int rascunho, privado;
+            await using (var db = _f.Db())
+            {
+                var r = NovoProjeto(dono.Id, VisibilidadeProjeto.Publico, "DONO-RASCUNHO", StatusProjeto.Rascunho);
+                var p = NovoProjeto(dono.Id, VisibilidadeProjeto.Privado, "DONO-PRIVADO");
+                db.Projetos.AddRange(r, p);
+                await db.SaveChangesAsync();
+                (rascunho, privado) = (r.Id, p.Id);
+            }
+
+            Assert.Equal(201, (await RespostaAsync(sp, HttpMethod.Post, $"/api/projects/{cenario.ProjetoId}/mensagens", new { texto = "Mensagem do prestador." })).Status);
+            Assert.Equal(200, (await RespostaAsync(sp, HttpMethod.Get, $"/api/projects/{cenario.ProjetoId}/mensagens")).Status);
+            Assert.Equal(200, (await RespostaAsync(sd, HttpMethod.Get, $"/api/projects/{cenario.ProjetoId}/mensagens?prestadorId={prestador.Id}")).Status);
+            Assert.Equal(200, (await RespostaAsync(sd, HttpMethod.Get, $"/api/projects/{cenario.ProjetoId}/proposals")).Status);
+            Assert.Equal(201, (await RespostaAsync(sd, HttpMethod.Post, $"/api/projects/{privado}/convites",
+                new { prestadorId = convidavel.Id, mensagemInicial = "Convite do dono com tamanho suficiente." })).Status);
+            Assert.Equal(200, (await RespostaAsync(sd, HttpMethod.Get, $"/api/projects/{privado}/convites")).Status);
+            // Publicar exige identidade verificada (a massa não tem): o dono passa da checagem de
+            // propriedade e para na etapa seguinte — não recebe "Projeto não encontrado".
+            var publicar = await RespostaAsync(sd, HttpMethod.Post, $"/api/projects/{rascunho}/publish");
+            Assert.Contains("Valide seu CPF/CNPJ", publicar.Corpo);
+            Assert.Equal(200, (await RespostaAsync(sd, HttpMethod.Delete, $"/api/projects/{privado}?motivo=teste")).Status);
+        }
     }
 }

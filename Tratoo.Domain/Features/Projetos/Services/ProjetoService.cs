@@ -86,7 +86,7 @@ namespace Tratoo.Domain.Features.Projetos
         private async Task PublicarInternoAsync(Projeto projeto, int contratanteId)
         {
             if (projeto.ContratanteId != contratanteId)
-                throw new NegocioException("Você não tem permissão para publicar este projeto.");
+                throw new NegocioException("Projeto não encontrado.");   // alheio = inexistente (D2)
 
             if (projeto.Status != StatusProjeto.Rascunho)
                 throw new NegocioException("Somente rascunhos podem ser publicados.");
@@ -175,7 +175,7 @@ namespace Tratoo.Domain.Features.Projetos
                 ?? throw new NegocioException("Projeto não encontrado.");
 
             if (projeto.ContratanteId != contratanteId)
-                throw new NegocioException("Você não tem permissão para cancelar este projeto.");
+                throw new NegocioException("Projeto não encontrado.");   // alheio = inexistente (D2)
 
             if (projeto.Status != StatusProjeto.Rascunho && projeto.Status != StatusProjeto.Aberto)
                 throw new NegocioException("Projeto não pode ser cancelado neste status.");
