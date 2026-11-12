@@ -96,6 +96,17 @@ namespace Tratoo.Domain.Features.Mensagens
             if (convite.PrestadorId != prestadorId)
                 throw new NegocioException("Você não tem permissão para responder este convite.");
 
+            if (convite.Status == StatusConvite.Expirado)
+                throw new NegocioException("Este convite expirou.");
+
+            if (convite.PendenteVencido(DateTime.UtcNow))
+            {
+                // Vencido mas ainda não marcado pelo job: marca agora e recusa a resposta.
+                convite.Status = StatusConvite.Expirado;
+                await _repo.SaveChangesAsync();
+                throw new NegocioException("Este convite expirou.");
+            }
+
             if (convite.Status != StatusConvite.Pendente)
                 throw new NegocioException("Este convite já foi respondido.");
 
@@ -128,6 +139,17 @@ namespace Tratoo.Domain.Features.Mensagens
 
             if (convite.PrestadorId != prestadorId)
                 throw new NegocioException("Você não tem permissão para responder este convite.");
+
+            if (convite.Status == StatusConvite.Expirado)
+                throw new NegocioException("Este convite expirou.");
+
+            if (convite.PendenteVencido(DateTime.UtcNow))
+            {
+                // Vencido mas ainda não marcado pelo job: marca agora e recusa a resposta.
+                convite.Status = StatusConvite.Expirado;
+                await _repo.SaveChangesAsync();
+                throw new NegocioException("Este convite expirou.");
+            }
 
             if (convite.Status != StatusConvite.Pendente)
                 throw new NegocioException("Este convite já foi respondido.");
@@ -178,6 +200,9 @@ namespace Tratoo.Domain.Features.Mensagens
         // ─────────────────────────────────────────────────────────────────────────
         // MAPPING
         // ─────────────────────────────────────────────────────────────────────────
+        /// <summary>Chamado pelo ConviteExpiracaoService (de hora em hora).</summary>
+        public Task<int> ExpirarConvitesAsync() => _repo.ExpirarVencidosAsync(DateTime.UtcNow);
+
         private static ConviteProjetoDTO MapDTO(ConviteProjeto c) => new()
         {
             Id = c.Id,
@@ -193,7 +218,8 @@ namespace Tratoo.Domain.Features.Mensagens
             MensagemInicial = c.MensagemInicial,
             OrcamentoSugerido = c.OrcamentoSugerido,
             PrazoDesejado = c.PrazoDesejado,
-            Status = c.Status,
+            // Vencido e ainda não marcado pelo job já aparece como Expirado.
+            Status = c.PendenteVencido(DateTime.UtcNow) ? StatusConvite.Expirado : c.Status,
             CriadoEm = c.CriadoEm,
             RespondidoEm = c.RespondidoEm,
             MotivoRecusa = c.MotivoRecusa

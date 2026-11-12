@@ -26,5 +26,17 @@ namespace Tratoo.Domain.Models
         public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
         public DateTime? RespondidoEm { get; set; }
         public string? MotivoRecusa { get; set; }
+
+        /// <summary>
+        /// Convite pendente vence 30 dias após o envio, ou quando o projeto deixa de estar Aberto
+        /// (contratado, cancelado, encerrado). Convite aceito não expira. Usa CriadoEm, que já
+        /// existe: nenhuma coluna nova.
+        /// </summary>
+        public static readonly TimeSpan ValidadePendente = TimeSpan.FromDays(30);
+
+        /// <summary>Pendente e vencido (pelo prazo ou pelo projeto). Exige Projeto carregado para a regra do projeto.</summary>
+        public bool PendenteVencido(DateTime agoraUtc) =>
+            Status == StatusConvite.Pendente &&
+            (CriadoEm <= agoraUtc - ValidadePendente || (Projeto is not null && Projeto.Status != StatusProjeto.Aberto));
     }
 }

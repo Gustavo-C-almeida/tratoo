@@ -20,11 +20,26 @@ namespace Tratoo.Domain.Features.Mensagens
                 .FirstOrDefaultAsync(c => c.Id == id);
 
         public async Task<ConviteProjeto?> GetAtivoByPrestadorEProjetoAsync(int prestadorId, int projetoId)
-            => await _context.ConvitesProjeto
+        {
+            // Pendente vencido não bloqueia um convite novo, mesmo antes de o job marcá-lo.
+            var limite = DateTime.UtcNow - ConviteProjeto.ValidadePendente;
+            return await _context.ConvitesProjeto
                 .FirstOrDefaultAsync(c =>
                     c.PrestadorId == prestadorId &&
                     c.ProjetoId == projetoId &&
-                    c.Status == StatusConvite.Pendente);
+                    c.Status == StatusConvite.Pendente &&
+                    c.CriadoEm > limite);
+        }
+
+        public Task<int> ExpirarVencidosAsync(DateTime agoraUtc)
+        {
+            // UPDATE condicional único: seguro com várias réplicas rodando o job ao mesmo tempo.
+            var limite = agoraUtc - ConviteProjeto.ValidadePendente;
+            return _context.ConvitesProjeto
+                .Where(c => c.Status == StatusConvite.Pendente
+                         && (c.CriadoEm <= limite || c.Projeto.Status != StatusProjeto.Aberto))
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, StatusConvite.Expirado));
+        }
 
         public async Task<List<ConviteProjeto>> GetDoPrestadorAsync(int prestadorId)
             => await _context.ConvitesProjeto
