@@ -60,7 +60,12 @@ namespace Tratoo.Domain.Features.Perfis
         {
             return await _context.Projetos
                 .AsNoTracking()
-                .Where(p => p.ContratanteId == contratanteId && p.Publicado)
+                // Rota pública (perfil do contratante, anônimo): só projeto público e publicado.
+                // Privado e rascunho expunham título e descrição (revisão do achado D2).
+                .Where(p => p.ContratanteId == contratanteId
+                         && p.Publicado
+                         && p.Status != StatusProjeto.Rascunho
+                         && p.Visibilidade == VisibilidadeProjeto.Publico)
                 .OrderByDescending(p => p.PublicadoEm ?? p.CriadoEm)
                 .Take(quantidade)
                 .ToListAsync();
