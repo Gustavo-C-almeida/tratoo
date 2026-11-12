@@ -11,6 +11,13 @@ namespace Tratoo.Domain.Features.Projetos
         /// Decide quem, além do dono, enxerga um projeto privado.
         /// </summary>
         Task<bool> PrestadorParticipaAsync(int projetoId, int prestadorId);
+
+        /// <summary>
+        /// O prestador tem convite pendente ou aceito no projeto. É o único vínculo que autoriza
+        /// CRIAR proposta em projeto privado (proposta anterior não conta: seria o próprio
+        /// vínculo que se quer impedir de forjar).
+        /// </summary>
+        Task<bool> PrestadorConvidadoAsync(int projetoId, int prestadorId);
         Task<(List<Projeto> Itens, int Total)> BuscarAsync(FiltrosProjetoDTO filtros);
         Task<List<Projeto>> GetDoContratanteAsync(int contratanteId);
         Task AddAsync(Projeto projeto);

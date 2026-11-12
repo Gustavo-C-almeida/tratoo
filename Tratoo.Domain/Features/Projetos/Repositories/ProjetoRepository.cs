@@ -24,10 +24,13 @@ namespace Tratoo.Domain.Features.Projetos
                     .AnyAsync(p => p.ProjetoId == projetoId && p.PrestadorId == prestadorId))
                 return true;
 
-            return await _context.ConvitesProjeto.AsNoTracking()
+            return await PrestadorConvidadoAsync(projetoId, prestadorId);
+        }
+
+        public Task<bool> PrestadorConvidadoAsync(int projetoId, int prestadorId) =>
+            _context.ConvitesProjeto.AsNoTracking()
                 .AnyAsync(c => c.ProjetoId == projetoId && c.PrestadorId == prestadorId
                             && (c.Status == StatusConvite.Pendente || c.Status == StatusConvite.Aceito));
-        }
 
         public async Task<(List<Projeto> Itens, int Total)> BuscarAsync(FiltrosProjetoDTO filtros)
         {

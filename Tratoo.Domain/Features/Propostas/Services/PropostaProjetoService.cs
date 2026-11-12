@@ -37,8 +37,12 @@ namespace Tratoo.Domain.Features.Propostas
         // ─────────────────────────────────────────────────────────────────────────
         public async Task<PropostaDetalheDTO> CriarRascunhoAsync(CriarRascunhoPropostaDTO dto)
         {
-            var projeto = await _projetoRepo.GetByIdAsync(dto.ProjetoId)
-                ?? throw new NegocioException("Projeto não encontrado.");
+            // Inexistente, rascunho e privado sem convite recebem a MESMA resposta: a criação de
+            // proposta não pode revelar que o projeto existe nem servir para forjar o vínculo
+            // que dá acesso ao detalhe de um projeto privado (revisão do achado D2).
+            var projeto = await _projetoRepo.GetByIdAsync(dto.ProjetoId);
+            if (projeto is null || !await PrestadorPodeProporAsync(projeto, dto.PrestadorId))
+                throw new NegocioException("Projeto não encontrado.");
 
             if (projeto.Status != StatusProjeto.Aberto)
                 throw new NegocioException("Este projeto não está aceitando propostas no momento.");
@@ -86,6 +90,22 @@ namespace Tratoo.Domain.Features.Propostas
             var prestador = await _prestadorRepo.GetByIdAsync(dto.PrestadorId);
             var nomesUsuarios = await ResolverNomesVersoes(proposta);
             return MapDetalhe(proposta, prestador?.Nome ?? string.Empty, prestador?.FotoUrl, prestador?.TituloProfissional, nomesUsuarios);
+        }
+
+        /// <summary>
+        /// Quem pode propor: em projeto público e já publicado, qualquer prestador; em privado,
+        /// só o convidado (convite pendente ou aceito) ou o prestador selecionado; em rascunho,
+        /// ninguém. Proposta anterior não conta como vínculo.
+        /// </summary>
+        private async Task<bool> PrestadorPodeProporAsync(Projeto projeto, int prestadorId)
+        {
+            if (projeto.Status == StatusProjeto.Rascunho)
+                return false;
+            if (projeto.Visibilidade == VisibilidadeProjeto.Publico)
+                return true;
+            if (projeto.FreelancerSelecionadoId == prestadorId)
+                return true;
+            return await _projetoRepo.PrestadorConvidadoAsync(projeto.Id, prestadorId);
         }
 
         // ─────────────────────────────────────────────────────────────────────────

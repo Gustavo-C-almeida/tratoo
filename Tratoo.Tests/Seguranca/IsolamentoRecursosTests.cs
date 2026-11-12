@@ -285,6 +285,89 @@ namespace Tratoo.Tests.Seguranca
             }
             Assert.True(gravados.Count == 0, "Arquivos gravados no bucket privado antes da checagem de dono:\n" + string.Join("\n", gravados));
         }
+        // ─────────────────────────────────────────────────────────────────────
+        // D2 (revisão): proposta como porta de entrada e perfil público do dono
+        // ─────────────────────────────────────────────────────────────────────
+
+        private static object PropostaValida() => new
+        {
+            validoAte = DateTime.UtcNow.AddDays(10),
+            objetivo = "Objetivo da proposta criada pelo teste de visibilidade de projeto.",
+            escopo = "Escopo detalhado o suficiente para passar na validação mínima de cinquenta caracteres.",
+            revisoesInclusas = 1, prazoTotal = DateTime.UtcNow.AddDays(20), valorTotal = 700m, formaPagamento = "PIX"
+        };
+
+        private async Task<(HttpStatusCode Status, string Mensagem)> CriarPropostaAsync(Sessao s, int projetoId)
+        {
+            using var r = await _f.Api.EnviarAsync(HttpMethod.Post, $"/api/propostas?projetoId={projetoId}", s, PropostaValida());
+            var json = await ClienteApi.LerJsonAsync(r);
+            var msg = json.ValueKind == System.Text.Json.JsonValueKind.Object && json.TryGetProperty("mensagem", out var m) ? m.GetString() ?? "" : "";
+            return (r.StatusCode, msg);
+        }
+
+        /// <summary>
+        /// Revisão do D2: criar proposta num projeto privado (sem convite) dava 201 com o título
+        /// e, pela regra "proposta dá acesso", abria o detalhe. Inexistente, rascunho e privado
+        /// sem convite precisam receber a MESMA resposta.
+        /// </summary>
+        [FactApiReal]
+        public async Task PropostaEmProjetoPrivadoOuRascunho_SemConvite_NaoECriada_NemAbreODetalhe()
+        {
+            var (dono, _, _) = await _f.NovoParAsync();
+            var (_, intruso, _) = await _f.NovoParAsync();
+            int privado, rascunho;
+            await using (var db = _f.Db())
+            {
+                var p = NovoProjeto(dono.Id, StatusProjeto.Aberto, VisibilidadeProjeto.Privado);
+                var r = NovoProjeto(dono.Id, StatusProjeto.Rascunho, VisibilidadeProjeto.Publico);
+                db.Projetos.AddRange(p, r);
+                await db.SaveChangesAsync();
+                (privado, rascunho) = (p.Id, r.Id);
+            }
+            var s = await _f.LoginAsync(intruso);
+
+            var inexistente = await CriarPropostaAsync(s, 999_999);
+            var emPrivado = await CriarPropostaAsync(s, privado);
+            var emRascunho = await CriarPropostaAsync(s, rascunho);
+
+            Assert.Equal(HttpStatusCode.BadRequest, inexistente.Status);
+            Assert.Equal("Projeto não encontrado.", inexistente.Mensagem);
+            Assert.Equal(inexistente, emPrivado);    // mesma resposta: não revela que o projeto existe
+            Assert.Equal(inexistente, emRascunho);
+
+            await using (var db = _f.Db())
+                Assert.False(await db.PropostasProjeto.AnyAsync(x => x.PrestadorId == intruso.Id && (x.ProjetoId == privado || x.ProjetoId == rascunho)));
+            using var detalhe = await _f.Api.EnviarAsync(HttpMethod.Get, $"/api/projects/{privado}", s);
+            Assert.Equal(HttpStatusCode.NotFound, detalhe.StatusCode);
+        }
+
+        /// <summary>Contraparte: quem pode propor continua propondo.</summary>
+        [FactApiReal]
+        public async Task PropostaLegitima_EmProjetoPublico_OuPrivadoComConvite_ContinuaFuncionando()
+        {
+            var (dono, _, _) = await _f.NovoParAsync();
+            var (_, convidado, _) = await _f.NovoParAsync();
+            var (_, recusou, _) = await _f.NovoParAsync();
+            var (_, qualquer, _) = await _f.NovoParAsync();
+            int publico, privado;
+            await using (var db = _f.Db())
+            {
+                var pub = NovoProjeto(dono.Id, StatusProjeto.Aberto, VisibilidadeProjeto.Publico);
+                var pri = NovoProjeto(dono.Id, StatusProjeto.Aberto, VisibilidadeProjeto.Privado);
+                db.Projetos.AddRange(pub, pri);
+                await db.SaveChangesAsync();
+                db.ConvitesProjeto.AddRange(
+                    new ConviteProjeto { ProjetoId = pri.Id, ContratanteId = dono.Id, PrestadorId = convidado.Id, MensagemInicial = "convite", Status = StatusConvite.Aceito },
+                    new ConviteProjeto { ProjetoId = pri.Id, ContratanteId = dono.Id, PrestadorId = recusou.Id, MensagemInicial = "convite", Status = StatusConvite.Recusado });
+                await db.SaveChangesAsync();
+                (publico, privado) = (pub.Id, pri.Id);
+            }
+
+            Assert.Equal(HttpStatusCode.Created, (await CriarPropostaAsync(await _f.LoginAsync(qualquer), publico)).Status);
+            Assert.Equal(HttpStatusCode.Created, (await CriarPropostaAsync(await _f.LoginAsync(convidado), privado)).Status);
+            Assert.Equal("Projeto não encontrado.", (await CriarPropostaAsync(await _f.LoginAsync(recusou), privado)).Mensagem);
+        }
+
         [FactApiReal]
         public async Task Entrega_DoPrestadorDoContrato_ContinuaFuncionando_ESegundaEntregaNaoSobeArquivo()
         {
