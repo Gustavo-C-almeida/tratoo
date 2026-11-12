@@ -359,5 +359,40 @@ namespace Tratoo.Tests.Seguranca
             Assert.Equal(StatusConvite.Pendente, status[vigente]);
             Assert.Equal(StatusConvite.Aceito, status[aceito]);
         }
+        // ─────────────────────────────────────────────────────────────────────
+        // 5. Métricas do perfil público do contratante
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// As métricas do perfil público (anônimo) contavam projetos e contratos de projetos
+        /// privados. Só projeto público entra em contagens, valor médio e tempo de decisão.
+        /// Massa: projeto do cenário (público, EmAndamento, 1200/1200, contrato Ativo) +
+        /// público Aberto (1000/3000) + público Concluído com contrato Encerrado (1000/3000) +
+        /// privado Aberto + privado Concluído com contrato Encerrado.
+        /// </summary>
+        [FactApiReal]
+        public async Task MetricasDoPerfilPublico_NaoContamProjetosPrivados()
+        {
+            var (dono, prestador, _) = await _f.NovoParAsync();
+            await ProjetoComContratoAsync(dono.Id, prestador.Id, VisibilidadeProjeto.Publico, "METRICA-PUB-CONCLUIDO");
+            await ProjetoComContratoAsync(dono.Id, prestador.Id, VisibilidadeProjeto.Privado, "METRICA-PRIV-CONCLUIDO");
+            await using (var db = _f.Db())
+            {
+                db.Projetos.AddRange(
+                    NovoProjeto(dono.Id, VisibilidadeProjeto.Publico, "METRICA-PUB-ABERTO"),
+                    NovoProjeto(dono.Id, VisibilidadeProjeto.Privado, "METRICA-PRIV-ABERTO"));
+                await db.SaveChangesAsync();
+            }
+
+            using var r = await _f.Api.EnviarAsync(HttpMethod.Get, $"/contratantes/{dono.Id}/perfil");
+            var j = JsonDocument.Parse(await r.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+
+            Assert.Equal(3, j.GetProperty("totalProjetosPublicados").GetInt32());
+            Assert.Equal(1, j.GetProperty("totalProjetosConcluidos").GetInt32());
+            Assert.Equal(1, j.GetProperty("totalProjetosAtivos").GetInt32());
+            Assert.Equal(1, j.GetProperty("totalContratosConcluidoss").GetInt32());
+            Assert.Equal(1733.33m, Math.Round(j.GetProperty("valorMedioProjetos").GetDecimal(), 2));
+        }
     }
 }
