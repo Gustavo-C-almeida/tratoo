@@ -10,14 +10,47 @@ Testes: [`Tratoo.Tests/Seguranca/`](../../Tratoo.Tests/Seguranca/).
 
 | # | Status | Commit | Teste de regressão (vermelho → verde) |
 |---|---|---|---|
-| D2 | ✅ Corrigido | `62986b1` | `ProjetoRascunhoOuPrivado_NaoApareceParaTerceiros` + `…_ContinuaVisivelParaQuemParticipa` |
+| D2 | ✅ Corrigido | `62986b1`, `59cb6e1`, `883943f` | Detalhe: `ProjetoRascunhoOuPrivado_NaoApareceParaTerceiros` + `…_ContinuaVisivelParaQuemParticipa`. Revisão: `PropostaEmProjetoPrivadoOuRascunho_SemConvite_NaoECriada_NemAbreODetalhe` + `PropostaLegitima_…_ContinuaFuncionando` + `PerfilPublicoDoContratante_SoListaProjetosPublicosEPublicados` |
 | D3 | ✅ Corrigido | `db24107` | `Entrega_DeQuemNaoEOPrestador_NaoGravaArquivoNoBucketPrivado` + `Entrega_DoPrestadorDoContrato_ContinuaFuncionando_…` + matriz (rota com policy Prestador) |
 | D4 | ✅ Corrigido | `af9b3bb` | `BuscaPublica_ComIA_TemRateLimit` + `BuscaSemTexto_ContinuaSemLimite_…` + matriz (política `busca`) |
 | D1 | Decidido, a implementar | — | `/health/*` anônimo só com o status; `/api/admin/health` com os detalhes (Admin + reautenticação). |
 | D5, D6, D7, D9, D8, D10, D11, D12 | Em aberto | — | Testes de achado continuam ignorados por padrão. |
 
-Com `TRATOO_REPRODUZIR_ACHADOS=1`, a suíte de segurança agora dá 467 testes: 448 aprovados e 19 reprovados. Os
-19 são os achados ainda abertos: D1, D5 (8 rotas), D6 (7 rotas), D7, D11 e D12.
+Com `TRATOO_REPRODUZIR_ACHADOS=1`, a suíte de segurança agora dá 470 testes: 451 aprovados e 19 reprovados. Os
+19 são os achados ainda abertos: D1, D5 (8 rotas), D6 (7 rotas), D7, D11 e D12. A suíte completa, na
+configuração da CI (Release, `TRATOO_EXIGIR_DOCKER=1`), dá 967 aprovados, 0 falhas e 6 ignorados (os achados).
+
+### Revisão técnica das correções (2026-11-12)
+
+Uma revisão independente das correções, com experimentos contra a API real (duas réplicas), encontrou:
+
+**D2 — dois contornos, corrigidos antes do PR**
+- **Proposta como porta de entrada** (`59cb6e1`). `CriarRascunhoAsync` só conferia `Status == Aberto`. Um prestador
+  sem vínculo criava proposta num projeto privado (201, com `projetoTitulo` e `contratanteId` na resposta), e a regra
+  "proposta dá acesso" abria o detalhe.
+  - Agora, em projeto privado, só propõe o convidado (convite pendente ou aceito) ou o prestador selecionado.
+  - Em rascunho, ninguém propõe.
+  - Inexistente, rascunho e sem acesso recebem a mesma resposta: "Projeto não encontrado.".
+- **Perfil público do contratante** (`883943f`). `GET /contratantes/{id}/perfil`, anônimo, listava título e descrição
+  de projetos privados. Agora lista só projetos públicos e publicados.
+
+**Ainda abertos, aguardando decisão** (detalhe na revisão):
+- **D2:**
+  - oráculos de existência: o chat responde 403 × 404, e o convite confere o status antes do dono;
+  - título de projeto privado nas avaliações públicas;
+  - métricas do perfil público contando projetos privados (só números);
+  - convite pendente que nunca expira;
+  - quais status de proposta dão acesso.
+- **D3:**
+  - entregas simultâneas do mesmo prestador geram entregas pendentes duplicadas e **travam o contrato** (confirmado). Correção recomendada: `UPDATE` condicional no status do contrato, sem migration, e opcionalmente índice único parcial (migration manual);
+  - a limpeza do R2 pode apagar anexos se a conexão cair depois do commit;
+  - o limite efetivo de upload é ~30 MB por requisição.
+- **D4:**
+  - IPv6 escapa da cota (partição pelo endereço completo, e não por /64; afeta todas as políticas);
+  - `q` sem limite de tamanho;
+  - reindexação síncrona e sem limite nas escritas de perfil (custo na OpenAI, parte do D5);
+  - sem cache de embeddings;
+  - 429 aparece como erro genérico no frontend.
 
 O restante deste relatório descreve o estado **auditado** (`0c253ae`), antes das correções.
 
