@@ -277,6 +277,12 @@ namespace Tratoo.Domain.Features.Propostas
 
             await ValidarChavePixCadastradaAsync(prestadorId);
 
+            // Rascunho criado pelo contorno antigo do D2 (projeto privado sem convite) não chega
+            // ao dono: enviar exige o mesmo direito de propor que a criação.
+            var projeto = await _projetoRepo.GetByIdAsync(proposta.ProjetoId);
+            if (projeto is null || !await PrestadorPodeProporAsync(projeto, prestadorId))
+                throw new NegocioException("Projeto não encontrado.");
+
             if (proposta.Status != StatusPropostaProjeto.Draft)
                 throw new NegocioException("Apenas rascunhos podem ser enviados.");
 

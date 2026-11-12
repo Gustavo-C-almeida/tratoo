@@ -7,10 +7,11 @@ namespace Tratoo.Domain.Features.Projetos
         Task<Projeto?> GetByIdAsync(int id);
 
         /// <summary>
-        /// O prestador tem vínculo com o projeto: proposta (qualquer status) ou convite pendente/aceito.
-        /// Decide quem, além do dono, enxerga um projeto privado.
+        /// O prestador tem vínculo com o projeto PRIVADO: convite pendente/aceito ou contrato no
+        /// projeto. Proposta sozinha não conta (toda proposta legítima em privado tem convite).
+        /// Decide quem, além do dono, do Admin e do selecionado, enxerga um projeto privado.
         /// </summary>
-        Task<bool> PrestadorParticipaAsync(int projetoId, int prestadorId);
+        Task<bool> PrestadorTemVinculoAsync(int projetoId, int prestadorId);
 
         /// <summary>
         /// O prestador tem convite pendente ou aceito no projeto. É o único vínculo que autoriza

@@ -237,7 +237,8 @@ namespace Tratoo.Tests.Seguranca
             Assert.Equal(HttpStatusCode.OK, await Ver(rascunho, dono));
             Assert.Equal(HttpStatusCode.OK, await Ver(privado, dono));
             Assert.Equal(HttpStatusCode.OK, await Ver(privado, convidado));
-            Assert.Equal(HttpStatusCode.OK, await Ver(privado, comProposta));
+            // Proposta sem convite não é vínculo com projeto privado (regra aprovada na revisão do D2).
+            Assert.Equal(HttpStatusCode.NotFound, await Ver(privado, comProposta));
             Assert.Equal(HttpStatusCode.OK, await Ver(privado, m.Admin));
             Assert.Equal(HttpStatusCode.NotFound, await Ver(privado, recusou));     // convite recusado não dá acesso
             Assert.Equal(HttpStatusCode.NotFound, await Ver(rascunho, convidado));  // rascunho: só o dono
