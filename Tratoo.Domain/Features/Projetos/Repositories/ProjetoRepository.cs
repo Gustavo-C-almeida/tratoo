@@ -17,14 +17,15 @@ namespace Tratoo.Domain.Features.Projetos
                 .Include(p => p.Contratante)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-        public async Task<bool> PrestadorParticipaAsync(int projetoId, int prestadorId)
+        public async Task<bool> PrestadorTemVinculoAsync(int projetoId, int prestadorId)
         {
             // Duas consultas em sequência (o DbContext não aceita operações paralelas).
-            if (await _context.PropostasProjeto.AsNoTracking()
-                    .AnyAsync(p => p.ProjetoId == projetoId && p.PrestadorId == prestadorId))
+            if (await PrestadorConvidadoAsync(projetoId, prestadorId))
                 return true;
 
-            return await PrestadorConvidadoAsync(projetoId, prestadorId);
+            // Contrato (qualquer status): cobre o contrato cancelado, que limpa a seleção.
+            return await _context.ContratosServico.AsNoTracking()
+                .AnyAsync(c => c.ProjetoId == projetoId && c.PrestadorId == prestadorId);
         }
 
         public Task<bool> PrestadorConvidadoAsync(int projetoId, int prestadorId) =>

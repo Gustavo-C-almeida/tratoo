@@ -135,10 +135,10 @@ namespace Tratoo.Domain.Features.Projetos
         /// sem revelar se existe) quando quem pede não pode ver o projeto:
         ///  • publicado e público → qualquer pessoa, inclusive anônima;
         ///  • rascunho → só o dono (e Admin);
-        ///  • privado → dono, Admin, prestador selecionado e prestador com proposta ou convite
-        ///    pendente/aceito.
-        /// <see cref="ObterDetalheAsync"/> continua sem filtro para uso interno (chat), que faz a
-        /// própria checagem de participação.
+        ///  • privado → dono, Admin, prestador selecionado e prestador com convite pendente/aceito
+        ///    ou contrato no projeto. Proposta sozinha não dá acesso.
+        /// Também decide o acesso ao chat do projeto. <see cref="ObterDetalheAsync"/> continua sem
+        /// filtro, só para uso interno.
         /// </summary>
         public async Task<ProjetoDetalheDTO?> ObterDetalheVisivelAsync(int id, int? usuarioId, bool ehAdmin)
         {
@@ -160,7 +160,7 @@ namespace Tratoo.Domain.Features.Projetos
                 return false;
             if (p.FreelancerSelecionadoId == usuarioId)
                 return true;
-            return await _repo.PrestadorParticipaAsync(p.Id, usuarioId.Value);
+            return await _repo.PrestadorTemVinculoAsync(p.Id, usuarioId.Value);
         }
 
         public async Task<List<ProjetoResumoDTO>> GetDoContratanteAsync(int contratanteId)

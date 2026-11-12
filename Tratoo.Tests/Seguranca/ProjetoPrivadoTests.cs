@@ -190,5 +190,71 @@ namespace Tratoo.Tests.Seguranca
             Assert.Contains("Valide seu CPF/CNPJ", publicar.Corpo);
             Assert.Equal(200, (await RespostaAsync(sd, HttpMethod.Delete, $"/api/projects/{privado}?motivo=teste")).Status);
         }
+        // ─────────────────────────────────────────────────────────────────────
+        // 3. Proposta não é vínculo com projeto privado
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Regra aprovada: em projeto privado, proposta sozinha (qualquer status) não dá acesso.
+        /// Toda proposta legítima em privado convive com um convite; as que não têm só podem ter
+        /// vindo do contorno antigo do D2 — e não podem abrir o detalhe, o chat nem ser enviadas.
+        /// </summary>
+        [FactApiReal]
+        public async Task PropostaSemConvite_EmProjetoPrivado_NaoDaAcessoNemPodeSerEnviada()
+        {
+            var (dono, _, _) = await _f.NovoParAsync();
+            var (_, comEnviada, _) = await _f.NovoParAsync();
+            var (_, comRascunho, _) = await _f.NovoParAsync();
+            int privado; Guid rascunho;
+            await using (var db = _f.Db())
+            {
+                var p = NovoProjeto(dono.Id, VisibilidadeProjeto.Privado, "PROPOSTA-SEM-CONVITE");
+                db.Projetos.Add(p);
+                await db.SaveChangesAsync();
+                privado = p.Id;
+                var enviada = new PropostaProjeto { ProjetoId = p.Id, PrestadorId = comEnviada.Id, Status = StatusPropostaProjeto.Submitted, VersaoAtual = 1, ValidoAte = DateTime.UtcNow.AddDays(5) };
+                var draft = new PropostaProjeto { ProjetoId = p.Id, PrestadorId = comRascunho.Id, Status = StatusPropostaProjeto.Draft, VersaoAtual = 1, ValidoAte = DateTime.UtcNow.AddDays(5) };
+                db.PropostasProjeto.AddRange(enviada, draft);
+                await db.SaveChangesAsync();
+                rascunho = draft.Id;
+            }
+
+            var se = await _f.LoginAsync(comEnviada);
+            var sr = await _f.LoginAsync(comRascunho);
+            Assert.Equal(404, (await RespostaAsync(se, HttpMethod.Get, $"/api/projects/{privado}")).Status);
+            Assert.Equal(404, (await RespostaAsync(se, HttpMethod.Get, $"/api/projects/{privado}/mensagens")).Status);
+            Assert.Equal(404, (await RespostaAsync(sr, HttpMethod.Get, $"/api/projects/{privado}")).Status);
+
+            var enviar = await RespostaAsync(sr, HttpMethod.Post, $"/api/propostas/{rascunho}/enviar");
+            Assert.Equal((400, "{\"mensagem\":\"Projeto não encontrado.\"}"), enviar);
+            await using var db2 = _f.Db();
+            Assert.Equal(StatusPropostaProjeto.Draft, (await db2.PropostasProjeto.AsNoTracking().SingleAsync(x => x.Id == rascunho)).Status);
+        }
+
+        /// <summary>Contraparte: convite aceito, seleção e contrato continuam dando acesso.</summary>
+        [FactApiReal]
+        public async Task ConviteAceitoSelecaoOuContrato_ContinuamDandoAcessoAoProjetoPrivado()
+        {
+            var (dono, comContrato, _) = await _f.NovoParAsync();
+            var (_, convidado, _) = await _f.NovoParAsync();
+            var (privadoComContrato, _) = await ProjetoComContratoAsync(dono.Id, comContrato.Id, VisibilidadeProjeto.Privado, "VINCULO-CONTRATO",
+                ContratoServicoStatus.Cancelado);
+            int privado;
+            await using (var db = _f.Db())
+            {
+                // Contrato cancelado limpa a seleção (ContratoServicoService): só o contrato prova o vínculo.
+                await db.Projetos.Where(x => x.Id == privadoComContrato)
+                    .ExecuteUpdateAsync(x => x.SetProperty(p => p.FreelancerSelecionadoId, (int?)null).SetProperty(p => p.Status, StatusProjeto.Aberto));
+                var p = NovoProjeto(dono.Id, VisibilidadeProjeto.Privado, "VINCULO-CONVITE");
+                db.Projetos.Add(p);
+                await db.SaveChangesAsync();
+                db.ConvitesProjeto.Add(new ConviteProjeto { ProjetoId = p.Id, ContratanteId = dono.Id, PrestadorId = convidado.Id, MensagemInicial = "convite", Status = StatusConvite.Aceito, CriadoEm = DateTime.UtcNow.AddDays(-90), RespondidoEm = DateTime.UtcNow.AddDays(-89) });
+                await db.SaveChangesAsync();
+                privado = p.Id;
+            }
+
+            Assert.Equal(200, (await RespostaAsync(await _f.LoginAsync(comContrato), HttpMethod.Get, $"/api/projects/{privadoComContrato}")).Status);
+            Assert.Equal(200, (await RespostaAsync(await _f.LoginAsync(convidado), HttpMethod.Get, $"/api/projects/{privado}")).Status);
+        }
     }
 }
