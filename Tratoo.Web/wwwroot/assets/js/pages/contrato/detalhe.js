@@ -658,6 +658,9 @@ async function cancelarContrato() {
 const ENTREGA_EXT_OK = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.zip'];
 const ENTREGA_MAX_ARQUIVOS = 10;
 const ENTREGA_MAX_BYTES = 20 * 1024 * 1024;
+// Soma máxima dos arquivos de uma entrega (mesmo limite da API: 25 MiB). Acima disso a API
+// responde 413; conferir antes evita enviar o arquivo à toa e um erro genérico de rede.
+const ENTREGA_MAX_TOTAL_BYTES = 25 * 1024 * 1024;
 
 function abrirModalEntrega() {
     // Reseta o formulário
@@ -708,6 +711,9 @@ async function registrarEntrega() {
         const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
         if (!ENTREGA_EXT_OK.includes(ext)) { showToast(`Formato não permitido: ${f.name}`, true); return; }
         if (f.size > ENTREGA_MAX_BYTES) { showToast(`Arquivo acima de 20 MB: ${f.name}`, true); return; }
+    }
+    if (arquivos.reduce((t, f) => t + f.size, 0) > ENTREGA_MAX_TOTAL_BYTES) {
+        showToast('A entrega ultrapassa o limite de 25 MB no total. Reduza ou compacte os arquivos.', true); return;
     }
 
     // Monta links

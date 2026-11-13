@@ -129,7 +129,23 @@ namespace Tratoo.API.EndPoints
                 // gravar qualquer arquivo no bucket privado (achado D3). Recusa = NegocioException → 400.
                 await service.ValidarRegistroDeEntregaAsync(id, userId.Value);
 
-                var form = await http.Request.ReadFormAsync();
+                // ── Limite de 25 MiB por entrega ──────────────────────────────
+                // Corpo declarado acima do limite da rota: 413 com mensagem ANTES de ler o corpo
+                // (com "Expect: 100-continue" o cliente nem chega a enviá-lo).
+                if (http.Request.ContentLength > EntregaRegras.LimiteRequisicaoBytes)
+                    return LimiteExcedido();
+
+                IFormCollection form;
+                try
+                {
+                    form = await http.Request.ReadFormAsync();
+                }
+                catch (Exception ex) when (ex is BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge }
+                                              or InvalidDataException)
+                {
+                    // Corpo sem Content-Length (chunked) que estourou o limite durante a leitura.
+                    return LimiteExcedido();
+                }
 
                 var descricao = form["descricaoEntrega"].ToString();
                 if (string.IsNullOrWhiteSpace(descricao))
@@ -175,6 +191,10 @@ namespace Tratoo.API.EndPoints
                         return Results.BadRequest(new { mensagem = $"Arquivo muito grande: {arquivo.FileName}. Máximo 20 MB por arquivo." });
                 }
 
+                // Corpo dentro da folga do multipart, mas arquivos somando mais de 25 MiB.
+                if (arquivos.Sum(a => a.Length) > EntregaRegras.LimiteTotalArquivosBytes)
+                    return LimiteExcedido();
+
                 // ── Upload ao bucket privado + registro ───────────────────────
                 // A chave entra em "enviadas" ANTES do upload: um upload ambíguo (o R2 gravou, a
                 // resposta se perdeu) também é limpo. Numa falha, só sai do bucket o que não ficou
@@ -210,9 +230,17 @@ namespace Tratoo.API.EndPoints
                     catch (Exception ex) { logger.LogWarning(ex, "Falha ao descartar anexos da entrega não registrada no contrato {ContratoId}.", id); }
                     throw;
                 }
+
+                static IResult LimiteExcedido() => Results.Json(
+                    new { mensagem = EntregaRegras.MensagemLimiteExcedido },
+                    statusCode: StatusCodes.Status413PayloadTooLarge);
             })
             .RequireAuthorization("Prestador")
-            .DisableAntiforgery();
+            .DisableAntiforgery()
+            // Limite do corpo NESTA rota (Kestrel, por requisição): 25 MiB dos arquivos + folga
+            // do multipart. O leitor do formulário usa o mesmo teto.
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(EntregaRegras.LimiteRequisicaoBytes))
+            .WithFormOptions(multipartBodyLengthLimit: EntregaRegras.LimiteRequisicaoBytes);
 
             // ──────────────────────────────────────────────────────────────────────
             // OBTER ENTREGA — qualquer parte do contrato (anexos com URL assinada)

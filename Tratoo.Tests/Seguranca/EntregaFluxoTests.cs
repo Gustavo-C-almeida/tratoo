@@ -394,6 +394,49 @@ namespace Tratoo.Tests.Seguranca
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // Limite de upload (25 MiB por entrega)
+        // ─────────────────────────────────────────────────────────────────────
+
+        [FactApiReal]
+        public async Task Upload_DentroDe25MiB_EAceito()
+        {
+            var c = await ContratoPagoAsync();
+            using var r = await RegistrarAsync(_f.Api, await _f.LoginAsync(c.Prestador), c.Id,
+                Formulario(arquivos: new[] { ("a.pdf", 12 * MiB), ("b.pdf", 12 * MiB) }));
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        }
+
+        /// <summary>Pouco acima do limite (cabe na folga do multipart): o corpo é lido e a resposta é 413 com mensagem.</summary>
+        [FactApiReal]
+        public async Task Upload_PoucoAcimaDe25MiB_Responde413ComMensagem_SemGravarNada()
+        {
+            var c = await ContratoPagoAsync();
+            using var r = await RegistrarAsync(_f.Api, await _f.LoginAsync(c.Prestador), c.Id,
+                Formulario(arquivos: new[] { ("a.pdf", 13 * MiB), ("b.pdf", 12 * MiB + MiB / 2) }));
+
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, r.StatusCode);
+            Assert.Contains("25 MB", await MensagemAsync(r) ?? "");
+            Assert.Equal(0, ObjetosDoContrato(_f.Externo.ObjetosGravados, c.Id));
+            Assert.Empty((await EstadoAsync(c)).Entregas);
+        }
+
+        /// <summary>Muito acima do limite: com "Expect: 100-continue" o cliente recebe o 413 com mensagem antes de enviar o corpo.</summary>
+        [FactApiReal]
+        public async Task Upload_MuitoAcimaDoLimite_Responde413ComMensagem_AntesDeReceberOCorpo()
+        {
+            var c = await ContratoPagoAsync();
+            var s = await _f.LoginAsync(c.Prestador);
+            using var req = ClienteApi.Requisicao(HttpMethod.Post, $"/api/contratos/{c.Id}/entrega", s.Ip, s.Token,
+                conteudo: Formulario(arquivos: new[] { ("a.pdf", 20 * MiB), ("b.pdf", 20 * MiB) }));
+            req.Headers.ExpectContinue = true;
+            using var r = await _f.Api.Http.SendAsync(req);
+
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, r.StatusCode);
+            Assert.Contains("25 MB", await MensagemAsync(r) ?? "");
+            Assert.Equal(0, ObjetosDoContrato(_f.Externo.ObjetosGravados, c.Id));
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         // Fluxos legítimos
         // ─────────────────────────────────────────────────────────────────────
 
