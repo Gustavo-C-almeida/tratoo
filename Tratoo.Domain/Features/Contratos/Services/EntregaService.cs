@@ -104,6 +104,8 @@ namespace Tratoo.Domain.Features.Contratos
             if (string.IsNullOrWhiteSpace(dto.DescricaoEntrega))
                 throw new NegocioException("A descrição da entrega é obrigatória.");
 
+            EntregaRegras.ValidarLinks(dto.Links);
+
             var entrega = new Entrega
             {
                 ContratoServicoId = contratoId,

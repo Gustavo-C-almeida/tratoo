@@ -155,6 +155,9 @@ namespace Tratoo.API.EndPoints
                     }
                 }
 
+                // Só http/https, com host e dentro dos tamanhos das colunas — antes de qualquer upload.
+                EntregaRegras.ValidarLinks(links);
+
                 // ── Validação de arquivos ─────────────────────────────────────
                 var arquivos = form.Files;
                 if (arquivos.Count > 10)

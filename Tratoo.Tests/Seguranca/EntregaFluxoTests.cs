@@ -335,6 +335,65 @@ namespace Tratoo.Tests.Seguranca
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // Links
+        // ─────────────────────────────────────────────────────────────────────
+
+        public static IEnumerable<object[]> LinksMaliciosos => new[]
+        {
+            new object[] { "javascript:alert(document.cookie)" },
+            new object[] { "JaVaScRiPt:alert(1)" },
+            new object[] { " javascript:alert(1)" },
+            new object[] { "data:text/html,<script>alert(1)</script>" },
+            new object[] { "vbscript:msgbox(1)" },
+            new object[] { "file:///etc/passwd" },
+            new object[] { "ftp://exemplo.com/arquivo" },
+            new object[] { "//exemplo.com/sem-esquema" },
+            new object[] { "/caminho/relativo" },
+            new object[] { "http:" },
+            new object[] { "https://" },
+            new object[] { "https://exemplo.com/" + new string('a', 1000) },
+        };
+
+        [TheoryApiReal]
+        [MemberData(nameof(LinksMaliciosos))]
+        public async Task LinkSemEsquemaHttpOuHttps_ERecusadoCom400_SemGravarNada(string url)
+        {
+            var c = await ContratoPagoAsync();
+            var links = JsonSerializer.Serialize(new[] { new { url, descricao = "Ver entrega" } });
+            using var r = await RegistrarAsync(_f.Api, await _f.LoginAsync(c.Prestador), c.Id, Formulario(links: links));
+
+            Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+            Assert.Equal(0, ObjetosDoContrato(_f.Externo.ObjetosGravados, c.Id));
+            Assert.Empty((await EstadoAsync(c)).Entregas);
+        }
+
+        [FactApiReal]
+        public async Task LinkComDescricaoAcimaDoLimite_ERecusado()
+        {
+            var c = await ContratoPagoAsync();
+            var links = JsonSerializer.Serialize(new[] { new { url = "https://exemplo.com/ok", descricao = new string('d', 301) } });
+            using var r = await RegistrarAsync(_f.Api, await _f.LoginAsync(c.Prestador), c.Id, Formulario(links: links));
+            Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+            Assert.Equal(0, ObjetosDoContrato(_f.Externo.ObjetosGravados, c.Id));
+        }
+
+        [FactApiReal]
+        public async Task LinksHttpEHttps_SaoAceitosEDevolvidosIguais()
+        {
+            var c = await ContratoPagoAsync();
+            var validos = new[] { "https://www.figma.com/file/abc?node-id=1:2", "http://exemplo.com.br/entrega#v2" };
+            var links = JsonSerializer.Serialize(validos.Select(u => new { url = u, descricao = "Material" }));
+            var s = await _f.LoginAsync(c.Prestador);
+            using (var r = await RegistrarAsync(_f.Api, s, c.Id, Formulario(links: links)))
+                Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+
+            using var g = await _f.Api.EnviarAsync(HttpMethod.Get, $"/api/contratos/{c.Id}/entrega", s);
+            var corpo = await g.Content.ReadAsStringAsync();
+            foreach (var u in validos)
+                Assert.Contains(JsonSerializer.Serialize(u).Trim('"'), corpo);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         // Fluxos legítimos
         // ─────────────────────────────────────────────────────────────────────
 

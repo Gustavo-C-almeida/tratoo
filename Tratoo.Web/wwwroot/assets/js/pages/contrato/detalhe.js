@@ -717,6 +717,9 @@ async function registrarEntrega() {
             descricao: r.querySelector('.entrega-link-desc').value.trim() || null
         }))
         .filter(l => l.url);
+    // Só http:// ou https:// (a API recusa os demais com 400).
+    const linkInvalido = links.find(l => !/^https?:\/\/[^\s/]+/i.test(l.url));
+    if (linkInvalido) { showToast(`Link inválido: ${linkInvalido.url}. Use um endereço começando com http:// ou https://.`, true); return; }
 
     const form = new FormData();
     form.append('descricaoEntrega', descricao);
