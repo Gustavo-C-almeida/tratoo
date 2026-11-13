@@ -16,9 +16,9 @@ Testes: [`Tratoo.Tests/Seguranca/`](../../Tratoo.Tests/Seguranca/).
 | D1 | Decidido, a implementar | — | `/health/*` anônimo só com o status; `/api/admin/health` com os detalhes (Admin + reautenticação). |
 | D5, D6, D7, D9, D8, D10, D11, D12 | Em aberto | — | Testes de achado continuam ignorados por padrão. |
 
-Com `TRATOO_REPRODUZIR_ACHADOS=1`, a suíte de segurança agora dá 487 testes: 468 aprovados e 19 reprovados. Os
+Com `TRATOO_REPRODUZIR_ACHADOS=1`, a suíte de segurança agora dá 488 testes: 469 aprovados e 19 reprovados. Os
 19 são os achados ainda abertos: D1, D5 (8 rotas), D6 (7 rotas), D7, D11 e D12. A suíte completa, na
-configuração da CI (Release, `TRATOO_EXIGIR_DOCKER=1`), dá 984 aprovados, 0 falhas e 6 ignorados (os achados).
+configuração da CI (Release, `TRATOO_EXIGIR_DOCKER=1`), dá 985 aprovados, 0 falhas e 6 ignorados (os achados).
 `dotnet ef migrations has-pending-model-changes` não acusa mudança de modelo: nenhuma migration.
 
 ### Encerramento do D2 (2026-11-13)
@@ -31,12 +31,17 @@ Regras aprovadas e aplicadas (testes em `Tratoo.Tests/Seguranca/ProjetoPrivadoTe
 | Oráculos de existência | `21e6bba` | Chat, criar/listar convites, publicar, cancelar e listar propostas do projeto: para quem não é o dono (no chat: quem não pode ver o projeto), a resposta é idêntica à de um projeto inexistente. |
 | Vínculo com projeto privado | `7b87354` | Dono, Admin, prestador selecionado, convite pendente/aceito ou contrato no projeto. **Proposta sozinha não dá acesso**: toda proposta legítima em privado tem convite. Enviar proposta exige o mesmo direito de propor da criação. |
 | Expiração de convite | `6c90886` | Convite pendente vence 30 dias após o envio ou quando o projeto sai de Aberto; convite aceito não expira. Vale na hora (acesso, aceite, recusa, novo convite, listas) e é gravado por um job de hora em hora (`UPDATE` condicional, seguro com 2 réplicas). Sem coluna nova. |
-| Métricas do perfil público | `a888649` | Contagens, valor médio, contratos concluídos e tempo médio de decisão consideram só projetos públicos. |
+| Métricas do perfil público | `a888649` | Contagens, valor médio, contratos concluídos e tempo médio de decisão consideram só projetos públicos. O tempo médio tem teste próprio (`TempoMedioDeDecisao_DoPerfilPublico_NaoConsideraProjetoPrivado`): 16 sem o filtro, 2 com ele. |
 
 **Investigação em produção (somente leitura, 2026-11-13).** Um único `SELECT` no Neon (projeto `tratoo`, branch
 `production`, banco `tratoo`) procurou propostas em projetos privados sem convite do prestador e sem ele ser o
 selecionado. Resultado: **nenhuma linha**. Não há sinal de uso do contorno antigo, e a regra nova não remove acesso
 legítimo em produção. Ressalva: a consulta não mede quantos projetos privados existem.
+
+**Requisito antes da publicação em produção.** Ao subir, todo convite pendente com mais de 30 dias (ou de
+projeto que já não está Aberto) passa a valer como Expirado: o prestador perde o acesso ao projeto privado
+e não consegue mais aceitar; o dono precisa convidar de novo. **Essa mudança precisa ser comunicada aos
+usuários antes da promoção para a `main`** (decisão do responsável, 2026-11-13).
 
 ### Revisão técnica das correções (2026-11-12)
 
