@@ -274,3 +274,31 @@ Correções propostas, uma por commit, cada uma removendo o `[FactAchado]` do te
 
 Pelo fluxo de `Docs/CICD.md`, tudo sai de `fix/auditoria-seguranca-api` (criada a partir da `main`), com PR para a
 `staging` e, depois da homologação, PR `staging` → `main`.
+
+## D3: correção (branch `fix/auditoria-seguranca-d3`)
+
+A dona do contrato é validada antes de qualquer gravação no bucket (`d07be77`). A revisão do D3 encontrou outros
+problemas no mesmo fluxo de entrega, e cada um foi corrigido num commit separado:
+
+| Commit | O que muda |
+|---|---|
+| `3562bb9` | Registrar, aprovar e rejeitar viram UPDATEs condicionais no Postgres (`WHERE Status = …`), dentro de uma transação. Só uma entrega fica pendente por contrato, mesmo com 2 réplicas. Aprovar e rejeitar ao mesmo tempo: só um vence. Ao aprovar, na mesma transação, a liberação automática do pagamento é antecipada para agora. Se a liberação imediata falhar, o job de 4 h ou a liberação manual a retomam. A reivindicação atômica `Retido → TransferenciaEmProgresso` já existente garante uma única transferência. O cancelamento trava a linha do contrato (`FOR UPDATE`), o que serializa registro × cancelamento. |
+| `b0f1e32` | Quando um upload ou o commit falha, a limpeza do R2 só apaga as chaves que **nenhum** anexo gravado referencia. Se o banco não responder, nada é apagado: um arquivo órfão é preferível a um anexo quebrado. |
+| `465c14d` | Os links aceitam só URL absoluta `http`/`https` com host, URL de até 1000 caracteres e descrição de até 300. Qualquer outra coisa dá 400 antes de qualquer upload. |
+| `055b132` | A entrega aceita até 25 MiB de arquivos no total. O limite da rota é 26 MiB (multipart) no Kestrel e no form. Acima disso a resposta é **413** com mensagem, inclusive quando o cliente usa `Expect: 100-continue` (aí recusada antes do corpo). O frontend faz a mesma checagem antes de enviar. |
+
+Não há migration nem índice novo: a garantia de entrega pendente única vem da transição condicional do contrato.
+
+**Testes** (`Tratoo.Tests/Seguranca/EntregaFluxoTests.cs`, contra a API real com 2 réplicas). Antes das correções,
+20 dos 26 testes novos falhavam. Depois, todos passam. A suíte equivalente à CI teve 984 aprovados, 0 falhas e 8
+ignorados. `has-pending-model-changes` não acusou nenhuma mudança.
+
+**Verificação em produção (ainda não executada):** `consulta-d3-producao.sql`. A consulta roda em transação
+`READ ONLY`, termina em `ROLLBACK` e devolve só contagens.
+
+**Limitações conhecidas (fora do escopo do D3):**
+- O estorno do cancelamento não reivindica o pagamento de forma atômica e pode disputar com o job de liberação automática.
+- A liberação automática ignora o estado do contrato. Isso é por desenho e não foi alterado.
+- O rate limit da rota de entrega ainda falta (D5).
+- Um navegador que envia um corpo muito grande sem `Expect` ainda pode ver a conexão encerrada. A checagem do frontend reduz esse caso.
+- A recuperação de uma liberação que falhou depende do job de 4 h ou da liberação manual.
