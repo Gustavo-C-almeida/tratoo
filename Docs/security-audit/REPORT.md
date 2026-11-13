@@ -6,6 +6,57 @@
 Inventário e matriz de intenção: [`endpoint-matrix.md`](endpoint-matrix.md).
 Testes: [`Tratoo.Tests/Seguranca/`](../../Tratoo.Tests/Seguranca/).
 
+## Entrega desta branch: D2 (projetos privados)
+
+Esta branch (`fix/auditoria-seguranca-d2`) entrega **somente o D2**, sobre a base da auditoria (matriz de endpoints e
+suíte de segurança). Os demais achados continuam como descritos abaixo e são tratados em entregas próprias; os
+testes que os reproduzem seguem ignorados por padrão.
+
+| # | Status | Commits nesta branch |
+|---|---|---|
+| D2 | ✅ Encerrado | `b6f985b`, `8cf6423`, `d4a97af`, `d49b3db`, `0c107e3`, `1c8703a`, `4036aa0`, `56e90ed`, `b10b86f` |
+| D1, D3 a D12 | Em aberto nesta entrega | — |
+
+### Regras aplicadas
+
+Cada correção tem teste de regressão que falhou antes e passa depois; onde a correção podia afetar o uso legítimo,
+há também um teste de linha de base (verde antes e depois).
+
+| Problema | Commit | Regra |
+|---|---|---|
+| Detalhe público mostrava rascunho e projeto privado | `b6f985b` | `GET /api/projects/{id}` devolve 404 a quem não pode ver: rascunho só para dono e Admin; privado só para quem tem vínculo (abaixo). |
+| Criar proposta abria projeto privado | `8cf6423` | Em privado, só propõe quem tem convite pendente/aceito ou já foi selecionado; em rascunho, ninguém. Inexistente e sem acesso recebem a mesma resposta ("Projeto não encontrado."). |
+| Perfil público do contratante listava projetos privados | `d4a97af` | Últimos projetos do perfil público: só públicos e publicados. |
+| Avaliação pública identificava projeto privado | `d49b3db` | A avaliação continua pública, sem ID e sem título do projeto privado. |
+| Oito rotas revelavam projeto alheio | `0c107e3` | Chat, criar/listar convites, publicar, cancelar e listar propostas: para quem não é o dono (no chat, quem não pode ver o projeto), resposta idêntica à de projeto inexistente. |
+| Proposta sem convite dava acesso a projeto privado | `1c8703a` | Vínculo com projeto privado: dono, Admin, selecionado, convite pendente/aceito ou contrato no projeto. Proposta sozinha não conta; enviar proposta exige o mesmo direito de propor. |
+| Convite pendente nunca expirava | `4036aa0` | Pendente vence 30 dias após o envio ou quando o projeto sai de Aberto; aceito não expira. Vale na hora e é gravado por um job de hora em hora (`UPDATE` condicional, seguro com 2 réplicas). Sem coluna nova. |
+| Métricas do perfil público contavam projetos privados | `56e90ed`, `b10b86f` | Contagens, valor médio, contratos concluídos e tempo médio de decisão consideram só projetos públicos (o tempo médio tem teste próprio: 16 sem o filtro, 2 com ele). |
+
+### Validação
+
+- Suíte completa na configuração da CI (Release, `TRATOO_EXIGIR_DOCKER=1`, Postgres + pgvector e Redis em Docker):
+  **977 aprovados, 0 falhas**, 8 ignorados (testes de achados em aberto).
+- Suíte de segurança: 458 aprovados, 0 falhas. Com `TRATOO_REPRODUZIR_ACHADOS=1`, só falham os 22 testes de achados
+  fora do D2 (D1, D3, D4, D5, D6, D7, D11, D12); nenhum teste do D2.
+- `dotnet ef migrations has-pending-model-changes`: nenhuma mudança de modelo; **nenhuma migration**.
+
+### Investigação em produção (somente leitura, 2026-11-13)
+
+Um único `SELECT` no Neon (projeto `tratoo`, branch `production`, banco `tratoo`) procurou propostas em projetos
+privados de prestadores sem convite e que não são o selecionado. Resultado: **nenhuma linha**. Não há sinal de uso
+do contorno antigo, e a regra de vínculo não remove acesso legítimo. Ressalva: a consulta não mede quantos projetos
+privados existem.
+
+### Pendências do D2 antes da produção
+
+- **Comunicar aos usuários a expiração dos convites antigos antes da promoção para a `main`.** Ao subir, todo convite
+  pendente com mais de 30 dias (ou de projeto fora de Aberto) passa a valer como Expirado: o prestador perde o acesso
+  ao projeto privado e não consegue mais aceitar; o dono precisa convidar de novo.
+- Mensagens de erro mais genéricas para terceiros ("Projeto não encontrado." no lugar de "sem permissão").
+
+O restante deste relatório descreve o estado **auditado** (`0c253ae`), antes das correções.
+
 ## Resumo executivo
 
 **Veredito: aprovado com ressalvas.** Os quatro requisitos centrais se sustentam nos testes contra a API real:
