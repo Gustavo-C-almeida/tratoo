@@ -249,6 +249,92 @@ namespace Tratoo.Tests.Seguranca
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // Limpeza do R2
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Upload ambíguo: o R2 grava o 2º arquivo mas responde erro. Nada pode ficar no bucket —
+        /// inclusive o arquivo cujo upload "falhou".
+        /// </summary>
+        [FactApiReal]
+        public async Task UploadAmbiguo_NenhumArquivoFicaOrfaoNoBucket()
+        {
+            var c = await ContratoPagoAsync();
+            var s = await _f.LoginAsync(c.Prestador);
+            var marca = $"entregas/{c.Id}/";
+            _f.Externo.GravarEResponderErro = caminho => caminho.Contains(marca) && caminho.EndsWith(".png");
+            try
+            {
+                using var r = await RegistrarAsync(_f.Api, s, c.Id, Formulario(arquivos: new[] { ("parte1.pdf", 64L), ("parte2.png", 64L) }));
+                Assert.False(r.IsSuccessStatusCode, $"Registro deveria falhar: {(int)r.StatusCode}");
+            }
+            finally
+            {
+                _f.Externo.GravarEResponderErro = null;
+            }
+
+            var gravados = _f.Externo.ObjetosGravados.Where(o => o.Contains(marca)).Distinct().ToList();
+            var removidos = _f.Externo.ObjetosRemovidos.Where(o => o.Contains(marca)).Distinct().ToHashSet();
+            Assert.Equal(2, gravados.Count);
+            Assert.True(gravados.All(removidos.Contains), "Órfãos no bucket: " + string.Join(", ", gravados.Where(g => !removidos.Contains(g))));
+            Assert.Empty((await EstadoAsync(c)).Entregas);
+        }
+
+        /// <summary>
+        /// Commit ambíguo (a exceção chega, mas a entrega foi gravada): a limpeza não pode apagar os
+        /// anexos dela. Testado no serviço, com Postgres real e o R2 falso — pela HTTP não dá para
+        /// provocar a perda da confirmação do commit. Com o banco inacessível, nada é removido.
+        /// </summary>
+        [FactApiReal]
+        public async Task LimpezaAposFalha_NaoApagaAnexoDeEntregaGravada_ESemBancoNaoApagaNada()
+        {
+            var c = await ContratoPagoAsync();
+            var gravada = $"entregas/{c.Id}/{Guid.NewGuid()}.pdf";
+            var orfa = $"entregas/{c.Id}/{Guid.NewGuid()}.pdf";
+            await using (var db = _f.Db())
+            {
+                var entrega = new Entrega { ContratoServicoId = c.Id, DescricaoEntrega = "Gravada antes da falha.", Status = EntregaStatus.PendenteAprovacao, DataEntrega = DateTime.UtcNow };
+                entrega.Anexos.Add(new EntregaAnexo { NomeArquivo = "a.pdf", ChaveR2 = gravada, TipoArquivo = ".pdf", TamanhoArquivo = 10 });
+                db.Entregas.Add(entrega);
+                await db.SaveChangesAsync();
+            }
+
+            await using (var db = _f.Db())
+                await Servico(db).DescartarAnexosNaoGravadosAsync(new[] { gravada, orfa });
+
+            var removidos = _f.Externo.ObjetosRemovidos.ToList();
+            Assert.Contains(removidos, r => r.EndsWith(orfa));
+            Assert.DoesNotContain(removidos, r => r.EndsWith(gravada));
+
+            // Banco inacessível: não dá para saber o que está gravado → não remove nada.
+            var outra = $"entregas/{c.Id}/{Guid.NewGuid()}.pdf";
+            await using (var semBanco = Tratoo.Tests.Integracao.SeedIntegracao.Contexto("Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x;Timeout=2"))
+                await Servico(semBanco).DescartarAnexosNaoGravadosAsync(new[] { outra });
+            Assert.DoesNotContain(_f.Externo.ObjetosRemovidos, r => r.EndsWith(outra));
+        }
+
+        private Tratoo.Domain.Features.Contratos.EntregaService Servico(Tratoo.Domain.Data.TratooContext db)
+        {
+            var storage = new Tratoo.Domain.Features.Storage.R2PrivateStorageService(
+                Microsoft.Extensions.Options.Options.Create(new Tratoo.Domain.Features.Storage.R2PrivateConfig
+                {
+                    AccountId = "falso", AccessKey = "falso", SecretKey = "falso", BucketName = "privado", ServiceURL = _f.Externo.BaseUrl
+                }),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<Tratoo.Domain.Features.Storage.R2PrivateStorageService>.Instance);
+            return new Tratoo.Domain.Features.Contratos.EntregaService(
+                new Tratoo.Domain.Features.Contratos.EntregaRepository(db),
+                Tratoo.Tests.Integracao.Falso<Tratoo.Domain.Features.Contratos.IContratoServicoRepository>.Criar(),
+                Tratoo.Tests.Integracao.Falso<Tratoo.Domain.Features.Pagamentos.IPagamentoRepository>.Criar(),
+                Tratoo.Tests.Integracao.Falso<Tratoo.Domain.Features.Pagamentos.IPagamentoService>.Criar(),
+                Tratoo.Tests.Integracao.Falso<Tratoo.Domain.Features.Avaliacoes.IAvaliacaoService>.Criar(),
+                storage,
+                Tratoo.Tests.Integracao.Falso<Tratoo.Domain.Features.Perfis.IContratanteRepository>.Criar(),
+                Tratoo.Tests.Integracao.Falso<Tratoo.Domain.Features.Perfis.IPrestadorRepository>.Criar(),
+                Tratoo.Tests.Integracao.Falso<Tratoo.Domain.Features.Infrastructure.IEmailService>.Criar(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<Tratoo.Domain.Features.Contratos.EntregaService>.Instance);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         // Fluxos legítimos
         // ─────────────────────────────────────────────────────────────────────
 

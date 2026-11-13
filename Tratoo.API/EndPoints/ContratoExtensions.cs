@@ -173,9 +173,11 @@ namespace Tratoo.API.EndPoints
                 }
 
                 // ── Upload ao bucket privado + registro ───────────────────────
-                // Qualquer falha a partir daqui (upload parcial, outra entrega gravada entre a
-                // validação e o registro, banco fora) remove o que já subiu: nada fica órfão.
+                // A chave entra em "enviadas" ANTES do upload: um upload ambíguo (o R2 gravou, a
+                // resposta se perdeu) também é limpo. Numa falha, só sai do bucket o que não ficou
+                // gravado em nenhuma entrega — um commit ambíguo não apaga anexos de entrega salva.
                 var anexos = new List<EntregaAnexoUpload>();
+                var enviadas = new List<string>();
                 try
                 {
                     foreach (var arquivo in arquivos)
@@ -183,6 +185,7 @@ namespace Tratoo.API.EndPoints
                         var ext = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
                         var contentType = ContentTypePorExtensao(ext);
                         var chave = $"entregas/{id}/{Guid.NewGuid()}{ext}";
+                        enviadas.Add(chave);
 
                         using var stream = arquivo.OpenReadStream();
                         await storage.UploadAsync(stream, chave, contentType);
@@ -200,14 +203,13 @@ namespace Tratoo.API.EndPoints
                 }
                 catch
                 {
-                    foreach (var anexo in anexos)
-                    {
-                        try { await storage.ExcluirAsync(anexo.ChaveR2); }
-                        catch (Exception ex) { logger.LogWarning(ex, "Não foi possível remover o anexo órfão {Chave}.", anexo.ChaveR2); }
-                    }
+                    try { await service.DescartarAnexosNaoGravadosAsync(enviadas); }
+                    catch (Exception ex) { logger.LogWarning(ex, "Falha ao descartar anexos da entrega não registrada no contrato {ContratoId}.", id); }
                     throw;
                 }
-            }).RequireAuthorization("Prestador").DisableAntiforgery();
+            })
+            .RequireAuthorization("Prestador")
+            .DisableAntiforgery();
 
             // ──────────────────────────────────────────────────────────────────────
             // OBTER ENTREGA — qualquer parte do contrato (anexos com URL assinada)

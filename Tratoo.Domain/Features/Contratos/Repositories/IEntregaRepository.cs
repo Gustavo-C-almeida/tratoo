@@ -18,6 +18,9 @@ namespace Tratoo.Domain.Features.Contratos
 
         Task<List<HistoricoContrato>> GetHistoricoPorContratoAsync(Guid contratoServicoId);
 
+        /// <summary>Das chaves informadas, as que estão gravadas em EntregaAnexos (leitura nova, sem rastreamento).</summary>
+        Task<HashSet<string>> ChavesReferenciadasAsync(IReadOnlyCollection<string> chaves);
+
         Task SaveChangesAsync();
     }
 }

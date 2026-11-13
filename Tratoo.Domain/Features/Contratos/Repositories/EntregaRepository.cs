@@ -48,6 +48,13 @@ namespace Tratoo.Domain.Features.Contratos
                 .OrderByDescending(h => h.DataEvento)
                 .ToListAsync();
 
+        public async Task<HashSet<string>> ChavesReferenciadasAsync(IReadOnlyCollection<string> chaves)
+            => (await _ctx.EntregaAnexos.AsNoTracking()
+                    .Where(a => chaves.Contains(a.ChaveR2))
+                    .Select(a => a.ChaveR2)
+                    .ToListAsync())
+                .ToHashSet();
+
         public async Task SaveChangesAsync()
             => await _ctx.SaveChangesAsync();
     }

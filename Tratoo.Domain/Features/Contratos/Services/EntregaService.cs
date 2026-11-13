@@ -303,6 +303,36 @@ namespace Tratoo.Domain.Features.Contratos
             return await MapAsync(entrega);
         }
 
+        /// <summary>
+        /// Depois de uma falha no registro: remove do bucket só os arquivos que NÃO estão gravados
+        /// em nenhuma entrega. Cobre o commit ambíguo (a exceção chega, mas a entrega foi gravada:
+        /// os anexos dela ficam) e o upload ambíguo (a chave entra na lista antes do envio). Se não
+        /// for possível consultar o banco, não remove nada — arquivo órfão é melhor que anexo perdido.
+        /// </summary>
+        public async Task DescartarAnexosNaoGravadosAsync(IReadOnlyCollection<string> chaves)
+        {
+            if (chaves.Count == 0) return;
+
+            HashSet<string> gravadas;
+            try
+            {
+                gravadas = await _entregaRepo.ChavesReferenciadasAsync(chaves);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Não foi possível conferir {Total} anexo(s) da entrega no banco: nenhum foi removido do bucket (podem ficar órfãos).",
+                    chaves.Count);
+                return;
+            }
+
+            foreach (var chave in chaves.Where(c => !gravadas.Contains(c)))
+            {
+                try { await _storage.ExcluirAsync(chave); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Não foi possível remover o anexo órfão {Chave}.", chave); }
+            }
+        }
+
         // ─────────────────────────────────────────────────────────────────────────
         // OBTER ENTREGA
         // ─────────────────────────────────────────────────────────────────────────

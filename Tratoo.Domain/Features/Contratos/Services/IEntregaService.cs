@@ -9,6 +9,9 @@ namespace Tratoo.Domain.Features.Contratos
         /// <summary>Confere, sem gravar nada, se o prestador pode registrar entrega no contrato (lança NegocioException se não).</summary>
         Task ValidarRegistroDeEntregaAsync(Guid contratoId, int prestadorId);
 
+        /// <summary>Remove do bucket os arquivos enviados que não ficaram gravados em nenhuma entrega.</summary>
+        Task DescartarAnexosNaoGravadosAsync(IReadOnlyCollection<string> chaves);
+
         Task<EntregaDetalheDto> RegistrarEntregaAsync(
             Guid contratoId, int prestadorId, RegistrarEntregaDto dto, List<EntregaAnexoUpload> anexos);
 

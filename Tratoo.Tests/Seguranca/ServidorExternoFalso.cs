@@ -43,6 +43,12 @@ namespace Tratoo.Tests.Seguranca
         /// <summary>"MÉTODO caminho" de cada chamada ao Asaas falso (ex.: "POST /asaas/api/v3/transfers").</summary>
         public IReadOnlyCollection<string> ChamadasAsaasDetalhadas => _chamadasAsaas_.ToArray();
 
+        /// <summary>
+        /// Upload ambíguo: quando o predicado casa com o caminho do PUT, o objeto É gravado, mas a
+        /// resposta é 500 — como um R2 que gravou e perdeu a resposta. Null = R2 normal.
+        /// </summary>
+        public Func<string, bool>? GravarEResponderErro { get; set; }
+
         private ServidorExternoFalso(WebApplication app) => _app = app;
 
         public static async Task<ServidorExternoFalso> IniciarAsync()
@@ -99,6 +105,11 @@ namespace Tratoo.Tests.Seguranca
             if (HttpMethods.IsPut(http.Request.Method) || HttpMethods.IsPost(http.Request.Method))
             {
                 _objetosGravados.Enqueue(caminho);
+                if (GravarEResponderErro?.Invoke(caminho) == true)
+                {
+                    http.Response.StatusCode = 500;
+                    return;
+                }
             }
             if (HttpMethods.IsDelete(http.Request.Method))
                 _objetosRemovidos.Enqueue(caminho);
