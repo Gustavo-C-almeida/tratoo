@@ -10,15 +10,33 @@ Testes: [`Tratoo.Tests/Seguranca/`](../../Tratoo.Tests/Seguranca/).
 
 | # | Status | Commit | Teste de regressão (vermelho → verde) |
 |---|---|---|---|
-| D2 | ✅ Corrigido | `62986b1`, `59cb6e1`, `883943f` | Detalhe: `ProjetoRascunhoOuPrivado_NaoApareceParaTerceiros` + `…_ContinuaVisivelParaQuemParticipa`. Revisão: `PropostaEmProjetoPrivadoOuRascunho_SemConvite_NaoECriada_NemAbreODetalhe` + `PropostaLegitima_…_ContinuaFuncionando` + `PerfilPublicoDoContratante_SoListaProjetosPublicosEPublicados` |
+| D2 | ✅ Encerrado | `62986b1`, `59cb6e1`, `883943f`, `7530893`, `21e6bba`, `7b87354`, `6c90886`, `a888649` | Detalhe: `ProjetoRascunhoOuPrivado_NaoApareceParaTerceiros` + `…_ContinuaVisivelParaQuemParticipa`. Revisão: `PropostaEmProjetoPrivadoOuRascunho_SemConvite_NaoECriada_NemAbreODetalhe` + `PropostaLegitima_…_ContinuaFuncionando` + `PerfilPublicoDoContratante_SoListaProjetosPublicosEPublicados` |
 | D3 | ✅ Corrigido | `db24107` | `Entrega_DeQuemNaoEOPrestador_NaoGravaArquivoNoBucketPrivado` + `Entrega_DoPrestadorDoContrato_ContinuaFuncionando_…` + matriz (rota com policy Prestador) |
 | D4 | ✅ Corrigido | `af9b3bb` | `BuscaPublica_ComIA_TemRateLimit` + `BuscaSemTexto_ContinuaSemLimite_…` + matriz (política `busca`) |
 | D1 | Decidido, a implementar | — | `/health/*` anônimo só com o status; `/api/admin/health` com os detalhes (Admin + reautenticação). |
 | D5, D6, D7, D9, D8, D10, D11, D12 | Em aberto | — | Testes de achado continuam ignorados por padrão. |
 
-Com `TRATOO_REPRODUZIR_ACHADOS=1`, a suíte de segurança agora dá 470 testes: 451 aprovados e 19 reprovados. Os
+Com `TRATOO_REPRODUZIR_ACHADOS=1`, a suíte de segurança agora dá 487 testes: 468 aprovados e 19 reprovados. Os
 19 são os achados ainda abertos: D1, D5 (8 rotas), D6 (7 rotas), D7, D11 e D12. A suíte completa, na
-configuração da CI (Release, `TRATOO_EXIGIR_DOCKER=1`), dá 967 aprovados, 0 falhas e 6 ignorados (os achados).
+configuração da CI (Release, `TRATOO_EXIGIR_DOCKER=1`), dá 984 aprovados, 0 falhas e 6 ignorados (os achados).
+`dotnet ef migrations has-pending-model-changes` não acusa mudança de modelo: nenhuma migration.
+
+### Encerramento do D2 (2026-11-13)
+
+Regras aprovadas e aplicadas (testes em `Tratoo.Tests/Seguranca/ProjetoPrivadoTests.cs`, vermelho → verde):
+
+| Item | Commit | Regra |
+|---|---|---|
+| Avaliações públicas | `7530893` | Avaliação de contrato em projeto privado continua pública, mas sem ID e sem título do projeto. |
+| Oráculos de existência | `21e6bba` | Chat, criar/listar convites, publicar, cancelar e listar propostas do projeto: para quem não é o dono (no chat: quem não pode ver o projeto), a resposta é idêntica à de um projeto inexistente. |
+| Vínculo com projeto privado | `7b87354` | Dono, Admin, prestador selecionado, convite pendente/aceito ou contrato no projeto. **Proposta sozinha não dá acesso**: toda proposta legítima em privado tem convite. Enviar proposta exige o mesmo direito de propor da criação. |
+| Expiração de convite | `6c90886` | Convite pendente vence 30 dias após o envio ou quando o projeto sai de Aberto; convite aceito não expira. Vale na hora (acesso, aceite, recusa, novo convite, listas) e é gravado por um job de hora em hora (`UPDATE` condicional, seguro com 2 réplicas). Sem coluna nova. |
+| Métricas do perfil público | `a888649` | Contagens, valor médio, contratos concluídos e tempo médio de decisão consideram só projetos públicos. |
+
+**Investigação em produção (somente leitura, 2026-11-13).** Um único `SELECT` no Neon (projeto `tratoo`, branch
+`production`, banco `tratoo`) procurou propostas em projetos privados sem convite do prestador e sem ele ser o
+selecionado. Resultado: **nenhuma linha**. Não há sinal de uso do contorno antigo, e a regra nova não remove acesso
+legítimo em produção. Ressalva: a consulta não mede quantos projetos privados existem.
 
 ### Revisão técnica das correções (2026-11-12)
 
@@ -34,13 +52,7 @@ Uma revisão independente das correções, com experimentos contra a API real (d
 - **Perfil público do contratante** (`883943f`). `GET /contratantes/{id}/perfil`, anônimo, listava título e descrição
   de projetos privados. Agora lista só projetos públicos e publicados.
 
-**Ainda abertos, aguardando decisão** (detalhe na revisão):
-- **D2:**
-  - oráculos de existência: o chat responde 403 × 404, e o convite confere o status antes do dono;
-  - título de projeto privado nas avaliações públicas;
-  - métricas do perfil público contando projetos privados (só números);
-  - convite pendente que nunca expira;
-  - quais status de proposta dão acesso.
+**Ainda abertos, aguardando decisão** (detalhe na revisão; os itens do D2 foram encerrados acima):
 - **D3:**
   - entregas simultâneas do mesmo prestador geram entregas pendentes duplicadas e **travam o contrato** (confirmado). Correção recomendada: `UPDATE` condicional no status do contrato, sem migration, e opcionalmente índice único parcial (migration manual);
   - a limpeza do R2 pode apagar anexos se a conexão cair depois do commit;
