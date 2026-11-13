@@ -394,5 +394,31 @@ namespace Tratoo.Tests.Seguranca
             Assert.Equal(1, j.GetProperty("totalContratosConcluidoss").GetInt32());
             Assert.Equal(1733.33m, Math.Round(j.GetProperty("valorMedioProjetos").GetDecimal(), 2));
         }
+        /// <summary>
+        /// Tempo médio de decisão (dias entre a publicação do projeto e a criação do contrato) no
+        /// perfil público: só projetos públicos entram. Massa: o cenário tem um contrato público
+        /// com 2 dias (projeto publicado há 10, contrato há 8); acrescenta-se um contrato num
+        /// projeto PRIVADO com 30 dias. Só o público → 2,0; com o privado → 16,0.
+        /// </summary>
+        [FactApiReal]
+        public async Task TempoMedioDeDecisao_DoPerfilPublico_NaoConsideraProjetoPrivado()
+        {
+            var (dono, prestador, _) = await _f.NovoParAsync();
+            var (privado, contratoPrivado) = await ProjetoComContratoAsync(dono.Id, prestador.Id, VisibilidadeProjeto.Privado, "TEMPO-PRIVADO");
+            var agora = DateTime.UtcNow;
+            await using (var db = _f.Db())
+            {
+                await db.Projetos.Where(p => p.Id == privado)
+                    .ExecuteUpdateAsync(p => p.SetProperty(x => x.PublicadoEm, agora.AddDays(-40)));
+                await db.ContratosServico.Where(c => c.Id == contratoPrivado)
+                    .ExecuteUpdateAsync(c => c.SetProperty(x => x.CriadoEm, agora.AddDays(-10)));
+            }
+
+            using var r = await _f.Api.EnviarAsync(HttpMethod.Get, $"/contratantes/{dono.Id}/perfil");
+            var j = JsonDocument.Parse(await r.Content.ReadAsStringAsync()).RootElement;
+
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+            Assert.Equal(2.0, j.GetProperty("tempoMedioDecisaoDias").GetDouble());
+        }
     }
 }
