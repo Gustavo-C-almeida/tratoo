@@ -145,6 +145,17 @@ namespace Tratoo.Domain.Features.Pagamentos
             return AsaasErroTipo.ResultadoIncerto;
         }
 
+        /// <summary>
+        /// Classificação de uma resposta não-2xx de <c>POST /v3/payments/{id}/refund</c>, onde o
+        /// erro decide se o dinheiro pode ter voltado ao pagador. Aplica a MESMA regra de evidência
+        /// de <see cref="ClassificarTransferencia"/>: só 400 com <c>{"errors":[...]}</c> e 401
+        /// comprovam que o estorno NÃO foi feito. Todo o resto vira
+        /// <see cref="AsaasErroTipo.ResultadoIncerto"/> — e um estorno incerto nunca pode ser
+        /// tratado como "não aconteceu" (o pagamento não pode voltar a ficar liberável).
+        /// </summary>
+        public static AsaasErroTipo ClassificarEstorno(HttpStatusCode status, string body)
+            => ClassificarTransferencia(status, body);
+
         private static bool TemListaDeErros(string body)
         {
             try

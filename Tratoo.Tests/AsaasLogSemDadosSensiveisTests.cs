@@ -109,7 +109,7 @@ namespace Tratoo.Tests
         public async Task Erro_no_estorno_nao_vaza_o_corpo()
         {
             var (gateway, log) = Montar(HttpStatusCode.BadRequest, ErroComEco);
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.EstornarCobrancaAsync("pay_123"));
+            var ex = await Assert.ThrowsAsync<AsaasIntegracaoException>(() => gateway.EstornarCobrancaAsync("pay_123"));
             SemVazamento(ex.Message);
             SemVazamento(log.Tudo);
         }

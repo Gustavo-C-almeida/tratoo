@@ -347,14 +347,39 @@ namespace Tratoo.Domain.Features.Pagamentos
 
             var json = JsonSerializer.Serialize(body, _jsonOpts);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var resp = await _http.PostAsync($"payments/{Uri.EscapeDataString(cobrancaId)}/refund", content);
-            var respBody = await resp.Content.ReadAsStringAsync();
+
+            HttpResponseMessage resp;
+            string respBody;
+            try
+            {
+                resp = await _http.PostAsync($"payments/{Uri.EscapeDataString(cobrancaId)}/refund", content);
+                respBody = await resp.Content.ReadAsStringAsync();
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
+            {
+                // O pedido pode ter chegado e o estorno pode ter sido feito: resultado INCERTO.
+                _logger.LogError(ex, "Timeout ou falha de rede ao estornar cobrança {CobrancaId} (resultado incerto).", cobrancaId);
+                throw new AsaasIntegracaoException(
+                    HttpStatusCode.ServiceUnavailable, string.Empty, AsaasErroTipo.ResultadoIncerto,
+                    $"Falha de rede/timeout ao estornar no Asaas: {ex.Message}");
+            }
 
             if (!resp.IsSuccessStatusCode)
             {
+                var tipoErro = AsaasIntegracaoException.ClassificarEstorno(resp.StatusCode, respBody);
+                // Só códigos e tamanho: o corpo pode ecoar dados do pagador.
                 var resumo = AsaasIntegracaoException.ResumirResposta(respBody);
-                _logger.LogError("Falha ao estornar cobrança {CobrancaId} no Asaas: {Status}, {Resumo}", cobrancaId, resp.StatusCode, resumo);
-                throw new InvalidOperationException($"Erro ao processar estorno: {resp.StatusCode} - {resumo}");
+                if (tipoErro == AsaasErroTipo.ResultadoIncerto)
+                    _logger.LogError("Resposta inconclusiva do Asaas ao estorno da cobrança {CobrancaId} (resultado incerto): {Status}, {Resumo}",
+                        cobrancaId, (int)resp.StatusCode, resumo);
+                else
+                    _logger.LogError("Asaas recusou o estorno da cobrança {CobrancaId} (nada foi estornado): {Status}, {Resumo}",
+                        cobrancaId, (int)resp.StatusCode, resumo);
+
+                throw new AsaasIntegracaoException(resp.StatusCode, respBody, tipoErro,
+                    tipoErro == AsaasErroTipo.ResultadoIncerto
+                        ? $"Erro ao processar estorno: Asaas [{(int)resp.StatusCode}] sem resposta conclusiva: {resumo}"
+                        : $"Erro ao processar estorno: Asaas [{(int)resp.StatusCode}] recusou: {resumo}");
             }
 
             _logger.LogInformation("Estorno solicitado para cobrança Asaas: {CobrancaId}", cobrancaId);
