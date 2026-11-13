@@ -71,6 +71,13 @@ namespace Tratoo.Domain.Features.Pagamentos
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, StatusPagamento.Retido));
         }
 
+        public Task<int> AnteciparLiberacaoAutomaticaAsync(Guid contratoServicoId, DateTime agora)
+            => _db.Pagamentos
+                .Where(p => p.ContratoServicoId == contratoServicoId
+                         && p.Status == StatusPagamento.Retido
+                         && (p.LiberacaoAutomaticaEm == null || p.LiberacaoAutomaticaEm > agora))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.LiberacaoAutomaticaEm, (DateTime?)agora));
+
         public async Task<List<Pagamento>> GetPendentesLiberacaoAsync(DateTime ate)
         {
             return await _db.Pagamentos

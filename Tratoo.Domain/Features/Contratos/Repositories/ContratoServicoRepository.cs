@@ -59,6 +59,38 @@ namespace Tratoo.Domain.Features.Contratos
         /// momento da escrita. Se outra réplica já o cancelou — ou o usuário assinou /
         /// cancelou entre a leitura e a escrita — nada é alterado e devolve false.
         /// </summary>
+        public Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> IniciarTransacaoAsync()
+            => _ctx.Database.BeginTransactionAsync();
+
+        public Task BloquearParaAtualizacaoAsync(Guid contratoId)
+            => _ctx.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM \"ContratosServico\" WHERE \"Id\" = {contratoId} FOR UPDATE");
+
+        public async Task<ContratoServicoStatus?> ObterStatusAsync(Guid contratoId)
+            => await _ctx.ContratosServico.AsNoTracking()
+                .Where(c => c.Id == contratoId)
+                .Select(c => (ContratoServicoStatus?)c.Status)
+                .FirstOrDefaultAsync();
+
+        public async Task<bool> TentarRegistrarEntregaAsync(Guid contratoId, DateTime agora)
+            => await _ctx.ContratosServico
+                .Where(c => c.Id == contratoId && c.Status == ContratoServicoStatus.Ativo)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.Status, ContratoServicoStatus.AguardandoAprovacaoEntrega)
+                    .SetProperty(c => c.EntregaRegistradaEm, agora)) == 1;
+
+        public async Task<bool> TentarAprovarEntregaAsync(Guid contratoId)
+            => await _ctx.ContratosServico
+                .Where(c => c.Id == contratoId && c.Status == ContratoServicoStatus.AguardandoAprovacaoEntrega)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, ContratoServicoStatus.Encerrado)) == 1;
+
+        public async Task<bool> TentarRejeitarEntregaAsync(Guid contratoId)
+            => await _ctx.ContratosServico
+                .Where(c => c.Id == contratoId && c.Status == ContratoServicoStatus.AguardandoAprovacaoEntrega)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.Status, ContratoServicoStatus.Ativo)
+                    .SetProperty(c => c.EntregaRegistradaEm, (DateTime?)null)) == 1;
+
         public async Task<bool> CancelarPorExpiracaoAsync(
             Guid contratoId, Guid propostaId, int projetoId, DateTime agora,
             string motivoContrato, string motivoProposta)

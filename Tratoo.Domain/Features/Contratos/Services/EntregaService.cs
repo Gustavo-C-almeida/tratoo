@@ -136,11 +136,25 @@ namespace Tratoo.Domain.Features.Contratos
                 }
             }
 
+            // Transição atômica Ativo → AguardandoAprovacaoEntrega, na mesma transação que grava a
+            // entrega. Duas entregas simultâneas (mesmo em réplicas diferentes): só uma muda o
+            // contrato; a outra recebe 400 e nada dela é gravado. Um cancelamento simultâneo
+            // (que trava a linha) também é excludente com o registro.
+            var agora = DateTime.UtcNow;
+            await using var tx = await _contratoRepo.IniciarTransacaoAsync();
+            if (!await _contratoRepo.TentarRegistrarEntregaAsync(contratoId, agora))
+            {
+                var atual = await _contratoRepo.ObterStatusAsync(contratoId);
+                throw new NegocioException(atual == ContratoServicoStatus.AguardandoAprovacaoEntrega
+                    ? "Já existe uma entrega aguardando aprovação para este contrato."
+                    : "A entrega só pode ser registrada em contratos ativos.");
+            }
+
             await _entregaRepo.AddAsync(entrega);
 
-            // Transição de status do contrato + compat com regra de cancelamento existente
+            // Mantém a entidade rastreada igual ao que o UPDATE condicional gravou.
             contrato.Status = ContratoServicoStatus.AguardandoAprovacaoEntrega;
-            contrato.EntregaRegistradaEm = DateTime.UtcNow;
+            contrato.EntregaRegistradaEm = agora;
 
             // Auditoria
             await RegistrarHistoricoAsync(contratoId, AcaoHistoricoContrato.EntregaCriada, prestadorId,
@@ -151,6 +165,7 @@ namespace Tratoo.Domain.Features.Contratos
                 await RegistrarHistoricoAsync(contratoId, AcaoHistoricoContrato.LinkAdicionado, prestadorId, $"Link: {l.Url}");
 
             await _entregaRepo.SaveChangesAsync();
+            await tx.CommitAsync();
 
             _logger.LogInformation(
                 "Entrega {EntregaId} registrada no contrato {ContratoId} pelo prestador {PrestadorId}.",
@@ -183,23 +198,35 @@ namespace Tratoo.Domain.Features.Contratos
             if (contrato.ContratanteId != contratanteId)
                 throw new NegocioException("Apenas o contratante pode aprovar a entrega.");
 
-            if (contrato.Status != ContratoServicoStatus.AguardandoAprovacaoEntrega)
+            // Transição atômica AguardandoAprovacaoEntrega → Encerrado. Aprovação dupla ou aprovação
+            // simultânea com rejeição: só uma das ações muda o contrato; a outra recebe 400.
+            // Na MESMA transação, a liberação do pagamento retido fica pendente de forma durável
+            // (liberação automática antecipada para agora): se a liberação imediata, logo abaixo,
+            // falhar — ou o processo cair entre o commit e ela —, o job de liberação automática
+            // a retoma. A reivindicação atômica do pagamento (Retido → TransferenciaEmProgresso)
+            // impede transferência dupla entre a liberação imediata, o job e a liberação manual.
+            var agora = DateTime.UtcNow;
+            await using var tx = await _contratoRepo.IniciarTransacaoAsync();
+            if (!await _contratoRepo.TentarAprovarEntregaAsync(contratoId))
                 throw new NegocioException("Não há entrega aguardando aprovação neste contrato.");
 
             var entrega = await _entregaRepo.GetPendentePorContratoAsync(contratoId)
                 ?? throw new NegocioException("Entrega pendente não encontrada.");
 
             entrega.Status = EntregaStatus.Aprovada;
-            entrega.AprovadaEm = DateTime.UtcNow;
+            entrega.AprovadaEm = agora;
             entrega.AprovadorId = contratanteId;
-            entrega.AtualizadoEm = DateTime.UtcNow;
+            entrega.AtualizadoEm = agora;
 
-            contrato.Status = ContratoServicoStatus.Encerrado;
+            contrato.Status = ContratoServicoStatus.Encerrado;   // igual ao UPDATE condicional
 
             await RegistrarHistoricoAsync(contratoId, AcaoHistoricoContrato.EntregaAprovada, contratanteId,
                 "Entrega aprovada pelo contratante.");
 
+            await _pagamentoRepo.AnteciparLiberacaoAutomaticaAsync(contratoId, agora);
+
             await _entregaRepo.SaveChangesAsync();
+            await tx.CommitAsync();
 
             _logger.LogInformation("Entrega {EntregaId} do contrato {ContratoId} aprovada pelo contratante {ContratanteId}.",
                 entrega.Id, contratoId, contratanteId);
@@ -235,7 +262,9 @@ namespace Tratoo.Domain.Features.Contratos
             if (contrato.ContratanteId != contratanteId)
                 throw new NegocioException("Apenas o contratante pode reprovar a entrega.");
 
-            if (contrato.Status != ContratoServicoStatus.AguardandoAprovacaoEntrega)
+            // Transição atômica AguardandoAprovacaoEntrega → Ativo (excludente com a aprovação).
+            await using var tx = await _contratoRepo.IniciarTransacaoAsync();
+            if (!await _contratoRepo.TentarRejeitarEntregaAsync(contratoId))
                 throw new NegocioException("Não há entrega aguardando aprovação neste contrato.");
 
             var entrega = await _entregaRepo.GetPendentePorContratoAsync(contratoId)
@@ -254,6 +283,7 @@ namespace Tratoo.Domain.Features.Contratos
                 $"Ajustes solicitados: {motivo.Trim()}");
 
             await _entregaRepo.SaveChangesAsync();
+            await tx.CommitAsync();
 
             _logger.LogInformation("Entrega {EntregaId} do contrato {ContratoId} rejeitada pelo contratante {ContratanteId}.",
                 entrega.Id, contratoId, contratanteId);

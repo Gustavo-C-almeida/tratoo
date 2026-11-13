@@ -21,6 +21,14 @@ namespace Tratoo.Domain.Features.Pagamentos
 
         /// <summary>Reverte TransferenciaEmProgresso → Retido (usado se a criação da transferência falhar).</summary>
         Task ReverterTransferenciaParaRetidoAsync(Guid pagamentoId);
+        /// <summary>
+        /// Antecipa para <paramref name="agora"/> a liberação automática do pagamento RETIDO do
+        /// contrato (o job de liberação passa a enxergá-lo). Usado na aprovação da entrega, dentro
+        /// da mesma transação: se a liberação imediata falhar ou o processo cair, a liberação já
+        /// está pendente de forma durável. Retorna as linhas afetadas.
+        /// </summary>
+        Task<int> AnteciparLiberacaoAutomaticaAsync(Guid contratoServicoId, DateTime agora);
+
         Task<List<Pagamento>> GetPendentesLiberacaoAsync(DateTime ate);
 
         /// <summary>

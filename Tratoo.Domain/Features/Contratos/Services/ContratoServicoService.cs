@@ -501,6 +501,14 @@ namespace Tratoo.Domain.Features.Contratos
         // ─────────────────────────────────────────────────────────────────────────
         public async Task CancelarAsync(Guid contratoId, int usuarioId, string? motivo)
         {
+            // Integridade das transições (achado D3): o contrato fica travado (SELECT ... FOR UPDATE)
+            // da leitura até o commit. Um registro de entrega simultâneo — que faz um UPDATE
+            // condicional na mesma linha — espera e, depois, encontra o contrato já cancelado; ou o
+            // registro vence e o cancelamento lê a entrega registrada (Situação 3). Se o estorno
+            // falhar, a transação desfaz tudo e o contrato continua como estava.
+            await using var tx = await _repo.IniciarTransacaoAsync();
+            await _repo.BloquearParaAtualizacaoAsync(contratoId);
+
             var contrato = await _repo.GetByIdAsync(contratoId)
                 ?? throw new NegocioException("Contrato não encontrado.");
 
@@ -559,6 +567,7 @@ namespace Tratoo.Domain.Features.Contratos
             contrato.CanceladoEm = DateTime.UtcNow;
 
             await _repo.SaveChangesAsync();
+            await tx.CommitAsync();
 
             // O motivo é texto livre do usuário: fica no contrato (MotivoCancelamento), não no log.
             _logger.LogInformation(

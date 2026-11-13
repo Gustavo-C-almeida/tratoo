@@ -29,6 +29,8 @@ namespace Tratoo.Tests.Seguranca
         private readonly WebApplication _app;
         private readonly ConcurrentQueue<EmailCapturado> _emails = new();
         private readonly ConcurrentQueue<string> _objetosGravados = new();
+        private readonly ConcurrentQueue<string> _objetosRemovidos = new();
+        private readonly ConcurrentQueue<string> _chamadasAsaas_ = new();
         private int _chamadasEmbeddings;
         private int _chamadasAsaas;
 
@@ -36,6 +38,10 @@ namespace Tratoo.Tests.Seguranca
         public int ChamadasEmbeddings => Volatile.Read(ref _chamadasEmbeddings);
         public int ChamadasAsaas => Volatile.Read(ref _chamadasAsaas);
         public IReadOnlyCollection<string> ObjetosGravados => _objetosGravados.ToArray();
+        public IReadOnlyCollection<string> ObjetosRemovidos => _objetosRemovidos.ToArray();
+
+        /// <summary>"MÉTODO caminho" de cada chamada ao Asaas falso (ex.: "POST /asaas/api/v3/transfers").</summary>
+        public IReadOnlyCollection<string> ChamadasAsaasDetalhadas => _chamadasAsaas_.ToArray();
 
         private ServidorExternoFalso(WebApplication app) => _app = app;
 
@@ -80,6 +86,7 @@ namespace Tratoo.Tests.Seguranca
             if (caminho.StartsWith("/asaas/", StringComparison.Ordinal))
             {
                 Interlocked.Increment(ref _chamadasAsaas);
+                _chamadasAsaas_.Enqueue($"{http.Request.Method} {caminho}");
                 await http.Response.WriteAsJsonAsync(new
                 {
                     @object = "payment", id = "pay_falso", status = "PENDING", value = 0,
@@ -90,7 +97,11 @@ namespace Tratoo.Tests.Seguranca
 
             // R2 / S3
             if (HttpMethods.IsPut(http.Request.Method) || HttpMethods.IsPost(http.Request.Method))
+            {
                 _objetosGravados.Enqueue(caminho);
+            }
+            if (HttpMethods.IsDelete(http.Request.Method))
+                _objetosRemovidos.Enqueue(caminho);
             http.Response.Headers.ETag = "\"etag-falso\"";
             http.Response.StatusCode = HttpMethods.IsDelete(http.Request.Method) ? 204 : 200;
         }
