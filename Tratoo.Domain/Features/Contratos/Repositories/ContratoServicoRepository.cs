@@ -52,13 +52,6 @@ namespace Tratoo.Domain.Features.Contratos
                     c.ExpiraEm < agora)
                 .ToListAsync();
 
-        /// <summary>
-        /// Cancela UM contrato por expiração e desfaz seus vínculos (proposta recusada,
-        /// projeto reaberto), tudo numa transação. O cancelamento é condicional: só
-        /// acontece se o contrato AINDA estiver pendente de assinatura e vencido no
-        /// momento da escrita. Se outra réplica já o cancelou — ou o usuário assinou /
-        /// cancelou entre a leitura e a escrita — nada é alterado e devolve false.
-        /// </summary>
         public Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> IniciarTransacaoAsync()
             => _ctx.Database.BeginTransactionAsync();
 
@@ -91,6 +84,13 @@ namespace Tratoo.Domain.Features.Contratos
                     .SetProperty(c => c.Status, ContratoServicoStatus.Ativo)
                     .SetProperty(c => c.EntregaRegistradaEm, (DateTime?)null)) == 1;
 
+        /// <summary>
+        /// Cancela UM contrato por expiração e desfaz seus vínculos (proposta recusada,
+        /// projeto reaberto), tudo numa transação. O cancelamento é condicional: só
+        /// acontece se o contrato AINDA estiver pendente de assinatura e vencido no
+        /// momento da escrita. Se outra réplica já o cancelou — ou o usuário assinou /
+        /// cancelou entre a leitura e a escrita — nada é alterado e devolve false.
+        /// </summary>
         public async Task<bool> CancelarPorExpiracaoAsync(
             Guid contratoId, Guid propostaId, int projetoId, DateTime agora,
             string motivoContrato, string motivoProposta)
