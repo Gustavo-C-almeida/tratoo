@@ -309,6 +309,8 @@ atômica do contrato e do pagamento.
 | `7b0acb8` | O estorno no gateway separa recusa comprovada (400 com `errors[]`, 401) de resultado incerto (rede, timeout, 5xx, qualquer outro status). |
 | `6180920` | Novo status `EstornoEmProgresso`, texto, sem migration. Veja abaixo. |
 | `4f40775` | M4: testes determinísticos das transições do contrato (registro, aprovação, rejeição, cancelamento). |
+| `66485de` | Liberação manual que perde a disputa pela reserva responde 409. |
+| `3acace4` | Aprovação × job registra `LiberacaoProcessadaPorOutraOperacao`, não falha. |
 
 O cancelamento passa a ter três fases:
 
@@ -323,13 +325,26 @@ O cancelamento passa a ter três fases:
    - recusa comprovada: contrato e reserva voltam juntos.
 
 A mesma reserva vale para o estorno solicitado pelo contratante. A abertura de disputa ficou condicional.
-A liberação manual que perde a reivindicação responde erro. O webhook de estorno é idempotente pelo
-estado e nunca sobrescreve `TransferenciaEmProgresso` nem `Liberado`.
+O webhook de estorno é idempotente pelo estado e nunca sobrescreve `TransferenciaEmProgresso` nem `Liberado`.
+
+**Liberação manual em conflito (`66485de`).** `POST /api/pagamentos/{id}/liberar` responde **409
+Conflict** quando perde a reivindicação para outra operação ou quando o pagamento está
+`EstornoEmProgresso`. A resposta vem de `ConflitoException`, que herda de `NegocioException`. Os demais
+status continuam respondendo 400, `TransferenciaEmProgresso` inclusive. No 409, o frontend recarrega o
+pagamento em vez de reabilitar o botão.
+
+**Aprovação × job (`3acace4`).** Às vezes o job libera o pagamento enquanto a aprovação está em
+andamento. Nesse caso, o histórico do contrato registra o evento informativo
+`LiberacaoProcessadaPorOutraOperacao`, com a situação real do pagamento. Antes ficava registrado
+`FalhaLiberacao` ou `PagamentoLiberado`. Falhas reais continuam como `FalhaLiberacao`, e o ledger não
+muda.
 
 **Testes:** `EstornoReservaTests`, com 17 testes contra Postgres real. Os 12 de fluxo falhavam contra o
 código anterior: cancelamento + job resultava em 1 estorno e 1 transferência, e o webhook sobrescrevia
-`Liberado`. `TransicoesContratoConcorrenciaTests` tem 6 testes. A suíte completa: 1020 aprovados,
-0 falhas, 8 ignorados.
+`Liberado`. `TransicoesContratoConcorrenciaTests` tem 6 testes, `TratamentoErrosConflitoTests` (409) e
+`AprovacaoLiberacaoConcorrenteTests` (evento informativo) também falhavam antes. A suíte completa:
+1022 aprovados, 0 falhas, 8 ignorados. Nenhuma migration nova: o `has-pending-model-changes` não acusa
+mudanças.
 
 **Limitações conhecidas (fora do escopo do D3):**
 - Se o processo cair entre a reserva e a resposta do Asaas, o pagamento fica `EstornoEmProgresso` sem
