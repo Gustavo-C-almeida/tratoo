@@ -12,6 +12,11 @@ namespace Tratoo.Domain.Enums
         FalhaTransferencia, // Transferência ao prestador falhou/cancelada (TRANSFER_FAILED/CANCELLED) — exige reprocessamento
         Cancelado,     // Cancelado antes do pagamento (contrato não executado)
         Estornado,     // Estorno processado pelo gateway
-        Falhou         // Pagamento falhou no gateway
+        Falhou,        // Pagamento falhou no gateway
+        // Estorno reservado: o valor está saindo de volta ao pagador (ou o resultado no gateway é
+        // incerto). Nenhuma liberação, disputa ou novo estorno parte daqui. Sai só para Estornado
+        // (gateway aceitou ou webhook PAYMENT_REFUNDED) ou, em falha DEFINITIVA, de volta a Retido.
+        // Gravado como texto (HasConversion<string>): não exige migration.
+        EstornoEmProgresso
     }
 }

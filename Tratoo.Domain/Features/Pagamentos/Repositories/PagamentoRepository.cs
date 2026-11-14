@@ -78,6 +78,65 @@ namespace Tratoo.Domain.Features.Pagamentos
                          && (p.LiberacaoAutomaticaEm == null || p.LiberacaoAutomaticaEm > agora))
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.LiberacaoAutomaticaEm, (DateTime?)agora));
 
+        private static readonly StatusPagamento[] NaoVigentes =
+            { StatusPagamento.Cancelado, StatusPagamento.Falhou, StatusPagamento.Estornado };
+
+        public Task<List<Pagamento>> ListarVigentesPorContratoAsync(Guid contratoServicoId)
+            => _db.Pagamentos.AsNoTracking()
+                .Where(p => p.ContratoServicoId == contratoServicoId && !NaoVigentes.Contains(p.Status))
+                .OrderByDescending(p => p.CriadoEm)
+                .ToListAsync();
+
+        public async Task<bool> TryReservarEstornoAsync(Guid pagamentoId)
+            => await _db.Pagamentos
+                .Where(p => p.Id == pagamentoId && p.Status == StatusPagamento.Retido)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, StatusPagamento.EstornoEmProgresso)) == 1;
+
+        public async Task<bool> TryConcluirEstornoAsync(Guid pagamentoId, DateTime agora)
+            => await _db.Pagamentos
+                .Where(p => p.Id == pagamentoId && p.Status == StatusPagamento.EstornoEmProgresso)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.Status, StatusPagamento.Estornado)
+                    .SetProperty(p => p.EstornadoEm, (DateTime?)agora)) == 1;
+
+        public async Task<bool> TryReverterReservaEstornoAsync(Guid pagamentoId)
+            => await _db.Pagamentos
+                .Where(p => p.Id == pagamentoId && p.Status == StatusPagamento.EstornoEmProgresso)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, StatusPagamento.Retido)) == 1;
+
+        public async Task<bool> MarcarEstornoIncertoAsync(Guid pagamentoId, string marcador)
+            => await _db.Pagamentos
+                .Where(p => p.Id == pagamentoId && p.Status == StatusPagamento.EstornoEmProgresso)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.StatusGateway, marcador)) == 1;
+
+        public async Task<bool> TryMarcarEmDisputaAsync(Guid pagamentoId)
+            => await _db.Pagamentos
+                .Where(p => p.Id == pagamentoId && p.Status == StatusPagamento.Retido)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, StatusPagamento.EmDisputa)) == 1;
+
+        public Task BloquearParaAtualizacaoAsync(Guid pagamentoId)
+            => _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM \"Pagamentos\" WHERE \"Id\" = {pagamentoId} FOR UPDATE");
+
+        public async Task<StatusPagamento?> ObterStatusAsync(Guid pagamentoId)
+            => await _db.Pagamentos.AsNoTracking()
+                .Where(p => p.Id == pagamentoId)
+                .Select(p => (StatusPagamento?)p.Status)
+                .FirstOrDefaultAsync();
+
+        public async Task<bool> TryConfirmarEstornoAsync(Guid pagamentoId, DateTime agora, IReadOnlyCollection<StatusPagamento> origens)
+            => await _db.Pagamentos
+                .Where(p => p.Id == pagamentoId && origens.Contains(p.Status))
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.Status, StatusPagamento.Estornado)
+                    .SetProperty(p => p.EstornadoEm, (DateTime?)agora)
+                    .SetProperty(p => p.StatusGateway, "REFUNDED")) == 1;
+
+        public Task<bool> ExisteLedgerAsync(Guid pagamentoId, TipoEntradaLedger tipo)
+            => _db.LedgerFinanceiro.AnyAsync(l => l.PagamentoId == pagamentoId && l.Tipo == tipo);
+
+        public void Descartar(object entidade) => _db.Entry(entidade).State = EntityState.Detached;
+
         public async Task<List<Pagamento>> GetPendentesLiberacaoAsync(DateTime ate)
         {
             return await _db.Pagamentos

@@ -59,11 +59,28 @@ namespace Tratoo.Domain.Features.Pagamentos
         Task SolicitarEstornoAsync(Guid pagamentoId, int contratanteId);
 
         /// <summary>
-        /// Processa o reembolso ao cancelar um contrato ativo com escrow retido.
-        /// Estorno integral ao contratante — a plataforma não retém taxa de cancelamento.
-        /// Não faz nada se não houver pagamento retido para o contrato.
+        /// Fase 1 do reembolso por cancelamento (achado A1), chamada DENTRO da transação do
+        /// cancelamento: reserva de forma atômica o pagamento Retido do contrato
+        /// (Retido → EstornoEmProgresso), o que exclui a liberação (manual ou do job), a disputa
+        /// e outro estorno. Recusa (NegocioException) se o pagamento já estiver em transferência,
+        /// liberado, em disputa ou em estorno. Devolve null se não há valor retido a estornar.
+        /// Não chama o gateway.
         /// </summary>
-        Task EstornarCancelamentoContratoAsync(Guid contratoServicoId, int usuarioId);
+        Task<Guid?> ReservarEstornoParaCancelamentoAsync(Guid contratoServicoId);
+
+        /// <summary>
+        /// Fase 2 de um estorno reservado: chama o Asaas FORA de qualquer transação e registra o
+        /// desfecho (status + ledger na mesma transação). Nunca devolve o pagamento a Retido:
+        /// em <see cref="ResultadoEstorno.FalhaDefinitiva"/> o chamador decide desfazer a reserva.
+        /// </summary>
+        Task<ResultadoEstorno> EstornarReservadoAsync(Guid pagamentoId, int usuarioId, string motivo);
+
+        /// <summary>
+        /// Desfaz a reserva (EstornoEmProgresso → Retido) depois de falha DEFINITIVA do gateway e
+        /// adiciona a entrada de ledger. Não grava: o chamador faz SaveChanges e o commit na
+        /// mesma transação em que desfaz o resto.
+        /// </summary>
+        Task<bool> ReverterReservaEstornoAsync(Guid pagamentoId, int usuarioId, string motivo);
 
         /// <summary>
         /// Simula o recebimento do pagamento PIX diretamente via API do Asaas Sandbox.

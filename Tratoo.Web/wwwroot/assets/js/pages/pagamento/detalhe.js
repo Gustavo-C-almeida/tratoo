@@ -23,6 +23,7 @@ const STATUS_LABEL = {
     Cancelado:  'Cancelado',
     Falhou:     'Falhou',
     Estornado:  'Estornado',
+    EstornoEmProgresso: 'Reembolso em processamento',
     EmDisputa:  'Em disputa'
 };
 
@@ -37,6 +38,7 @@ const STATUS_CLASS = {
     Cancelado:  'badge-cancelado',
     Falhou:     'badge-cancelado',
     Estornado:  'badge-encerrado',
+    EstornoEmProgresso: 'badge-aguardando',
     EmDisputa:  'badge-disputa'
 };
 

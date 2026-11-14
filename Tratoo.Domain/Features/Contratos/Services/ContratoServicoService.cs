@@ -501,78 +501,119 @@ namespace Tratoo.Domain.Features.Contratos
         // ─────────────────────────────────────────────────────────────────────────
         public async Task CancelarAsync(Guid contratoId, int usuarioId, string? motivo)
         {
-            // Integridade das transições (achado D3): o contrato fica travado (SELECT ... FOR UPDATE)
-            // da leitura até o commit. Um registro de entrega simultâneo — que faz um UPDATE
-            // condicional na mesma linha — espera e, depois, encontra o contrato já cancelado; ou o
-            // registro vence e o cancelamento lê a entrega registrada (Situação 3). Se o estorno
-            // falhar, a transação desfaz tudo e o contrato continua como estava.
-            await using var tx = await _repo.IniciarTransacaoAsync();
-            await _repo.BloquearParaAtualizacaoAsync(contratoId);
-
-            var contrato = await _repo.GetByIdAsync(contratoId)
-                ?? throw new NegocioException("Contrato não encontrado.");
-
-            var ehContratante = contrato.ContratanteId == usuarioId;
-            var ehPrestador   = contrato.PrestadorId   == usuarioId;
-
-            if (!ehContratante && !ehPrestador)
-                throw new NegocioException("Você não tem permissão para cancelar este contrato.");
-
-            if (contrato.Status == ContratoServicoStatus.Cancelado ||
-                contrato.Status == ContratoServicoStatus.Encerrado)
-                throw new NegocioException($"Contrato já está {contrato.Status.ToString().ToLower()} e não pode ser cancelado.");
-
-            // ── Situação 3: entrega registrada → disputa obrigatória ────────────
-            if (contrato.EntregaRegistradaEm.HasValue)
-                throw new NegocioException(
-                    "Há uma entrega registrada neste contrato. Para solicitar cancelamento, abra uma disputa — " +
-                    "nossa equipe irá analisar e decidir sobre o reembolso.");
-
-            // ── Situação 2: ativo sem entrega → estorno integral ────────────────
-            if (contrato.Status == ContratoServicoStatus.Ativo)
+            // Fase 1 — transação curta, SEM chamada externa (achados D3 e A1). O contrato fica
+            // travado (SELECT ... FOR UPDATE) da leitura até o commit: um registro de entrega
+            // simultâneo espera e depois encontra o contrato cancelado, ou o registro vence e o
+            // cancelamento lê a entrega (Situação 3). Na mesma transação, o pagamento retido é
+            // RESERVADO para estorno (Retido → EstornoEmProgresso), o que exclui a liberação
+            // manual, o job de liberação automática e a disputa. Nenhum lock fica aberto durante a
+            // chamada ao Asaas.
+            Guid? pagamentoReservado = null;
+            await using (var tx = await _repo.IniciarTransacaoAsync())
             {
-                await _pagamentoService.EstornarCancelamentoContratoAsync(contratoId, usuarioId);
-            }
-            // ── Situação 1: gerado/aguardando assinatura → cancelamento gratuito
-            else if (contrato.Status == ContratoServicoStatus.Gerado ||
-                     contrato.Status == ContratoServicoStatus.AguardandoAssinatura)
-            {
-                // Proposta volta a estar disponível e projeto reabre
-                var proposta = await _propostaRepo.GetByIdAsync(contrato.PropostaId);
-                if (proposta != null)
+                await _repo.BloquearParaAtualizacaoAsync(contratoId);
+
+                var contrato = await _repo.GetByIdAsync(contratoId)
+                    ?? throw new NegocioException("Contrato não encontrado.");
+
+                var ehContratante = contrato.ContratanteId == usuarioId;
+                var ehPrestador   = contrato.PrestadorId   == usuarioId;
+
+                if (!ehContratante && !ehPrestador)
+                    throw new NegocioException("Você não tem permissão para cancelar este contrato.");
+
+                if (contrato.Status == ContratoServicoStatus.Cancelado ||
+                    contrato.Status == ContratoServicoStatus.Encerrado)
+                    throw new NegocioException($"Contrato já está {contrato.Status.ToString().ToLower()} e não pode ser cancelado.");
+
+                // ── Situação 3: entrega registrada → disputa obrigatória ────────────
+                if (contrato.EntregaRegistradaEm.HasValue)
+                    throw new NegocioException(
+                        "Há uma entrega registrada neste contrato. Para solicitar cancelamento, abra uma disputa — " +
+                        "nossa equipe irá analisar e decidir sobre o reembolso.");
+
+                // ── Situação 2: ativo sem entrega → estorno integral (reservado aqui) ─
+                if (contrato.Status == ContratoServicoStatus.Ativo)
                 {
-                    proposta.Status = StatusPropostaProjeto.Recusada;
-                    proposta.MotivoCancelamento = "Contrato cancelado antes da assinatura.";
-                    proposta.CanceladoPorId = usuarioId;
-                    proposta.CanceladoEm = DateTime.UtcNow;
-                    proposta.AtualizadoEm = DateTime.UtcNow;
+                    pagamentoReservado = await _pagamentoService.ReservarEstornoParaCancelamentoAsync(contratoId);
+                }
+                // ── Situação 1: gerado/aguardando assinatura → cancelamento gratuito
+                else if (contrato.Status == ContratoServicoStatus.Gerado ||
+                         contrato.Status == ContratoServicoStatus.AguardandoAssinatura)
+                {
+                    // Proposta volta a estar disponível e projeto reabre
+                    var proposta = await _propostaRepo.GetByIdAsync(contrato.PropostaId);
+                    if (proposta != null)
+                    {
+                        proposta.Status = StatusPropostaProjeto.Recusada;
+                        proposta.MotivoCancelamento = "Contrato cancelado antes da assinatura.";
+                        proposta.CanceladoPorId = usuarioId;
+                        proposta.CanceladoEm = DateTime.UtcNow;
+                        proposta.AtualizadoEm = DateTime.UtcNow;
+                    }
+
+                    var projeto = await _projetoRepo.GetByIdAsync(contrato.ProjetoId);
+                    if (projeto != null)
+                    {
+                        projeto.Status = StatusProjeto.Aberto;
+                        projeto.FreelancerSelecionadoId = null;
+                        projeto.AtualizadoEm = DateTime.UtcNow;
+                    }
+                }
+                else
+                {
+                    throw new NegocioException($"Contrato no status '{contrato.Status}' não pode ser cancelado.");
                 }
 
-                var projeto = await _projetoRepo.GetByIdAsync(contrato.ProjetoId);
-                if (projeto != null)
-                {
-                    projeto.Status = StatusProjeto.Aberto;
-                    projeto.FreelancerSelecionadoId = null;
-                    projeto.AtualizadoEm = DateTime.UtcNow;
-                }
-            }
-            else
-            {
-                throw new NegocioException($"Contrato no status '{contrato.Status}' não pode ser cancelado.");
-            }
+                contrato.Status = ContratoServicoStatus.Cancelado;
+                contrato.MotivoCancelamento = motivo?.Trim();
+                contrato.CanceladoPorId = usuarioId;
+                contrato.CanceladoEm = DateTime.UtcNow;
 
-            contrato.Status = ContratoServicoStatus.Cancelado;
-            contrato.MotivoCancelamento = motivo?.Trim();
-            contrato.CanceladoPorId = usuarioId;
-            contrato.CanceladoEm = DateTime.UtcNow;
-
-            await _repo.SaveChangesAsync();
-            await tx.CommitAsync();
+                await _repo.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
 
             // O motivo é texto livre do usuário: fica no contrato (MotivoCancelamento), não no log.
             _logger.LogInformation(
                 "Contrato {ContratoId} cancelado por usuário {UsuarioId}. Motivo informado: {MotivoInformado}",
                 contratoId, usuarioId, !string.IsNullOrWhiteSpace(motivo));
+
+            if (pagamentoReservado is not Guid pagamentoId)
+                return;
+
+            // Fase 2 — estorno no Asaas, fora de transação. Estornado, estornado sem registro ou
+            // incerto: o contrato fica cancelado e o pagamento nunca volta a ser liberável (o
+            // webhook PAYMENT_REFUNDED ou a conciliação concluem os dois últimos).
+            var resultado = await _pagamentoService.EstornarReservadoAsync(
+                pagamentoId, usuarioId, "Reembolso integral por cancelamento de contrato");
+            if (resultado != ResultadoEstorno.FalhaDefinitiva)
+                return;
+
+            // Fase 3 — recusa comprovada do gateway: nada foi estornado. Desfaz o cancelamento e a
+            // reserva JUNTOS; até o commit, ninguém age sobre o pagamento (ainda EstornoEmProgresso).
+            try
+            {
+                await using var tx = await _repo.IniciarTransacaoAsync();
+                await _repo.BloquearParaAtualizacaoAsync(contratoId);
+                if (!await _repo.TentarDesfazerCancelamentoAsync(contratoId, usuarioId))
+                    _logger.LogError("Cancelamento do contrato {ContratoId} não pôde ser desfeito: o contrato mudou de estado.", contratoId);
+                await _pagamentoService.ReverterReservaEstornoAsync(
+                    pagamentoId, usuarioId, "Cancelamento do contrato desfeito: o gateway recusou o reembolso.");
+                await _repo.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex,
+                    "Reembolso do contrato {ContratoId} recusado pelo gateway e o cancelamento não pôde ser desfeito. " +
+                    "Contrato Cancelado com o pagamento {PagamentoId} em EstornoEmProgresso, SEM estorno: REQUER INTERVENÇÃO.",
+                    contratoId, pagamentoId);
+                throw new NegocioException(
+                    "Não foi possível processar o reembolso no gateway. O cancelamento ficou pendente de análise pela nossa equipe.");
+            }
+
+            throw new NegocioException("Não foi possível processar o reembolso no gateway. Tente novamente.");
         }
 
         // ─────────────────────────────────────────────────────────────────────────

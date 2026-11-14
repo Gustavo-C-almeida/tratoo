@@ -41,6 +41,13 @@ namespace Tratoo.Domain.Features.Contratos
         /// <summary>AguardandoAprovacaoEntrega → Ativo (limpa EntregaRegistradaEm). True se mudou.</summary>
         Task<bool> TentarRejeitarEntregaAsync(Guid contratoId);
 
+        /// <summary>
+        /// Desfaz um cancelamento cujo reembolso o gateway recusou de forma comprovada:
+        /// Cancelado → Ativo, só se o contrato ainda estiver cancelado por <paramref name="usuarioId"/>.
+        /// Só existe para a fase 3 do cancelamento com estorno (achado A1).
+        /// </summary>
+        Task<bool> TentarDesfazerCancelamentoAsync(Guid contratoId, int usuarioId);
+
         Task AddAsync(ContratoServico contrato);
         Task AddSnapshotAsync(ContratoSnapshot snapshot);
         Task AddHistoricoAsync(HistoricoAssinatura historico);

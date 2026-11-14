@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore.Storage;
+using Tratoo.Domain.Enums;
 using Tratoo.Domain.Models;
 using Tratoo.Domain.Models.Financeiro;
 
@@ -28,6 +29,54 @@ namespace Tratoo.Domain.Features.Pagamentos
         /// está pendente de forma durável. Retorna as linhas afetadas.
         /// </summary>
         Task<int> AnteciparLiberacaoAutomaticaAsync(Guid contratoServicoId, DateTime agora);
+
+        // ── Estorno com reserva (achado A1) ─────────────────────────────────
+        // O estorno segue o mesmo padrão da liberação: reserva condicional no banco, chamada ao
+        // Asaas FORA de qualquer transação e só então a finalização. A reserva
+        // (Retido → EstornoEmProgresso) e a reivindicação da liberação
+        // (Retido → TransferenciaEmProgresso) partem do MESMO estado: no máximo uma vence.
+
+        /// <summary>Pagamentos do contrato que ainda contam (não Cancelado/Falhou/Estornado), sem rastrear.</summary>
+        Task<List<Pagamento>> ListarVigentesPorContratoAsync(Guid contratoServicoId);
+
+        /// <summary>Transição atômica Retido → EstornoEmProgresso. True se este chamador reservou.</summary>
+        Task<bool> TryReservarEstornoAsync(Guid pagamentoId);
+
+        /// <summary>EstornoEmProgresso → Estornado (o Asaas aceitou o estorno). True se aplicou.</summary>
+        Task<bool> TryConcluirEstornoAsync(Guid pagamentoId, DateTime agora);
+
+        /// <summary>
+        /// EstornoEmProgresso → Retido. Só para falha DEFINITIVA do Asaas (nada foi estornado).
+        /// Nunca usar com resultado incerto.
+        /// </summary>
+        Task<bool> TryReverterReservaEstornoAsync(Guid pagamentoId);
+
+        /// <summary>Marca (StatusGateway) um estorno reservado cujo resultado no Asaas é incerto.</summary>
+        Task<bool> MarcarEstornoIncertoAsync(Guid pagamentoId, string marcador);
+
+        /// <summary>Transição atômica Retido → EmDisputa. True se aplicou.</summary>
+        Task<bool> TryMarcarEmDisputaAsync(Guid pagamentoId);
+
+        /// <summary>Trava a linha do pagamento (SELECT ... FOR UPDATE) até o fim da transação.</summary>
+        Task BloquearParaAtualizacaoAsync(Guid pagamentoId);
+
+        /// <summary>Status atual no banco, ignorando o que estiver rastreado em memória.</summary>
+        Task<StatusPagamento?> ObterStatusAsync(Guid pagamentoId);
+
+        /// <summary>
+        /// Confirmação de estorno vinda do gateway: → Estornado, só a partir dos estados em que
+        /// nenhum valor saiu para o prestador. True se aplicou.
+        /// </summary>
+        Task<bool> TryConfirmarEstornoAsync(Guid pagamentoId, DateTime agora, IReadOnlyCollection<StatusPagamento> origens);
+
+        Task<bool> ExisteLedgerAsync(Guid pagamentoId, TipoEntradaLedger tipo);
+
+        /// <summary>
+        /// Solta (detach) uma entidade que não chegou a ser gravada — depois de um SaveChanges que
+        /// falhou —, para que um SaveChanges posterior no mesmo escopo não a grave fora da
+        /// transação a que pertencia.
+        /// </summary>
+        void Descartar(object entidade);
 
         Task<List<Pagamento>> GetPendentesLiberacaoAsync(DateTime ate);
 

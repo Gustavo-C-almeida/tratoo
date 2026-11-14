@@ -490,23 +490,82 @@ namespace Tratoo.Domain.Features.Pagamentos
             await NotificarPagamentoConfirmadoAsync(pagamento);
         }
 
+        // Estados em que nenhum valor saiu para o prestador: a confirmação de estorno do gateway
+        // leva a Estornado. TransferenciaEmProgresso e Liberado NÃO: o valor já saiu ou está
+        // saindo — o status fica como está e o caso vai para conciliação manual.
+        private static readonly StatusPagamento[] OrigensEstornoConfirmado =
+        {
+            StatusPagamento.Criado, StatusPagamento.Aguardando, StatusPagamento.Processando,
+            StatusPagamento.Retido, StatusPagamento.EmDisputa, StatusPagamento.EstornoEmProgresso,
+            StatusPagamento.FalhaTransferencia
+        };
+
+        /// <summary>
+        /// PAYMENT_REFUNDED (achado A1). Idempotente pelo ESTADO, não só pela chave do webhook: a
+        /// linha do pagamento fica travada durante a decisão, a transição é condicional e a
+        /// entrada EstornoConcluido do ledger é gravada uma única vez, na mesma transação.
+        /// </summary>
         private async Task ProcessarEstornoConfirmadoAsync(Pagamento pagamento)
         {
-            pagamento.Status = StatusPagamento.Estornado;
-            pagamento.EstornadoEm = DateTime.UtcNow;
-            pagamento.StatusGateway = "REFUNDED";
+            await using var tx = await _repo.IniciarTransacaoAsync();
+            await _repo.BloquearParaAtualizacaoAsync(pagamento.Id);
 
-            await _repo.AddLedgerAsync(new LedgerFinanceiro
+            var atual = await _repo.ObterStatusAsync(pagamento.Id);
+            var jaRegistrado = await _repo.ExisteLedgerAsync(pagamento.Id, TipoEntradaLedger.EstornoConcluido);
+            string? descricaoLedger = null;
+
+            if (atual is StatusPagamento origem && OrigensEstornoConfirmado.Contains(origem))
             {
-                PagamentoId = pagamento.Id,
-                Tipo = TipoEntradaLedger.EstornoConcluido,
-                Valor = -pagamento.ValorBruto,
-                Descricao = $"Estorno confirmado pelo gateway. Valor devolvido: R$ {pagamento.ValorBruto:F2}",
-                ReferenciaExterna = pagamento.GatewayPagamentoId,
-                CriadoPorId = 0
-            });
+                await _repo.TryConfirmarEstornoAsync(pagamento.Id, DateTime.UtcNow, OrigensEstornoConfirmado);
+                descricaoLedger = $"Estorno confirmado pelo gateway. Valor devolvido: R$ {pagamento.ValorBruto:F2}";
+                _logger.LogInformation("Estorno confirmado para pagamento {PagamentoId} ({Origem} → Estornado).", pagamento.Id, origem);
+            }
+            else if (atual == StatusPagamento.Estornado)
+            {
+                descricaoLedger = $"Estorno confirmado pelo gateway. Valor devolvido: R$ {pagamento.ValorBruto:F2}";
+                if (jaRegistrado)
+                    _logger.LogInformation("Estorno do pagamento {PagamentoId} já confirmado — ignorado (idempotência).", pagamento.Id);
+            }
+            else if (atual is StatusPagamento.TransferenciaEmProgresso or StatusPagamento.Liberado)
+            {
+                descricaoLedger = $"[CONFLITO — CONCILIAÇÃO MANUAL] Estorno de R$ {pagamento.ValorBruto:F2} confirmado pelo gateway " +
+                                  $"com o pagamento em {atual}. Status não alterado.";
+                _logger.LogCritical(
+                    "CONFLITO: o gateway confirmou o estorno do pagamento {PagamentoId}, que está {Status} (valor já saiu ou está " +
+                    "saindo ao prestador). Status NÃO alterado. REQUER CONCILIAÇÃO MANUAL.", pagamento.Id, atual);
+            }
+            else
+            {
+                _logger.LogWarning("Confirmação de estorno do pagamento {PagamentoId} em status {Status} — ignorada.", pagamento.Id, atual);
+            }
 
-            _logger.LogInformation("Estorno confirmado para pagamento {PagamentoId}.", pagamento.Id);
+            LedgerFinanceiro? registro = null;
+            if (descricaoLedger is not null && !jaRegistrado)
+            {
+                registro = new LedgerFinanceiro
+                {
+                    PagamentoId = pagamento.Id,
+                    Tipo = TipoEntradaLedger.EstornoConcluido,
+                    Valor = -pagamento.ValorBruto,
+                    Descricao = descricaoLedger,
+                    ReferenciaExterna = pagamento.GatewayPagamentoId,
+                    CriadoPorId = 0
+                };
+                await _repo.AddLedgerAsync(registro);
+            }
+
+            try
+            {
+                await _repo.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                // O webhook falha e o Asaas reenvia; a entrada não pode ir ao banco depois, fora
+                // da transação, pelo SaveChanges do registro do webhook.
+                if (registro is not null) _repo.Descartar(registro);
+                throw;
+            }
         }
 
         private async Task ProcessarTransferenciaConcluidaAsync(Pagamento pagamento, string payloadJson)
@@ -848,6 +907,12 @@ namespace Tratoo.Domain.Features.Pagamentos
             await RegistrarAuditoriaLiberacaoAsync(pagamento, contratanteId, ip, userAgent);
 
             await ExecutarLiberacaoAsync(pagamento, contratanteId, observacao);
+
+            // Perdeu a reivindicação atômica (job, outra liberação ou um estorno reservado chegou
+            // antes): nada foi transferido por esta chamada — não responde como se tivesse liberado.
+            if (pagamento.Status == StatusPagamento.Retido)
+                throw new NegocioException("O pagamento está sendo processado por outra operação. Atualize a página e tente novamente.");
+
             return MapearParaResumoDto(pagamento);
         }
 
@@ -1113,7 +1178,12 @@ namespace Tratoo.Domain.Features.Pagamentos
                     : null
             };
 
-            pagamento.Status = StatusPagamento.EmDisputa;
+            // Retido → EmDisputa condicional (achado A1): não sobrescreve um estorno reservado nem
+            // uma transferência reivindicada no meio do caminho, nem abre duas disputas.
+            await using var tx = await _repo.IniciarTransacaoAsync();
+            if (!await _repo.TryMarcarEmDisputaAsync(pagamentoId))
+                throw new NegocioException("O pagamento mudou de estado e não aceita disputa agora. Atualize a página.");
+            pagamento.Status = StatusPagamento.EmDisputa; // igual ao UPDATE condicional
 
             await _repo.AddDisputaAsync(disputa);
             await _repo.AddLedgerAsync(new LedgerFinanceiro
@@ -1126,6 +1196,7 @@ namespace Tratoo.Domain.Features.Pagamentos
             });
 
             await _repo.SaveChangesAsync();
+            await tx.CommitAsync();
 
             _logger.LogWarning("Disputa aberta para pagamento {PagamentoId} pelo usuário {UsuarioId}.", pagamentoId, usuarioId);
 
@@ -1253,8 +1324,37 @@ namespace Tratoo.Domain.Features.Pagamentos
                 var prazoEntrega = ObterPrazoEntregaDoContrato(pagamento.ContratoServico!);
                 if (prazoEntrega.HasValue && prazoEntrega.Value < DateTime.UtcNow)
                     throw new NegocioException("O prazo de entrega já passou. Para disputar o pagamento, abra uma disputa.");
+
+                // Valor em escrow: estorno com reserva (achado A1) — exclui liberação, disputa e
+                // cancelamento simultâneos, e nunca deixa liberável um pagamento já estornado.
+                if (string.IsNullOrWhiteSpace(pagamento.GatewayPagamentoId))
+                    throw new NegocioException("Cobrança no gateway não encontrada para estorno.");
+                if (!await _repo.TryReservarEstornoAsync(pagamento.Id))
+                    throw new NegocioException("O pagamento está sendo processado por outra operação. Atualize a página e tente novamente.");
+
+                var resultado = await EstornarReservadoAsync(pagamento.Id, contratanteId, "Estorno solicitado pelo contratante");
+                if (resultado == ResultadoEstorno.FalhaDefinitiva)
+                {
+                    try
+                    {
+                        await using var tx = await _repo.IniciarTransacaoAsync();
+                        await ReverterReservaEstornoAsync(pagamento.Id, contratanteId, "Estorno solicitado pelo contratante recusado pelo gateway.");
+                        await _repo.SaveChangesAsync();
+                        await tx.CommitAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        // A exceção abaixo encerra o escopo: nada do que ficou pendente é gravado depois.
+                        _logger.LogCritical(ex,
+                            "Não foi possível desfazer a reserva de estorno do pagamento {PagamentoId} (nada foi estornado). " +
+                            "Pagamento bloqueado em EstornoEmProgresso: REQUER INTERVENÇÃO.", pagamento.Id);
+                    }
+                    throw new NegocioException("Não foi possível processar o estorno no gateway. Tente novamente.");
+                }
+                return;
             }
 
+            // Ainda não pago (Aguardando): cancela a cobrança no gateway; não há valor em escrow.
             await ExecutarEstornoAsync(pagamento, contratanteId);
             await _repo.SaveChangesAsync();
         }
@@ -1555,53 +1655,181 @@ namespace Tratoo.Domain.Features.Pagamentos
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // ESTORNO POR CANCELAMENTO DE CONTRATO (integral)
+        // ESTORNO COM RESERVA (cancelamento de contrato e estorno solicitado) — achado A1
         // ─────────────────────────────────────────────────────────────────────────
-        public async Task EstornarCancelamentoContratoAsync(Guid contratoServicoId, int usuarioId)
+        // Mesmo padrão da liberação: (1) reserva condicional no banco, Retido → EstornoEmProgresso,
+        // que exclui a reivindicação da liberação (Retido → TransferenciaEmProgresso), a disputa e
+        // outro estorno; (2) chamada ao Asaas FORA de transação e sem lock; (3) desfecho:
+        //   • aceito        → Estornado + ledger, na mesma transação;
+        //   • aceito, mas a gravação falhou → continua EstornoEmProgresso (bloqueado) até o webhook;
+        //   • incerto       → continua EstornoEmProgresso, marcado para conciliação, sem retentar;
+        //   • recusa comprovada → o chamador desfaz a reserva (volta a Retido).
+        // Um pagamento cujo estorno PODE ter acontecido nunca volta a Retido.
+
+        /// <summary>Marca em <c>Pagamento.StatusGateway</c> de um estorno com resultado incerto.</summary>
+        public const string MarcadorEstornoIncerto = "ESTORNO_INCERTO";
+
+        private static string? BloqueioDeCancelamento(StatusPagamento status) => status switch
         {
-            var pagamento = await _repo.GetByContratoServicoIdAsync(contratoServicoId);
+            StatusPagamento.TransferenciaEmProgresso =>
+                "O pagamento deste contrato está em transferência ao prestador. O contrato não pode ser cancelado agora.",
+            StatusPagamento.Liberado =>
+                "O pagamento deste contrato já foi liberado ao prestador e o contrato não pode mais ser cancelado. Fale com o suporte.",
+            StatusPagamento.FalhaTransferencia =>
+                "Há uma transferência ao prestador pendente de análise neste contrato. Fale com o suporte antes de cancelar.",
+            StatusPagamento.EmDisputa =>
+                "Há uma disputa aberta para o pagamento deste contrato. Aguarde a decisão antes de cancelar.",
+            StatusPagamento.EstornoEmProgresso =>
+                "Já existe um reembolso em processamento para este contrato.",
+            _ => null
+        };
 
-            // Se não há pagamento retido em escrow, não há ação financeira
-            if (pagamento == null || pagamento.Status != StatusPagamento.Retido)
-                return;
+        public async Task<Guid?> ReservarEstornoParaCancelamentoAsync(Guid contratoServicoId)
+        {
+            var vigentes = await _repo.ListarVigentesPorContratoAsync(contratoServicoId);
 
+            foreach (var p in vigentes)
+                if (BloqueioDeCancelamento(p.Status) is string mensagem)
+                    throw new NegocioException(mensagem);
+
+            var retidos = vigentes.Where(p => p.Status == StatusPagamento.Retido).ToList();
+            if (retidos.Count == 0)
+                return null; // sem valor em escrow (sem pagamento, ou ainda não pago): nada a estornar
+
+            if (retidos.Count > 1)
+                throw new NegocioException("Há mais de um pagamento retido neste contrato. Fale com o suporte para cancelar.");
+
+            var pagamento = retidos[0];
             if (string.IsNullOrWhiteSpace(pagamento.GatewayPagamentoId))
+                throw new NegocioException("O pagamento deste contrato não tem cobrança no gateway para reembolsar. Fale com o suporte.");
+
+            // Retido → EstornoEmProgresso. Quem perder a corrida (liberação manual, job, disputa)
+            // não faz nada; se o cancelamento perder, ele é recusado e nada muda.
+            if (!await _repo.TryReservarEstornoAsync(pagamento.Id))
+                throw new NegocioException("O pagamento deste contrato está sendo processado por outra operação. Tente novamente em instantes.");
+
+            return pagamento.Id;
+        }
+
+        public async Task<ResultadoEstorno> EstornarReservadoAsync(Guid pagamentoId, int usuarioId, string motivo)
+        {
+            var status = await _repo.ObterStatusAsync(pagamentoId);
+            if (status != StatusPagamento.EstornoEmProgresso)
+                throw new InvalidOperationException(
+                    $"Estorno sem reserva: o pagamento {pagamentoId} está {status?.ToString() ?? "inexistente"}.");
+
+            // Só dados imutáveis (cobrança e valor): o status em memória pode estar desatualizado.
+            var pagamento = await _repo.GetByIdAsync(pagamentoId)
+                ?? throw new InvalidOperationException($"Pagamento {pagamentoId} não encontrado.");
+            var cobranca = pagamento.GatewayPagamentoId;
+            var valor = pagamento.ValorBruto;
+
+            if (string.IsNullOrWhiteSpace(cobranca))
             {
-                _logger.LogWarning(
-                    "Cancelamento do contrato {ContratoId}: pagamento {PagamentoId} sem ID de gateway — estorno ignorado.",
-                    contratoServicoId, pagamento.Id);
-                return;
+                _logger.LogWarning("Estorno do pagamento {PagamentoId} sem cobrança no gateway: nada foi estornado.", pagamentoId);
+                return ResultadoEstorno.FalhaDefinitiva;
             }
 
+            // ── Fase 2: Asaas, fora de transação e sem lock ────────────────────
             try
             {
-                // Estorno integral — plataforma não retém taxa de cancelamento
-                await _gateway.EstornarCobrancaAsync(pagamento.GatewayPagamentoId, null);
+                await _gateway.EstornarCobrancaAsync(cobranca, null);
+            }
+            catch (AsaasIntegracaoException ex) when (ex.TipoErro != AsaasErroTipo.ResultadoIncerto)
+            {
+                _logger.LogWarning(ex,
+                    "Asaas recusou o estorno do pagamento {PagamentoId} ({TipoErro}): nada foi estornado.",
+                    pagamentoId, ex.TipoErro);
+                return ResultadoEstorno.FalhaDefinitiva;
             }
             catch (Exception ex)
             {
+                // Rede, timeout, 5xx ou qualquer erro não classificado: o estorno PODE ter
+                // acontecido. O pagamento fica EstornoEmProgresso (nada o libera) até a
+                // confirmação pelo webhook PAYMENT_REFUNDED ou a conciliação.
                 _logger.LogError(ex,
-                    "Falha ao estornar cobrança {CobrancaId} no gateway (cancelamento contrato {ContratoId}).",
-                    pagamento.GatewayPagamentoId, contratoServicoId);
-                throw new NegocioException("Não foi possível processar o reembolso no gateway. Tente novamente.");
+                    "Estorno do pagamento {PagamentoId} com RESULTADO INCERTO no Asaas. Pagamento mantido em " +
+                    "EstornoEmProgresso, sem nova tentativa automática. REQUER CONCILIAÇÃO com o Asaas.",
+                    pagamentoId);
+                var registroIncerto = new LedgerFinanceiro
+                {
+                        PagamentoId       = pagamentoId,
+                        Tipo              = TipoEntradaLedger.EstornoSolicitado,
+                        Valor             = 0, // não se sabe se o valor saiu
+                        Descricao         = $"[RESULTADO INCERTO] {motivo}: estorno de R$ {valor:F2} sem resposta conclusiva do gateway. " +
+                                            "Pagamento bloqueado até a confirmação do gateway ou conciliação.",
+                        ReferenciaExterna = cobranca,
+                        CriadoPorId       = usuarioId
+                };
+                try
+                {
+                    await using var tx = await _repo.IniciarTransacaoAsync();
+                    await _repo.MarcarEstornoIncertoAsync(pagamentoId, MarcadorEstornoIncerto);
+                    await _repo.AddLedgerAsync(registroIncerto);
+                    await _repo.SaveChangesAsync();
+                    await tx.CommitAsync();
+                }
+                catch (Exception regEx)
+                {
+                    _repo.Descartar(registroIncerto);
+                    _logger.LogError(regEx, "Não foi possível marcar o estorno incerto do pagamento {PagamentoId} (o pagamento continua bloqueado).", pagamentoId);
+                }
+                return ResultadoEstorno.Incerto;
             }
 
-            await _repo.AddLedgerAsync(new LedgerFinanceiro
+            // ── Fase 3: o Asaas aceitou — status e ledger na mesma transação ──
+            var registroEstorno = new LedgerFinanceiro
             {
-                PagamentoId = pagamento.Id,
-                Tipo = TipoEntradaLedger.EstornoSolicitado,
-                Valor = -pagamento.ValorBruto,
-                Descricao = $"Reembolso integral por cancelamento de contrato: R$ {pagamento.ValorBruto:F2}.",
-                CriadoPorId = usuarioId
-            });
+                PagamentoId       = pagamentoId,
+                Tipo              = TipoEntradaLedger.EstornoSolicitado,
+                Valor             = -valor,
+                Descricao         = $"{motivo}: R$ {valor:F2}.",
+                ReferenciaExterna = cobranca,
+                CriadoPorId       = usuarioId
+            };
+            try
+            {
+                await using var tx = await _repo.IniciarTransacaoAsync();
+                var concluiu = await _repo.TryConcluirEstornoAsync(pagamentoId, DateTime.UtcNow);
+                await _repo.AddLedgerAsync(registroEstorno);
+                await _repo.SaveChangesAsync();
+                await tx.CommitAsync();
 
-            pagamento.Status = StatusPagamento.Estornado;
+                if (!concluiu)
+                    _logger.LogInformation("Estorno do pagamento {PagamentoId} já confirmado pelo gateway antes do registro.", pagamentoId);
+                _logger.LogInformation("Estorno processado: pagamento {PagamentoId}, valor {Valor}.", pagamentoId, valor);
+                return ResultadoEstorno.Estornado;
+            }
+            catch (Exception ex)
+            {
+                _repo.Descartar(registroEstorno);
+                _logger.LogCritical(ex,
+                    "Estorno do pagamento {PagamentoId} FEITO no Asaas, mas não registrado no banco. O pagamento continua " +
+                    "EstornoEmProgresso (não pode ser liberado) até o webhook PAYMENT_REFUNDED ou a conciliação.",
+                    pagamentoId);
+                return ResultadoEstorno.EstornadoSemRegistro;
+            }
+        }
 
-            await _repo.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Estorno por cancelamento processado: pagamento {PagamentoId}, reembolso integral {Valor}.",
-                pagamento.Id, pagamento.ValorBruto);
+        public async Task<bool> ReverterReservaEstornoAsync(Guid pagamentoId, int usuarioId, string motivo)
+        {
+            var reverteu = await _repo.TryReverterReservaEstornoAsync(pagamentoId);
+            if (reverteu)
+            {
+                await _repo.AddLedgerAsync(new LedgerFinanceiro
+                {
+                    PagamentoId = pagamentoId,
+                    Tipo        = TipoEntradaLedger.EstornoSolicitado,
+                    Valor       = 0, // nada foi estornado
+                    Descricao   = $"[ESTORNO RECUSADO] {motivo} Nada foi estornado; o valor voltou a ficar retido.",
+                    CriadoPorId = usuarioId
+                });
+            }
+            else
+            {
+                _logger.LogError("Reserva de estorno do pagamento {PagamentoId} não pôde ser desfeita: o status já não era EstornoEmProgresso.", pagamentoId);
+            }
+            return reverteu;
         }
 
         // ─────────────────────────────────────────────────────────────────────────

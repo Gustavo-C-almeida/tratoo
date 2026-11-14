@@ -84,6 +84,17 @@ namespace Tratoo.Domain.Features.Contratos
                     .SetProperty(c => c.Status, ContratoServicoStatus.Ativo)
                     .SetProperty(c => c.EntregaRegistradaEm, (DateTime?)null)) == 1;
 
+        public async Task<bool> TentarDesfazerCancelamentoAsync(Guid contratoId, int usuarioId)
+            => await _ctx.ContratosServico
+                .Where(c => c.Id == contratoId
+                         && c.Status == ContratoServicoStatus.Cancelado
+                         && c.CanceladoPorId == usuarioId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.Status, ContratoServicoStatus.Ativo)
+                    .SetProperty(c => c.MotivoCancelamento, (string?)null)
+                    .SetProperty(c => c.CanceladoPorId, (int?)null)
+                    .SetProperty(c => c.CanceladoEm, (DateTime?)null)) == 1;
+
         /// <summary>
         /// Cancela UM contrato por expiração e desfaz seus vínculos (proposta recusada,
         /// projeto reaberto), tudo numa transação. O cancelamento é condicional: só
