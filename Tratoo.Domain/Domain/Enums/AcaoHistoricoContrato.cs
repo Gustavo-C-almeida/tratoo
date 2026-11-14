@@ -13,6 +13,13 @@ namespace Tratoo.Domain.Enums
         EntregaRejeitada,
         PagamentoLiberado,
         FalhaLiberacao,
-        DisputaResolvida
+        DisputaResolvida,
+
+        /// <summary>
+        /// Informativo, NÃO é falha: na aprovação, a liberação imediata perdeu a reivindicação do
+        /// pagamento para outra operação (ex.: o job de liberação automática), que o processou.
+        /// Esta aprovação não iniciou transferência. Gravado como texto: sem migration.
+        /// </summary>
+        LiberacaoProcessadaPorOutraOperacao
     }
 }

@@ -20,7 +20,8 @@ const ACAO_LABEL = {
     EntregaRejeitada: 'Ajustes solicitados',
     PagamentoLiberado: 'Pagamento liberado',
     FalhaLiberacao: 'Falha na liberação',
-    DisputaResolvida: 'Disputa resolvida'
+    DisputaResolvida: 'Disputa resolvida',
+    LiberacaoProcessadaPorOutraOperacao: 'Liberação processada por outra operação'
 };
 
 function esc(s) {

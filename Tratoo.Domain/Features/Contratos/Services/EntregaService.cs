@@ -379,6 +379,28 @@ namespace Tratoo.Domain.Features.Contratos
                     "Pagamento liberado ao prestador após aprovação da entrega.");
                 await _entregaRepo.SaveChangesAsync();
             }
+            catch (ConflitoException)
+            {
+                // Outra operação (ex.: liberação automática) reivindicou o pagamento entre a leitura e
+                // a reivindicação desta aprovação. Não é falha: registra o que aconteceu, com a
+                // situação real do pagamento, sem afirmar que esta chamada liberou.
+                var atual = await _pagamentoRepo.ObterStatusAsync(pagamento.Id);
+                var saiuAoPrestador = atual is StatusPagamento.TransferenciaEmProgresso or StatusPagamento.Liberado;
+                if (saiuAoPrestador)
+                    _logger.LogInformation(
+                        "Pagamento {PagamentoId} do contrato {ContratoId} liberado por outra operação durante a aprovação ({Status}).",
+                        pagamento.Id, contratoId, atual);
+                else
+                    _logger.LogWarning(
+                        "Pagamento {PagamentoId} do contrato {ContratoId} estava em outra operação durante a aprovação ({Status}); nenhuma liberação iniciada.",
+                        pagamento.Id, contratoId, atual);
+
+                await RegistrarHistoricoAsync(contratoId, AcaoHistoricoContrato.LiberacaoProcessadaPorOutraOperacao, contratanteId,
+                    saiuAoPrestador
+                        ? $"O pagamento foi liberado ao prestador por outra operação (ex.: liberação automática) em paralelo à aprovação. Situação do pagamento: {atual}."
+                        : $"O pagamento estava sendo processado por outra operação no momento da aprovação; nenhuma liberação foi iniciada por ela. Situação do pagamento: {atual}.");
+                await _entregaRepo.SaveChangesAsync();
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
