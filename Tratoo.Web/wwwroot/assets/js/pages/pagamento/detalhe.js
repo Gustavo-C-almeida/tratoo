@@ -484,6 +484,20 @@ async function liberarPagamento() {
         renderPagamento(pag);
         configurarModais();
     } catch (err) {
+        if (err?.status === 409) {
+            // Outra operação (liberação automática, reembolso) pegou o pagamento antes: a ação não
+            // foi feita e o estado mudou. Mostra o estado real em vez de reabilitar o botão.
+            showToast(err?.data?.mensagem || 'O pagamento está sendo processado por outra operação.', true);
+            try {
+                const pag = await api.get(`/api/pagamentos/${pagamentoId}`);
+                pagamentoAtual = pag;
+                renderPagamento(pag);
+                configurarModais();
+            } catch (_) {
+                if (btn) btn.disabled = false;
+            }
+            return;
+        }
         showToast(err?.data?.mensagem || 'Erro ao liberar pagamento.', true);
         if (btn) btn.disabled = false;
     }

@@ -898,6 +898,10 @@ namespace Tratoo.Domain.Features.Pagamentos
             if (pagamento.Status == StatusPagamento.EmDisputa)
                 throw new NegocioException("Não é possível liberar um pagamento com disputa aberta.");
 
+            // Reservado para estorno por outra operação (cancelamento/estorno): disputa perdida → 409.
+            if (pagamento.Status == StatusPagamento.EstornoEmProgresso)
+                throw new ConflitoException("O pagamento está com um reembolso em processamento e não pode ser liberado. Atualize a página.");
+
             if (pagamento.Status != StatusPagamento.Retido)
                 throw new NegocioException($"O pagamento não pode ser liberado pois está com status '{pagamento.Status}'. Somente pagamentos Retidos podem ser liberados.");
 
@@ -911,7 +915,7 @@ namespace Tratoo.Domain.Features.Pagamentos
             // Perdeu a reivindicação atômica (job, outra liberação ou um estorno reservado chegou
             // antes): nada foi transferido por esta chamada — não responde como se tivesse liberado.
             if (pagamento.Status == StatusPagamento.Retido)
-                throw new NegocioException("O pagamento está sendo processado por outra operação. Atualize a página e tente novamente.");
+                throw new ConflitoException("O pagamento está sendo processado por outra operação. Atualize a página.");
 
             return MapearParaResumoDto(pagamento);
         }

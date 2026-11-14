@@ -7,6 +7,9 @@ namespace Tratoo.API.Infrastructure
     /// comportamento existente (400 para regra de negócio, 500 genérico), para o
     /// mapeamento poder ser testado — e com o caso novo:
     ///
+    ///  • <see cref="ConflitoException"/> → 409. A operação perdeu uma disputa concorrente
+    ///    pelo mesmo recurso (ex.: liberação manual × estorno reservado): o pedido era válido,
+    ///    mas o estado mudou. Vem antes de NegocioException, da qual herda.
     ///  • <see cref="ServicoIndisponivelException"/> → 503 + Retry-After. Dependência fora
     ///    do ar (ex.: Redis dos OTPs): a operação é recusada (fail-closed), e o cliente
     ///    sabe que é temporário, não erro de negócio nem bug.
@@ -23,7 +26,13 @@ namespace Tratoo.API.Infrastructure
 
                 ctx.Response.ContentType = "application/json";
 
-                if (ex is NegocioException negocio)
+                if (ex is ConflitoException conflito)
+                {
+                    // Disputa concorrente perdida: o estado mudou; o cliente deve recarregá-lo.
+                    ctx.Response.StatusCode = StatusCodes.Status409Conflict;
+                    await ctx.Response.WriteAsJsonAsync(new { mensagem = conflito.Message });
+                }
+                else if (ex is NegocioException negocio)
                 {
                     ctx.Response.StatusCode = 400;
                     await ctx.Response.WriteAsJsonAsync(new { mensagem = negocio.Message });

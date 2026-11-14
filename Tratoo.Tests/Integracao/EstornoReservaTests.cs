@@ -198,7 +198,7 @@ namespace Tratoo.Tests.Integracao
             // O banco volta. Nada consegue liberar o pagamento estornado.
             await QuebrarLedgerAsync(conexao, quebrar: false);
             await JobAsync(sp, c);
-            await Assert.ThrowsAsync<NegocioException>(() => LiberarManualAsync(sp, c));
+            await Assert.ThrowsAsync<ConflitoException>(() => LiberarManualAsync(sp, c)); // reembolso em processamento: 409
             await Assert.ThrowsAsync<NegocioException>(() => SolicitarEstornoAsync(sp, c));
             Assert.Equal(0, gateway.Transferencias);
             Assert.Equal(1, gateway.Estornos);
@@ -293,7 +293,7 @@ namespace Tratoo.Tests.Integracao
             var cancelar = CancelarAsync(sp, c);
             await gateway.EntrouEstorno.Task.WaitAsync(Limite);
 
-            await Assert.ThrowsAsync<NegocioException>(() => LiberarManualAsync(sp, c));
+            await Assert.ThrowsAsync<ConflitoException>(() => LiberarManualAsync(sp, c)); // perdeu a corrida: 409
             gateway.SegurarEstorno.SetResult();
             await cancelar.WaitAsync(Limite);
 
@@ -397,7 +397,7 @@ namespace Tratoo.Tests.Integracao
 
             // Ninguém libera, ninguém estorna de novo.
             await JobAsync(sp, c);
-            await Assert.ThrowsAsync<NegocioException>(() => LiberarManualAsync(sp, c));
+            await Assert.ThrowsAsync<ConflitoException>(() => LiberarManualAsync(sp, c)); // reembolso em processamento: 409
             await Assert.ThrowsAsync<NegocioException>(() => SolicitarEstornoAsync(sp, c));
             await Assert.ThrowsAsync<NegocioException>(() => AbrirDisputaAsync(sp, c));
             Assert.Equal((1, 0), (gateway.Estornos, gateway.Transferencias));
