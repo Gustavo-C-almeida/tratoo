@@ -296,8 +296,46 @@ ignorados. `has-pending-model-changes` não acusou nenhuma mudança.
 **Verificação em produção (ainda não executada):** `consulta-d3-producao.sql`. A consulta roda em transação
 `READ ONLY`, termina em `ROLLBACK` e devolve só contagens.
 
+### A1: estorno com reserva atômica (achado da revisão final do D3)
+
+A primeira versão do `3562bb9` envolvia numa transação a chamada HTTP de estorno no Asaas. Se o Asaas
+estornasse e a gravação falhasse, o rollback devolvia o pagamento a `Retido`, e o valor podia sair de novo.
+O estorno também disputava com o job e com a liberação manual. A correção segue a Opção B: reserva
+atômica do contrato e do pagamento.
+
+| Commit | O que muda |
+|---|---|
+| `d1c0c61` | B1: o resumo de `CancelarPorExpiracaoAsync` volta ao método. |
+| `7b0acb8` | O estorno no gateway separa recusa comprovada (400 com `errors[]`, 401) de resultado incerto (rede, timeout, 5xx, qualquer outro status). |
+| `6180920` | Novo status `EstornoEmProgresso`, texto, sem migration. Veja abaixo. |
+| `4f40775` | M4: testes determinísticos das transições do contrato (registro, aprovação, rejeição, cancelamento). |
+
+O cancelamento passa a ter três fases:
+
+1. **Transação curta, sem HTTP.** Trava o contrato, reserva o pagamento (`Retido → EstornoEmProgresso`)
+   e marca o contrato `Cancelado`. É recusado se o pagamento estiver em transferência, liberado, em
+   disputa, com falha de transferência ou já em estorno.
+2. **Estorno no Asaas**, sem lock.
+3. **Desfecho:**
+   - aceito: `Estornado` e ledger na mesma transação;
+   - gravação falhou ou resultado incerto: o pagamento continua `EstornoEmProgresso`, que nada libera,
+     até o webhook `PAYMENT_REFUNDED`;
+   - recusa comprovada: contrato e reserva voltam juntos.
+
+A mesma reserva vale para o estorno solicitado pelo contratante. A abertura de disputa ficou condicional.
+A liberação manual que perde a reivindicação responde erro. O webhook de estorno é idempotente pelo
+estado e nunca sobrescreve `TransferenciaEmProgresso` nem `Liberado`.
+
+**Testes:** `EstornoReservaTests`, com 17 testes contra Postgres real. Os 12 de fluxo falhavam contra o
+código anterior: cancelamento + job resultava em 1 estorno e 1 transferência, e o webhook sobrescrevia
+`Liberado`. `TransicoesContratoConcorrenciaTests` tem 6 testes. A suíte completa: 1020 aprovados,
+0 falhas, 8 ignorados.
+
 **Limitações conhecidas (fora do escopo do D3):**
-- O estorno do cancelamento não reivindica o pagamento de forma atômica e pode disputar com o job de liberação automática.
+- Se o processo cair entre a reserva e a resposta do Asaas, o pagamento fica `EstornoEmProgresso` sem
+  marca. Ele está seguro, porque nada o libera, mas só sai pelo webhook ou por conciliação manual: não há
+  conciliação automática, como já acontecia com `TransferenciaEmProgresso`.
+- `ResolverDisputaAsync` e `ReprocessarTransferenciaAsync` ainda gravam o status sem condição.
 - A liberação automática ignora o estado do contrato. Isso é por desenho e não foi alterado.
 - O rate limit da rota de entrega ainda falta (D5).
 - Um navegador que envia um corpo muito grande sem `Expect` ainda pode ver a conexão encerrada. A checagem do frontend reduz esse caso.
