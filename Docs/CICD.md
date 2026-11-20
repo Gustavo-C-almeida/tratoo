@@ -206,11 +206,8 @@ Exceções ficam no [`.trivyignore`](../.trivyignore), uma por linha, cada uma c
 volta a reportar a vulnerabilidade e o job falha: a exceção é revista, nunca renovada no automático.
 Para pacotes NuGet não há lista de exceções.
 
-Exceções em vigor:
-
-| CVE | Pacote | Motivo | Validade |
-|---|---|---|---|
-| CVE-2026-109518 | `apt`, `libapt-pkg6.0t64` (Ubuntu 24.04 da `aspnet:10.0`) | A falha está no apt ao baixar pacotes; o container nunca executa apt e roda como UID 1654. Corrigida no Ubuntu (2.8.4ubuntu0.1), ainda não na imagem da Microsoft | 23/11/2026 |
+Nenhuma exceção em vigor. A última, a CVE-2026-109518 (`apt` e `libapt-pkg6.0t64` da `aspnet:10.0`),
+foi removida em 20/11/2026: a imagem da Microsoft passou a trazer a versão corrigida (2.8.4ubuntu0.1).
 
 ### Atalho de documentação
 
